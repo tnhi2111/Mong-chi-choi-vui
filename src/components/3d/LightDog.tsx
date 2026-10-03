@@ -161,6 +161,7 @@ const vertex = /* glsl */ `
   attribute float aDelay;
   attribute float aSeed;
   attribute float aAnim;  // 0 still, 1 tail, 2 waving arm, 4 background point
+  attribute vec4 aRest;   // waving arm only: its place on the mirrored front leg (w: fades)
   attribute float aSize;
   attribute vec3 aColor;
   varying float vAlpha;
@@ -222,6 +223,7 @@ const vertex = /* glsl */ `
 
     // ── sitting ──
     vec3 sit = local + d;
+    float armFade = 0.0;
     // waving: the raised paw swings back and forth from the shoulder, a little pause between waves;
     // once she has played with it, the paw comes down to the ground beside the other
     if (aAnim > 1.5 && aAnim < 2.5) {
@@ -238,6 +240,12 @@ const vertex = /* glsl */ `
       sit = rotY(sit, W, 3.14159 * f);
       sit = rotX(sit, W, -1.5708 * f);
       sit.xy += vec2(${ARM_DOWN_SHIFT.join(', ')}) * uArmDown;
+      // …and over the last part of coming down, its light settles onto the mirror image of
+      // the other front leg: two front legs alike, standing, nothing left of the wave
+      float settle = smoothstep(0.3, 1.0, uArmDown);
+      settle = settle * settle * (3.0 - 2.0 * settle);
+      sit = mix(sit, aRest.xyz, settle);
+      armFade = aRest.w * smoothstep(0.2, 0.8, uArmDown);
     }
     // the head thrown up for the bark
     if (aAnim < 0.5) sit = rotX(sit, vec3(${HEAD_PIVOT.join(', ')}), -uBark * 0.28 * smoothstep(0.3, 0.46, sit.y));
@@ -272,7 +280,7 @@ const vertex = /* glsl */ `
     float twinkle = 0.8 + 0.2 * sin(t * (1.1 + aSeed * 2.0) + aSeed * 40.0);
     float lit = aAnim > 3.5 ? 0.55 : 1.0;
     // faint dust while asleep, bright once awake
-    vAlpha = twinkle * mix(0.1, lit, smoothstep(0.0, 0.3, uAwake)) * uShown * mix(0.6, 1.0, e);
+    vAlpha = twinkle * mix(0.1, lit, smoothstep(0.0, 0.3, uAwake)) * uShown * mix(0.6, 1.0, e) * (1.0 - armFade * (1.0 - uRun));
     vColor = aAnim > 3.5 ? vec3(1.0, 0.9, 0.85) : aColor;
     // pads face the ground once the paw is down: they fade, leaving the cream fur of the paw
     if (aAnim > 2.15 && aAnim < 2.25) vAlpha *= 1.0 - 0.97 * max(uArmDown, uRun);
@@ -356,8 +364,32 @@ export function LightDog({ awake, visible, position, facing = 0, scale, density,
       run[key].set(bound[key], 0);
       run[key].set(fur.run[key], surface.length * w);
     }
+    // Where the waving arm's light goes when the paw comes down: onto the mirror image of
+    // the other front leg, point for point (both lists ordered shoulder → paw, so the light
+    // flows down the leg instead of scattering). Pads and toe gaps (dark) fade out — a paw
+    // standing on the floor doesn't show them.
+    const rest = new Float32Array(n * 4);
+    const armIdx: number[] = [];
+    const legIdx: number[] = [];
+    const S = new THREE.Vector3(...SHOULDER);
+    const D = new THREE.Vector3(0.17, 0.28, 0.07).normalize();
+    const v = new THREE.Vector3();
+    dog.forEach((d, i) => {
+      if (d.anim > 1.5 && d.anim < 2.5) armIdx.push(i);
+      else if (d.part === 'fl' && d.anim < 0.05) legIdx.push(i);
+    });
+    armIdx.sort((a, b) => v.copy(dog[a].p).sub(S).dot(D) - v.copy(dog[b].p).sub(S).dot(D));
+    legIdx.sort((a, b) => dog[b].p.y - dog[a].p.y);
+    armIdx.forEach((ai, k) => {
+      const li = legIdx[Math.min(legIdx.length - 1, Math.floor((k / Math.max(1, armIdx.length - 1)) * (legIdx.length - 1)))];
+      const q = li !== undefined ? dog[li].p : dog[ai].p;
+      const c = dog[ai].col;
+      const dark = 0.299 * c.r + 0.587 * c.g + 0.114 * c.b < 0.42 ? 1 : 0;
+      rest.set([-q.x, q.y, q.z, dark], ai * 4);
+    });
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    g.setAttribute('aRest', new THREE.BufferAttribute(rest, 4));
     g.setAttribute('aRun', new THREE.BufferAttribute(run.pos, 3));
     g.setAttribute('aBoneA', new THREE.BufferAttribute(run.boneA, 1));
     g.setAttribute('aBoneB', new THREE.BufferAttribute(run.boneB, 1));

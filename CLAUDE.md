@@ -94,6 +94,18 @@ lifts its chin and the letter's flap opens. Idle: breathing, weight shift, head 
 tilt, irregular blinks, tail in bursts; her hand → head turns toward it, tilts, wags.
 The opening camera never backs out through the wall (`back` clamp in RoomWorld).
 
+**Delivery performance (owner's spec — keep it):** touching the puppy does NOT move it or
+push the camera in. `LetterDog` runs a timed state machine (NOTICE → HAPPY → MOUTH →
+RELEASE → FALL → SETTLE → AFTER): chin lifts, eyes narrow into a smile, the hinged lower
+jaw (`JAW_PIVOT`, separate `jaw` mesh, dark mouth + tongue behind it) opens, the letter
+(held via an anchor in the jaw group) is released with the mouth's velocity, falls under
+soft gravity turning flat, lands before its paws, the flap lifts, and only then
+`onDelivered()` → Gift3D `onOpened`. Closing the letter → it dips its head and picks the
+letter back up. Each channel (head/jaw/eyes/tail/body) has one target + one smoothing step;
+the tail uses an accumulated phase (slow: ~2.1 rad/s idle, a bit more on hover/happy).
+Intro particle puppy: after its lap the waving arm's points settle onto the mirror image
+of the left front leg (`aRest` attribute; pads/toe-gaps fade) — both front legs alike.
+
 ## Where the last session stopped
 
 Last request from the owner:

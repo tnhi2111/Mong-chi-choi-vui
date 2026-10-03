@@ -63,8 +63,7 @@ const BODY: Part[] = [
 // ── the head (posed about HEAD_PIVOT): skull, muzzle, cheeks, long silky ears ──
 const HEAD: Part[] = [
   { kind: 'e', c: [0, 0.875, 0.32], r: [0.158, 0.148, 0.152], col: 'gold' },
-  { kind: 'e', c: [0, 0.806, 0.468], r: [0.078, 0.066, 0.098], col: 'cream', k: 0.06 }, // muzzle
-  { kind: 'e', c: [0, 0.762, 0.43], r: [0.06, 0.04, 0.07], col: 'cream', k: 0.05 }, // chin
+  { kind: 'e', c: [0, 0.816, 0.468], r: [0.078, 0.056, 0.098], col: 'cream', k: 0.06 }, // muzzle (upper jaw)
   ...[-1, 1].map((s): Part => ({ kind: 'e', c: [s * 0.074, 0.8, 0.41], r: [0.07, 0.064, 0.07], col: 'cream', k: 0.06 })), // cheeks
   ...[-1, 1].map((s): Part => ({ kind: 'e', c: [s * 0.062, 0.928, 0.425], r: [0.05, 0.035, 0.04], col: 'pale', k: 0.05 })), // soft brows
   // long, thin ears hanging from high on the sides of the head: a root, a broad drop, a heavy lobe
@@ -73,6 +72,13 @@ const HEAD: Part[] = [
     { kind: 'e', c: [s * 0.178, 0.745, 0.315], r: [0.042, 0.13, 0.088], rot: [0, 0, s * 0.12], col: 'deep', k: 0.05, streak: 'ear' },
     { kind: 'e', c: [s * 0.185, 0.6, 0.325], r: [0.048, 0.075, 0.085], rot: [0, 0, s * 0.05], col: 'deep', k: 0.05, streak: 'ear' },
   ]),
+];
+
+// ── the lower jaw (hinged at JAW_PIVOT): chin and lower lip — it opens to let the letter go ──
+export const JAW_PIVOT: V3 = [0, 0.79, 0.37];
+const JAW: Part[] = [
+  { kind: 'e', c: [0, 0.762, 0.43], r: [0.06, 0.038, 0.07], col: 'cream' },
+  { kind: 'e', c: [0, 0.774, 0.47], r: [0.06, 0.024, 0.082], col: 'cream', k: 0.04 },
 ];
 
 // ── the tail: a plume curling up behind ──────────────────────────────────────
@@ -313,6 +319,7 @@ export interface MeshData {
 export interface LetterDogData {
   body: MeshData;
   head: MeshData;
+  jaw: MeshData;
   tail: MeshData;
 }
 
@@ -332,6 +339,7 @@ export function buildLetterDog(): LetterDogData {
     // the head is sculpted in its own frame, then turned to its resting pose by its group;
     // finer, because that is where she looks
     head: toData(mesh(HEAD, [-0.28, 0.48, 0.12], [0.28, 1.06, 0.6], 0.0095)),
+    jaw: toData(mesh(JAW, [-0.1, 0.69, 0.33], [0.1, 0.83, 0.59], 0.0075)),
     tail: toData(mesh(TAIL, [-0.14, 0.42, -0.62], [0.17, 1.03, -0.2], 0.0135)),
   };
 }
@@ -355,6 +363,9 @@ export const FACE = {
   eyeR: 0.027,
   nose: [0, 0.838, 0.56] as V3,
   /** The letter, held crosswise in the mouth: its top edge sits between the jaws. */
-  letter: { c: [0.0, 0.705, 0.555] as V3, rot: [0.16, 0, -0.12] as V3, w: 0.27, h: 0.175, t: 0.012 },
+  letter: { c: [0.0, 0.69, 0.555] as V3, rot: [0.16, 0, -0.12] as V3, w: 0.27, h: 0.175, t: 0.012 },
+  /** Inside the mouth (dark) and the tongue — seen only when the jaw opens. */
+  mouth: { c: [0, 0.774, 0.455] as V3, r: [0.05, 0.016, 0.07] as V3 },
+  tongue: { c: [0, 0.776, 0.468] as V3, r: [0.034, 0.011, 0.05] as V3 },
   collar: { c: [0, 0.6, 0.205] as V3, r: 0.122 },
 };

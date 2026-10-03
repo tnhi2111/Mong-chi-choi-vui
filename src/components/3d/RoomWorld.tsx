@@ -117,6 +117,12 @@ export function RoomWorld({
   // opening a gift: swing round to face it and push in; closing: pull back out
   useEffect(() => {
     if (openIndex < 0) return;
+    // the letter-carrying puppy performs where it stands: the camera stays (unless it is
+    // round the back of the room, where she couldn't see it — then turn just enough)
+    if (gifts[openIndex]?.shape === 'envelope') {
+      const facing = Math.cos(orbit.yaw + ring[openIndex].angle);
+      if (facing > 0.2) return;
+    }
     orbit.steerYaw(-ring[openIndex].angle);
     orbit.tPitch = 0;
     orbit.tZoom = 1;
@@ -171,16 +177,15 @@ export function RoomWorld({
     : { pos: [0, 3.0, 8.4] as [number, number, number], look: [0, -0.5, 0] as [number, number, number], fov: 40 };
   let camPos = base.pos;
   let camLook = base.look;
-  if (opening && openIndex >= 0) {
+  if (opening && openIndex >= 0 && gifts[openIndex]?.shape !== 'envelope') {
     // frame the rising gift from straight in front, closer. The offset is given
     // un-rotated: the orbit yaw (steered to the gift's angle) swings it round.
-    const [sx, sy0, sz] = showcase[openIndex];
-    // (look at the puppy's head, not its paws)
-    const sy = gifts[openIndex]?.shape === 'envelope' ? sy0 + 0.8 : sy0;
+    // (the letter-carrying puppy is excluded above: it performs where it stands)
+    const [sx, sy, sz] = showcase[openIndex];
     camLook = [sx, sy, sz];
     // step back to frame it — but never through the wall of the room behind her
     const back = Math.min(portrait ? 5.2 : 4.5, 8.1 - Math.hypot(sx, sz));
-    camPos = [sx, sy + (gifts[openIndex]?.shape === 'envelope' ? 0.55 : 1.0), sz + back];
+    camPos = [sx, sy + 1.0, sz + back];
   }
 
   return (

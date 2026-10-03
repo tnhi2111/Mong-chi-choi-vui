@@ -196,6 +196,8 @@ function GiftBody({
   glass,
   aim,
   reducedMotion,
+  opening,
+  onDelivered,
 }: {
   gift: Gift;
   progress: Progress;
@@ -203,6 +205,8 @@ function GiftBody({
   glass: boolean;
   aim: { current: { x: number; y: number } };
   reducedMotion: boolean;
+  opening: boolean;
+  onDelivered: () => void;
 }) {
   const lid = useRef<THREE.Group>(null);
   const core = useRef<THREE.Mesh>(null);
@@ -315,7 +319,7 @@ function GiftBody({
       );
     case 'envelope':
       // the letter isn't a floating envelope any more: a golden puppy brings it, in its mouth
-      return <LetterDog progress={progress} hover={hover} aim={aim} mats={mats} reducedMotion={reducedMotion} />;
+      return <LetterDog opening={opening} hover={hover} aim={aim} mats={mats} reducedMotion={reducedMotion} onDelivered={onDelivered} />;
   }
 }
 
@@ -458,11 +462,11 @@ export function Gift3D({
     // (the letter-carrying puppy stands on the floor: it doesn't float or lift)
     const bob = reducedMotion || isDog ? 0 : Math.sin(t * 0.9 + phase) * 0.06;
     const up = lift.step(active && !isDog ? 0.16 : 0, 9, dt);
-    tmp.copy(homeV).setY((isDog ? floorY : homeV.y) + bob + up).lerp(showV, e);
+    tmp.copy(homeV).setY((isDog ? floorY : homeV.y) + bob + up).lerp(showV, isDog ? 0 : e);
     r.position.copy(tmp);
     // a gentle squash-and-rise "breath" when the opening begins
     const kick = Math.sin(Math.min(1, o * 3) * Math.PI) * 0.06 * (reducedMotion ? 0 : 1);
-    r.scale.setScalar(size * (1 + kick + e * 0.12));
+    r.scale.setScalar(size * (isDog ? 1 : 1 + kick + e * 0.12));
 
     // idle sway; turns toward her hand when hovered; squares up to the camera while opening
     const idleY = reducedMotion ? 0 : Math.sin(t * 0.45 + phase) * (isDog ? 0.12 : 0.35);
@@ -473,7 +477,7 @@ export function Gift3D({
     if (glow.current) {
       const m = glow.current.material as THREE.SpriteMaterial;
       const base = opened ? 0.08 : 0.14;
-      const target = base + h * 0.22 + THREE.MathUtils.smoothstep(o, 0.45, 1) * (isDog ? 0.3 : 1.1);
+      const target = base + h * 0.22 + THREE.MathUtils.smoothstep(o, 0.45, 1) * (isDog ? 0.12 : 1.1);
       m.opacity += (target - m.opacity) * Math.min(1, dt * 5);
       glow.current.scale.setScalar(1.5 + h * 0.4 + THREE.MathUtils.smoothstep(o, 0.5, 1) * 4);
     }
@@ -495,11 +499,18 @@ export function Gift3D({
       label.current.classList.toggle('is-behind', behind);
     }
 
-    if (opening && o >= 1 && !notified.current) {
+    // (the puppy decides for itself when the letter has been delivered — see `delivered`)
+    if (opening && o >= 1 && !notified.current && !isDog) {
       notified.current = true;
       onOpened(gift.id);
     }
   });
+
+  const delivered = () => {
+    if (notified.current) return;
+    notified.current = true;
+    onOpened(gift.id);
+  };
 
   const click = (e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation();
@@ -543,7 +554,16 @@ export function Gift3D({
             sound.hoverEnd(gift.id);
           }}
         >
-          <GiftBody gift={gift} progress={progress} hover={hover} glass={glass} aim={aim} reducedMotion={reducedMotion} />
+          <GiftBody
+            gift={gift}
+            progress={progress}
+            hover={hover}
+            glass={glass}
+            aim={aim}
+            reducedMotion={reducedMotion}
+            opening={opening}
+            onDelivered={delivered}
+          />
           {/* generous invisible hit area — easier to tap on phones; it reaches down over the
               gift's label too, so tapping the name opens it as well */}
           <mesh position={isDog ? [0, 0.52, 0.02] : [0, -0.14, 0]} scale={isDog ? [0.62, 0.95, 0.95] : [1, 1.35, 1]}>
