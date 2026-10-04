@@ -27,8 +27,8 @@ export function RoomUI({ gifts, opened, busy, onSelect, onFocusGift, onFinal }: 
       <div className="room-ui__foot">
         {all ? (
           <div className="room-ui__final rise" key="final">
-            <p className="whisper">{cfg.allOpenedHint}</p>
-            <button type="button" className="btn btn--solid" onClick={onFinal}>
+            <p className="whisper room-ui__note">{cfg.allOpenedHint}</p>
+            <button type="button" className="btn btn--solid room-ui__cta" onClick={onFinal}>
               {cfg.finalButton}
             </button>
           </div>

@@ -119,12 +119,6 @@ export function RoomWorld({
   // opening a gift: swing round to face it and push in; closing: pull back out
   useEffect(() => {
     if (openIndex < 0) return;
-    // the letter-carrying puppy performs where it stands: the camera stays (unless it is
-    // round the back of the room, where she couldn't see it — then turn just enough)
-    if (gifts[openIndex]?.shape === 'envelope') {
-      const facing = Math.cos(orbit.yaw + ring[openIndex].angle);
-      if (facing > 0.2) return;
-    }
     orbit.steerYaw(-ring[openIndex].angle);
     orbit.tPitch = 0;
     orbit.tZoom = 1;
@@ -165,6 +159,14 @@ export function RoomWorld({
       roomLights.character = null;
     };
   }, [gifts, ring]);
+  // the puppy and the box each get their own spot on the stage
+  const spots = useMemo(() => {
+    const at = (shape: string) => {
+      const i = gifts.findIndex((g) => g.shape === shape);
+      return i < 0 ? null : { x: ring[i].pos[0], z: ring[i].pos[2], angle: ring[i].angle };
+    };
+    return { dog: at('envelope'), gift: at('box') };
+  }, [gifts, ring]);
   useEffect(
     () => () => {
       hoverLight.target = null;
@@ -186,13 +188,22 @@ export function RoomWorld({
   // Framing: a raised three-quarter view that shows the floor and the whole ring.
   const base = portrait
     ? { pos: [0, 6.9, 7.4] as [number, number, number], look: [0, -0.45, 0.35] as [number, number, number], fov: 50 }
-    : { pos: [0, 3.0, 8.4] as [number, number, number], look: [0, -0.5, 0] as [number, number, number], fov: 40 };
+    : { pos: [0, 3.0, 8.4] as [number, number, number], look: [0, -0.4, 0] as [number, number, number], fov: 40 };
   let camPos = base.pos;
   let camLook = base.look;
-  if (opening && openIndex >= 0 && gifts[openIndex]?.shape !== 'envelope') {
+  if (opening && openIndex >= 0 && gifts[openIndex]?.shape === 'envelope') {
+    // the puppy is a memory too: the camera walks up to it (same rig, same swing round to
+    // face it) and settles a little low, the puppy's face and the letter it gives framed
+    // together — the puppy stays where it stands and performs
+    const [px, , pz] = ring[openIndex].pos;
+    const a = ring[openIndex].angle;
+    const near = portrait ? 0.55 : 0.35; // look a little in front of it: where the letter lands
+    camLook = [px + Math.sin(a) * near, FLOOR_Y + (portrait ? 0.42 : 0.55), pz + Math.cos(a) * near];
+    const back = Math.min(portrait ? 4.6 : 3.7, 8.1 - Math.hypot(px, pz));
+    camPos = [camLook[0], camLook[1] + (portrait ? 1.55 : 0.95), camLook[2] + back];
+  } else if (opening && openIndex >= 0) {
     // frame the rising gift from straight in front, closer. The offset is given
     // un-rotated: the orbit yaw (steered to the gift's angle) swings it round.
-    // (the letter-carrying puppy is excluded above: it performs where it stands)
     const [sx, sy, sz] = showcase[openIndex];
     camLook = [sx, sy, sz];
     // step back to frame it — but never through the wall of the room behind her
@@ -206,7 +217,7 @@ export function RoomWorld({
         position={camPos}
         lookAt={camLook}
         parallax={reducedMotion || opening ? 0 : 0.25}
-        speed={opening ? 1.6 : 1.1}
+        speed={opening ? (gifts[openIndex]?.shape === 'envelope' ? 1.25 : 1.6) : 1.1}
         fov={base.fov}
         orbit={orbit}
         orbitCamera
@@ -220,6 +231,8 @@ export function RoomWorld({
         reducedMotion={reducedMotion}
         hoverFx={hoverFx}
         portrait={portrait}
+        dogSpot={spots.dog}
+        giftSpot={spots.gift}
       />
       <Floor rx={rx} rz={rz} />
       <group position={[0, 0.3, 0]}>

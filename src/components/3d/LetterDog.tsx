@@ -12,12 +12,14 @@ import { surface, type GiftMaterials } from './Gift3D';
  * The letter gift, delivered: a golden puppy standing on the floor of the gift room
  * with the love letter held in its mouth, lit by the room's own lights.
  *
- * It is a character, not a prop. Touched, it performs — the camera stays where it is:
+ * It is a character, not a prop. Touched, it performs where it stands while the camera
+ * walks up to it (RoomWorld frames it like the other memories):
  *
  *   NOTICE   (0 – 0.35 s)  lifts its head, a little crouch of anticipation, the tail picks up
  *   HAPPY    (0.3 – 0.8)   eyes narrow into a smile, the head tilts, a rhythmic happy wag
- *   MOUTH    (0.75 – 1.1)  the jaw opens — the letter, still held, sinks with it
- *   RELEASE  (1.1)         it lets go: the letter keeps the mouth's motion…
+ *   PRESENT  (0.8 – 1.3)   chin up, head forward: it holds the letter out to her
+ *   MOUTH    (1.3 – 1.65)  the jaw opens — the letter, still held, sinks with it
+ *   RELEASE  (1.65)        it lets go: the letter keeps the mouth's motion…
  *   FALL                   …drops under gravity, turning flat, and lands in front of its paws
  *   SETTLE   (+0.3 s)      the letter rests; the flap lifts — only then does the letter open
  *   AFTER                  a pleased, open-mouthed look and a gentle wag, easing back to idle
@@ -75,9 +77,10 @@ function flapGeometry(w: number, h: number): THREE.ExtrudeGeometry {
 }
 
 // timing of the performance (seconds since the touch)
-const T_MOUTH = 0.75;
-const T_RELEASE = 1.1;
-const SETTLE = 0.3;
+const T_PRESENT = 0.8;
+const T_MOUTH = 1.3;
+const T_RELEASE = 1.65;
+const SETTLE = 0.6;
 /** gentle "paper" gravity: a letter drops, but air slows it */
 const GRAVITY = 3.4;
 
@@ -134,7 +137,7 @@ export function LetterDog({ opening, hover, aim, mats, reducedMotion, onDelivere
 
   // the performance clock, and smoothed channels
   const perf = useRef({ startedAt: -1, deliveredAt: -1, happyAfter: 0 });
-  const ch = useRef({ look: HEAD_REST[0], turn: HEAD_REST[1], tilt: HEAD_REST[2], jaw: 0, smile: 0, crouch: 0, wagAmp: 0.07, wagFreq: 2.2, wagPhase: 0, lid: 0 });
+  const ch = useRef({ look: HEAD_REST[0], turn: HEAD_REST[1], tilt: HEAD_REST[2], jaw: 0, smile: 0, crouch: 0, present: 0, wagAmp: 0.07, wagFreq: 2.2, wagPhase: 0, lid: 0 });
   const blink = useRef(2 + Math.random() * 3);
   const L0 = useRef<Letter>({
     mode: 'held',
@@ -200,12 +203,15 @@ export function LetterDog({ opening, hover, aim, mats, reducedMotion, onDelivere
       Math.sin(now * 0.53 + 1) * 0.022 * motion -
       aim.current.y * 0.06 * h -
       notice * 0.1 + // noticed you: chin up
+      bump(T, T_PRESENT, T_MOUTH + 0.15) * 0.1 + // …and a little higher: here, this is for you
       bump(T, T_MOUTH - 0.1, T_RELEASE + 0.45) * 0.2 + // nods down to set the letter before you
+      bump(T, T_RELEASE + 0.2, T_RELEASE + 1.8) * 0.12 + // …and watches it go
       pickDip * 0.32; // dips to pick it back up
     const turnT = HEAD_REST[1] + Math.sin(now * 0.29) * 0.06 * motion * (1 - notice) + THREE.MathUtils.clamp(aim.current.x, -1, 1) * 0.22 * h;
     const tiltT = HEAD_REST[2] + Math.sin(now * 0.41) * 0.025 * motion + h * 0.06 + pleased * 0.12;
     const jawT = mouth * 0.34 + (T > T_RELEASE ? 0.12 * pleased : 0) + p.happyAfter * 0.08 - pickDip * 0.05;
     const crouchT = bump(T, 0, 0.32) * 1; // a little anticipation, then up
+    const presentT = bump(T, T_PRESENT, T_RELEASE + 0.1);
     // tail: slow and soft at rest; a little more when she's near; rhythmic when happy
     const ampT = (0.07 + 0.05 * h + 0.1 * notice * (1 - happy) + 0.15 * pleased) * motion;
     const freqT = 2.1 + 0.4 * h + 1.2 * pleased;
@@ -218,6 +224,7 @@ export function LetterDog({ opening, hover, aim, mats, reducedMotion, onDelivere
     c.jaw += (jawT - c.jaw) * (1 - Math.exp(-dt * 10));
     c.smile += (pleased - c.smile) * k;
     c.crouch += (crouchT - c.crouch) * (1 - Math.exp(-dt * 14));
+    c.present += (presentT - c.present) * k;
     c.wagAmp += (ampT - c.wagAmp) * kSlow;
     c.wagFreq += (freqT - c.wagFreq) * kSlow;
     c.wagPhase += c.wagFreq * dt; // phase accumulates: changing speed never jerks the tail
@@ -229,6 +236,7 @@ export function LetterDog({ opening, hover, aim, mats, reducedMotion, onDelivere
     if (head.current) {
       head.current.rotation.set(c.look, c.turn, c.tilt, 'YXZ');
       head.current.position.y = HEAD_PIVOT[1] - c.crouch * 0.02;
+      head.current.position.z = HEAD_PIVOT[2] + c.present * 0.035;
     }
     if (jaw.current) jaw.current.rotation.x = c.jaw;
     // eyes: irregular blinks; a smile narrows them into soft crescents
@@ -262,7 +270,7 @@ export function LetterDog({ opening, hover, aim, mats, reducedMotion, onDelivere
       Lt.quat.copy(tmp.q);
       Lt.vel.copy(tmp.p).sub(tmp.prev).divideScalar(Math.max(dt, 1e-3)).multiplyScalar(0.5);
       // …and glides toward her: forward, with a slight drift to the side
-      Lt.vel.z += 0.62;
+      Lt.vel.z += 0.46;
       Lt.vel.x += 0.08;
       Lt.vel.y = Math.min(Lt.vel.y, 0);
       Lt.releasedAt = now;

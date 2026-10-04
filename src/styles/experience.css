@@ -296,7 +296,49 @@
   display: grid;
   justify-items: center;
   gap: 16px;
-  max-width: 34ch;
+  max-width: min(92vw, 640px);
+}
+
+/* the last whisper: set like a line in a printed card, between two fine rules */
+.room-ui__note {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 0;
+  font-style: italic;
+  text-align: center;
+  text-wrap: balance;
+  text-shadow: 0 0 18px rgba(8, 3, 6, 0.9), 0 1px 2px rgba(8, 3, 6, 0.8);
+}
+
+.room-ui__note::before,
+.room-ui__note::after {
+  content: '';
+  flex: 0 0 28px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(216, 180, 124, 0.55), transparent);
+}
+
+/* "Come closer": ivory and blush glass with a fine champagne border — part of the room */
+.btn.room-ui__cta {
+  background: linear-gradient(180deg, rgba(246, 232, 220, 0.16), rgba(212, 154, 165, 0.1));
+  color: #f6e8dc;
+  border-color: rgba(216, 180, 124, 0.5);
+  box-shadow:
+    0 10px 30px rgba(8, 3, 6, 0.45),
+    inset 0 1px 0 rgba(255, 244, 232, 0.18);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+.btn.room-ui__cta:hover,
+.btn.room-ui__cta:focus-visible {
+  background: linear-gradient(180deg, rgba(246, 232, 220, 0.24), rgba(212, 154, 165, 0.16));
+  border-color: rgba(216, 180, 124, 0.8);
+  box-shadow:
+    0 10px 34px rgba(8, 3, 6, 0.5),
+    0 0 28px rgba(216, 180, 124, 0.2),
+    inset 0 1px 0 rgba(255, 244, 232, 0.25);
 }
 
 .room-ui.is-busy .room-ui__head,
@@ -319,11 +361,16 @@
 }
 
 .gift-nav__btn {
+  /* a small medallion: a fine champagne rim, an inner ring, a dark enamel face */
+  position: relative;
   width: 44px;
   height: 44px;
   border-radius: 50%;
-  border: 1px solid var(--line);
-  background: rgba(11, 6, 8, 0.35);
+  border: 1px solid rgba(216, 180, 124, 0.28);
+  background: radial-gradient(circle at 50% 35%, rgba(60, 26, 34, 0.55), rgba(14, 7, 10, 0.55) 70%);
+  box-shadow:
+    inset 0 0 0 3px rgba(11, 6, 8, 0.5),
+    inset 0 0 0 4px rgba(216, 180, 124, 0.12);
   color: var(--text-dim);
   font-family: var(--serif);
   font-size: 16px;
@@ -333,15 +380,23 @@
 
 .gift-nav__btn:hover,
 .gift-nav__btn:focus-visible {
-  border-color: rgba(241, 211, 214, 0.6);
+  border-color: rgba(216, 180, 124, 0.6);
   color: var(--text);
-  box-shadow: 0 0 20px rgba(212, 154, 165, 0.25);
+  box-shadow:
+    inset 0 0 0 3px rgba(11, 6, 8, 0.5),
+    inset 0 0 0 4px rgba(216, 180, 124, 0.25),
+    0 0 20px rgba(216, 180, 124, 0.18);
 }
 
+/* an opened memory: the medallion warms, with a soft glow and a check */
 .gift-nav__btn.is-opened {
-  color: var(--blush);
-  border-color: rgba(241, 211, 214, 0.35);
-  background: rgba(212, 154, 165, 0.12);
+  color: #f3dcc0;
+  border-color: rgba(216, 180, 124, 0.55);
+  background: radial-gradient(circle at 50% 35%, rgba(150, 70, 84, 0.5), rgba(40, 14, 22, 0.6) 72%);
+  box-shadow:
+    inset 0 0 0 3px rgba(11, 6, 8, 0.35),
+    inset 0 0 0 4px rgba(216, 180, 124, 0.3),
+    0 0 18px rgba(212, 154, 165, 0.22);
 }
 
 /* label floating under each 3D gift */

@@ -60,7 +60,7 @@ never `<shaderMaterial uniforms={…} />`.
 The owner said: **birthday theme for a lover, NOT Christmas** (an earlier Christmas tree /
 baubles pass was removed). `src/components/3d/RoomSet.tsx` dresses the gift room:
 wooden floor + round rug (shader, candle pools, heart glow, moonlight), round wall with an
-arched window onto a starry night, fairy-light garland, HAPPY BIRTHDAY bunting, candle
+arched window onto a starry night, fairy-light garland, the HAPPY BIRTHDAY installation, candle
 clusters (flicker shared by flames and the light they throw), a two-tier birthday cake on a
 table (tap → candles blown out with smoke + `sound.blow()`, relit after ~4 s), round and
 heart balloons on ribbons (bob; tap → bounce + chime), and a secret glowing letter by the
@@ -76,7 +76,7 @@ wax tint varies per candle, slight lean); contact shadows under candles/cake tab
 the foot of the wall. Beyond the window: a distant city whose windows switch on and off;
 **secret** — touching the window lights one far window pink, a little heart of light rises
 from it and becomes a new star (`uLove`, `LOVE_WIN`; `?debug` → `window.__roomLove()`).
-Bunting hangs in two runs from the window frame's corners so the city stays visible.
+(The old bunting is gone — see BirthdaySign below.)
 The owner does NOT want Christmas — no snow/tree/gnomes even if a prompt suggests them.
 
 ## The letter gift = a golden puppy carrying the letter (LetterDog)
@@ -94,8 +94,8 @@ lifts its chin and the letter's flap opens. Idle: breathing, weight shift, head 
 tilt, irregular blinks, tail in bursts; her hand → head turns toward it, tilts, wags.
 The opening camera never backs out through the wall (`back` clamp in RoomWorld).
 
-**Delivery performance (owner's spec — keep it):** touching the puppy does NOT move it or
-push the camera in. `LetterDog` runs a timed state machine (NOTICE → HAPPY → MOUTH →
+**Delivery performance:** touching the puppy does NOT move it (the camera walks up to it —
+the latest brief asked for that). `LetterDog` runs a timed state machine (NOTICE → HAPPY → MOUTH →
 RELEASE → FALL → SETTLE → AFTER): chin lifts, eyes narrow into a smile, the hinged lower
 jaw (`JAW_PIVOT`, separate `jaw` mesh, dark mouth + tongue behind it) opens, the letter
 (held via an anchor in the jaw group) is released with the mouth's velocity, falls under
@@ -106,13 +106,29 @@ the tail uses an accumulated phase (slow: ~2.1 rad/s idle, a bit more on hover/h
 On release the letter glides toward the viewer (forward push + a fading side sway) with a
 soft blob shadow on the floor that tightens as it lands.
 
-**Art direction of the room (keep the hierarchy): HEART > golden PUPPY > pink BOX.**
-Triangle composition: `layout()` is turned half a step so the heart is upper-centre, the
-puppy front-left, the box front-right; puppy size ×1.12, box ×0.84. Lighting tells the story
-via `roomLights` (sceneStore, set by RoomWorld): Lights' rimB becomes the heart's pink glow
-(`#ff4f86`, near the heart) and the top spot a narrow golden key on the puppy; no new lights
-are added (fixed light count). Background is quieter on purpose: 4 muted balloons, muted
-bunting, fewer candles, cake ×0.82, dim city windows, faint ring line, whispered title.
+**Art direction of the room (major redesign — keep it): HEART > PUPPY > SIGN > BOX > candles.**
+- `BirthdaySign.tsx`: the signature HAPPY BIRTHDAY installation (replaced the triangle
+  bunting): dimensional letters from a Cormorant atlas (stacked layers = depth; ivory face,
+  champagne bevel, rose-gold returns, inner glow + halo), a champagne arch with tiny bulbs on
+  cables, a rose-gold heart under the apex pointing at the real heart, posies + satin
+  ribbons. Hangs at the back centre (R 6.5; portrait R 4.9, scale 0.6, lower).
+- The window moved to the back-left (`WINDOW_ANGLE = -0.85`, cool moonlight `MOON`); the
+  cake stands back-right; the 4 balloons flank the sign in two pairs.
+- A real two-step **stage** (`Stage`, `STAGE_STEP` 0.08 — the wood floor is lower; gifts
+  stand on `floorY`): matte burgundy top with inset ring, champagne inlays, a chain of
+  engraved hearts, an interlaced-rings emblem under the heart, lacquer sides, gold tube trims.
+- Wall: walnut wainscot panels, blind arched recesses with warm cove light, pilasters,
+  champagne trims; sign glow and window spill on it; a distance `HAZE` on wall/floor/stage.
+- Memory spots: the puppy has a golden heart-shaped pool + petals (`dogSpot`), the box a
+  blush pool (`giftSpot`). `roomLights` still steer rimB (heart pink) and the gold key.
+- Candle clusters stand BETWEEN the gifts (the gifts are half a step round) — never in
+  front of one, or they block the hero shot.
+- **Dog click = a memory**: RoomWorld reuses the gift camera (steer yaw to face it, spring
+  dolly, speed 1.25) and frames the puppy + the spot where the letter lands. LetterDog
+  stretches the performance to match: PRESENT (0.8–1.3 s, chin up/head forward), MOUTH
+  1.3, RELEASE 1.65, watches the letter go; SETTLE 0.6 s before the letter opens.
+- Room UI: memory indicators are medallions; the final note sits between fine rules and
+  "Come closer" is ivory/blush glass (`room-ui__cta`).
 Intro particle puppy: after its lap the waving arm's points settle onto the mirror image
 of the left front leg (`aRest` attribute; pads/toe-gaps fade) — both front legs alike.
 
