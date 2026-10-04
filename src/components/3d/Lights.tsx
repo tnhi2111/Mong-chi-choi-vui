@@ -2,7 +2,7 @@ import { useMemo, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { Environment, Lightformer } from '@react-three/drei';
 import * as THREE from 'three';
-import { hoverLight } from './sceneStore';
+import { hoverLight, roomLights } from './sceneStore';
 
 export type Mood = 'intro' | 'room' | 'final';
 
@@ -14,9 +14,21 @@ export type Mood = 'intro' | 'room' | 'final';
  */
 const MOODS: Record<Mood, { ambient: number; key: number; fill: number; rimA: number; rimB: number; env: number; top: number }> = {
   intro: { ambient: 0.05, key: 2.1, fill: 0.12, rimA: 26, rimB: 14, env: 0.55, top: 0 },
-  room: { ambient: 0.16, key: 1.7, fill: 0.45, rimA: 16, rimB: 12, env: 0.8, top: 14 },
+  // (in the room, rimB becomes the heart's own pink light and the top spot the puppy's key)
+  room: { ambient: 0.13, key: 1.35, fill: 0.38, rimA: 12, rimB: 9, env: 0.7, top: 22 },
   final: { ambient: 0.22, key: 2.2, fill: 0.55, rimA: 22, rimB: 18, env: 1.0, top: 10 },
 };
+
+const RIM_B_HOME = new THREE.Vector3(3.4, 1.1, -3.6);
+const RIM_B_COLOR = new THREE.Color('#ffb08f');
+const HEART_PINK = new THREE.Color('#ff4f86');
+const TOP_HOME = new THREE.Vector3(0, 7, 1.5);
+const TOP_TARGET_HOME = new THREE.Vector3(0, -1, 0);
+const TOP_COLOR = new THREE.Color('#ffe2d6');
+/** the puppy's key: from above, a little in front and to the left, like a lamp */
+const KEY_OFFSET = new THREE.Vector3(-1.2, 4.2, 1.6);
+const KEY_GOLD = new THREE.Color('#ffd49a');
+const tmpV = new THREE.Vector3();
 
 /**
  * Studio-like reflections without downloading an HDR: a few soft light panels
@@ -45,6 +57,28 @@ export function Lights({ mood = 'intro', cursorLight = false }: { mood?: Mood; c
     ease(rimB.current, m.rimB);
     ease(top.current, m.top);
     scene.environmentIntensity += (m.env - scene.environmentIntensity) * k;
+
+    // the room re-aims two of the lights at its story (no lights are added or removed)
+    const kp = 1 - Math.exp(-Math.min(dt, 0.05) * 2);
+    if (rimB.current) {
+      const heart = mood === 'room' ? roomLights.heart : null;
+      rimB.current.position.lerp(heart ?? RIM_B_HOME, kp);
+      rimB.current.color.lerp(heart ? HEART_PINK : RIM_B_COLOR, kp);
+      rimB.current.distance += ((heart ? 7 : 14) - rimB.current.distance) * kp;
+    }
+    if (top.current) {
+      const ch = mood === 'room' ? roomLights.character : null;
+      if (ch) {
+        top.current.position.lerp(tmpV.copy(ch).add(KEY_OFFSET), kp);
+        topTarget.position.lerp(ch, kp);
+      } else {
+        top.current.position.lerp(TOP_HOME, kp);
+        topTarget.position.lerp(TOP_TARGET_HOME, kp);
+      }
+      top.current.angle += ((ch ? 0.32 : 0.75) - top.current.angle) * kp;
+      top.current.color.lerp(ch ? KEY_GOLD : TOP_COLOR, kp);
+      topTarget.updateMatrixWorld();
+    }
   });
 
   return (

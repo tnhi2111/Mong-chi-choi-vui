@@ -103,6 +103,16 @@ soft gravity turning flat, lands before its paws, the flap lifts, and only then
 `onDelivered()` → Gift3D `onOpened`. Closing the letter → it dips its head and picks the
 letter back up. Each channel (head/jaw/eyes/tail/body) has one target + one smoothing step;
 the tail uses an accumulated phase (slow: ~2.1 rad/s idle, a bit more on hover/happy).
+On release the letter glides toward the viewer (forward push + a fading side sway) with a
+soft blob shadow on the floor that tightens as it lands.
+
+**Art direction of the room (keep the hierarchy): HEART > golden PUPPY > pink BOX.**
+Triangle composition: `layout()` is turned half a step so the heart is upper-centre, the
+puppy front-left, the box front-right; puppy size ×1.12, box ×0.84. Lighting tells the story
+via `roomLights` (sceneStore, set by RoomWorld): Lights' rimB becomes the heart's pink glow
+(`#ff4f86`, near the heart) and the top spot a narrow golden key on the puppy; no new lights
+are added (fixed light count). Background is quieter on purpose: 4 muted balloons, muted
+bunting, fewer candles, cake ×0.82, dim city windows, faint ring line, whispered title.
 Intro particle puppy: after its lap the waving arm's points settle onto the mirror image
 of the left front leg (`aRest` attribute; pads/toe-gaps fade) — both front legs alike.
 

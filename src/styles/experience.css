@@ -275,8 +275,10 @@
   font-family: var(--serif);
   font-weight: 300;
   font-style: italic;
-  font-size: clamp(22px, 3vw, 30px);
-  color: var(--text-dim);
+  /* a whispered phrase, not a headline: it must never compete with the heart */
+  font-size: clamp(19px, 2.2vw, 25px);
+  letter-spacing: 0.01em;
+  color: rgba(246, 236, 231, 0.52);
 }
 
 .room-ui__foot {
@@ -287,6 +289,7 @@
 
 .room-ui__hint {
   margin: 0;
+  letter-spacing: 0.36em; /* (colour stays --text-faint: small text keeps AA contrast) */
 }
 
 .room-ui__final {

@@ -75,7 +75,8 @@ function placeCandles(rx: number, rz: number): Candle[] {
   const clusters = [0.62, 1.88, 3.14, 4.4, 5.66];
   const out: Candle[] = [];
   clusters.forEach((a, ci) => {
-    const n = ci % 2 ? 2 : 3;
+    // (two to a cluster: atmosphere, not a light show)
+    const n = ci === 2 ? 3 : 2;
     for (let k = 0; k < n; k++) {
       const aa = a + (k - (n - 1) / 2) * 0.09 + (ci === 2 ? 0.25 : 0);
       const push = 1.35 + (k % 2) * 0.22;
@@ -275,7 +276,7 @@ const wallFragment = /* glsl */ `
         vec2 f = fract(wc);
         float isWin = step(0.3, f.x) * step(f.x, 0.75) * step(0.3, f.y) * step(f.y, 0.8) * step(by, bh - 0.03);
         float on = step(0.72, hash2(cell + floor(t * 0.05 + hash2(cell) * 7.0)));
-        sky += vec3(1.0, 0.72, 0.4) * isWin * on * 0.55;
+        sky += vec3(1.0, 0.72, 0.4) * isWin * on * 0.32;
         // the secret window: the one she lights with a touch
         vec2 home = vec2(${LOVE_WIN[0].toFixed(3)}, ${LOVE_WIN[1].toFixed(3)});
         float mine = smoothstep(0.03, 0.0, max(abs(wx - home.x) - 0.012, abs(wy - home.y) - 0.012));
@@ -460,9 +461,9 @@ const glassFragment = /* glsl */ `
     float fres = pow(1.0 - facing, 3.0);
     // warm candle light from below, cool moonlight from the back window, a crisp highlight
     float warm = clamp(-vN.y * 0.6 + 0.4, 0.0, 1.0);
-    vec3 col = uColor * (0.18 + 0.5 * warm) + vec3(1.0, 0.7, 0.45) * fres * 0.8;
+    vec3 col = uColor * (0.14 + 0.42 * warm) + vec3(1.0, 0.7, 0.45) * fres * 0.45;
     vec3 hl = normalize(vec3(-0.4, 0.6, 0.7));
-    col += vec3(1.0, 0.95, 0.9) * pow(max(dot(reflect(-vView, vN), hl), 0.0), 60.0) * 1.4;
+    col += vec3(1.0, 0.95, 0.9) * pow(max(dot(reflect(-vView, vN), hl), 0.0), 60.0) * 0.6;
     col += uColor * uGlow;
     gl_FragColor = vec4(col, 1.0);
   }
@@ -609,7 +610,20 @@ const smokeFragment = /* glsl */ `
 `;
 
 /** A birthday cake on a little round table. Touch it: the candles are blown out, then relit. */
-function Cake({ at, motion, secretFound, onSecret }: { at: [number, number, number]; motion: number; secretFound: boolean; onSecret: () => void }) {
+function Cake({
+  at,
+  outward = at,
+  motion,
+  secretFound,
+  onSecret,
+}: {
+  at: [number, number, number];
+  /** where it stands in the room (for which way is "toward the wall") */
+  outward?: [number, number, number];
+  motion: number;
+  secretFound: boolean;
+  onSecret: () => void;
+}) {
   const TABLE_H = 0.72;
   const wood = useMemo(() => new THREE.MeshBasicMaterial({ color: '#2c170d' }), []);
   const cloth = useShader(
@@ -731,7 +745,7 @@ function Cake({ at, motion, secretFound, onSecret }: { at: [number, number, numb
   };
 
   // outward from the room's centre, and along the wall — the secret hides beside the table
-  const out = new THREE.Vector2(at[0], at[2]).normalize();
+  const out = new THREE.Vector2(outward[0], outward[2]).normalize();
   const along = new THREE.Vector2(-out.y, out.x);
 
   return (
@@ -887,7 +901,7 @@ function Bunting({ floorY }: { floorY: number }) {
     geom.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
     geom.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
     // dimmed to the room's light: they sit in the glow of the fairy lights, not a spotlight
-    const material = new THREE.MeshBasicMaterial({ map: tex, transparent: true, alphaTest: 0.5, side: THREE.DoubleSide, color: '#8c7676' });
+    const material = new THREE.MeshBasicMaterial({ map: tex, transparent: true, alphaTest: 0.5, side: THREE.DoubleSide, color: '#6e5a5c' });
     return { geo: geom, mat: material };
   }, [floorY]);
   useEffect(
@@ -1148,12 +1162,13 @@ export function RoomSet({ floorY, rx, rz, heart, reducedMotion, hoverFx, portrai
   // balloons: round and heart-shaped, tied down toward the back and sides, at different heights
   const balloons = useMemo(
     () =>
-      [1.5, 2.25, 2.85, 3.5, 4.1, 4.75].map((a, i) => ({
+      // four, muted, standing back by the wall — atmosphere behind the story, not part of it
+      [1.75, 2.75, 3.6, 4.55].map((a, i) => ({
         at: [Math.sin(a) * (WALL_R - 1.4 - (i % 2) * 0.5), floorY, Math.cos(a) * (WALL_R - 1.4 - (i % 2) * 0.5)] as [number, number, number],
         length: 1.6 + ((i * 7) % 3) * 0.3,
-        color: ['#f4a6b8', '#e8c07a', '#d9476a', '#fbe7ea', '#c9859e', '#e46b86'][i],
-        heart: i % 3 === 1,
-        pitch: [2, 4, 5, 3, 6, 1][i],
+        color: ['#c98a98', '#c9a56a', '#e6d6d0', '#b8788a'][i],
+        heart: i === 1,
+        pitch: [2, 4, 5, 3][i],
       })),
     [rx, rz, floorY],
   );
@@ -1246,7 +1261,9 @@ export function RoomSet({ floorY, rx, rz, heart, reducedMotion, hoverFx, portrai
       </mesh>
       <Garland floorY={floorY} />
       <Bunting floorY={floorY} />
-      <Cake at={cakeAt} motion={motion} secretFound={secretFound} onSecret={findSecret} />
+      <group position={cakeAt} scale={0.82}>
+        <Cake at={[0, 0, 0]} outward={cakeAt} motion={motion} secretFound={secretFound} onSecret={findSecret} />
+      </group>
       {balloons.map((b, i) => (
         <Balloon key={i} {...b} motion={motion} hoverFx={hoverFx} />
       ))}

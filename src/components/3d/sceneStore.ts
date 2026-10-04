@@ -12,3 +12,13 @@ export const hoverLight = {
   /** Where the hover rim light should glide to, or null when nothing is hovered. */
   target: null as THREE.Vector3 | null,
 };
+
+/**
+ * The gift room's two story lights, steered by RoomWorld:
+ *  • heart — the particle heart glowing pink onto the floor, the puppy and the gifts
+ *  • character — a soft golden key light falling on the puppy (the room's second subject)
+ */
+export const roomLights = {
+  heart: null as THREE.Vector3 | null,
+  character: null as THREE.Vector3 | null,
+};

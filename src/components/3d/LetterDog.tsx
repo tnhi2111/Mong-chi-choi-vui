@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { FACE, HEAD_PIVOT, HEAD_REST, JAW_PIVOT, TAIL_PIVOT, type V3 } from './letterDogModel';
 import { loadLetterDog, letterDogReady, type LetterDogGeometry } from './letterDogGeometry';
 import { getHeartGeometry } from './heartShape';
-import { getPaperTexture } from './glowTexture';
+import { getPaperTexture, getShadowTexture } from './glowTexture';
 import { surface, type GiftMaterials } from './Gift3D';
 
 /*
@@ -100,6 +100,8 @@ type Letter = {
   vel: THREE.Vector3;
   quat: THREE.Quaternion;
   landedAt: number;
+  /** when it left the mouth: its glide sways on this clock */
+  releasedAt: number;
   returnFrom: { pos: THREE.Vector3; quat: THREE.Quaternion; at: number } | null;
 };
 
@@ -128,6 +130,7 @@ export function LetterDog({ opening, hover, aim, mats, reducedMotion, onDelivere
   const anchor = useRef<THREE.Object3D>(null);
   const letter = useRef<THREE.Group>(null);
   const lid = useRef<THREE.Group>(null);
+  const shadow = useRef<THREE.Mesh>(null);
 
   // the performance clock, and smoothed channels
   const perf = useRef({ startedAt: -1, deliveredAt: -1, happyAfter: 0 });
@@ -139,6 +142,7 @@ export function LetterDog({ opening, hover, aim, mats, reducedMotion, onDelivere
     vel: new THREE.Vector3(),
     quat: new THREE.Quaternion(),
     landedAt: 0,
+    releasedAt: 0,
     returnFrom: null,
   });
   const tmp = useMemo(
@@ -257,8 +261,11 @@ export function LetterDog({ opening, hover, aim, mats, reducedMotion, onDelivere
       Lt.pos.copy(tmp.p);
       Lt.quat.copy(tmp.q);
       Lt.vel.copy(tmp.p).sub(tmp.prev).divideScalar(Math.max(dt, 1e-3)).multiplyScalar(0.5);
-      Lt.vel.z += 0.32;
+      // …and glides toward her: forward, with a slight drift to the side
+      Lt.vel.z += 0.62;
+      Lt.vel.x += 0.08;
       Lt.vel.y = Math.min(Lt.vel.y, 0);
+      Lt.releasedAt = now;
     }
     if (Lt.mode === 'held') {
       tmp.prev.copy(tmp.p);
@@ -268,6 +275,9 @@ export function LetterDog({ opening, hover, aim, mats, reducedMotion, onDelivere
       Lt.vel.y -= GRAVITY * fallDt;
       Lt.vel.multiplyScalar(Math.exp(-fallDt * 1.2)); // air
       Lt.pos.addScaledVector(Lt.vel, fallDt);
+      // paper rides the air: a soft side-to-side sway along its curved path
+      const air = (now - Lt.releasedAt) * pace;
+      Lt.pos.x += Math.cos(air * 7) * 0.05 * fallDt * 6 * Math.exp(-air * 1.5);
       // turning flat as it drops, so it lands lying face up
       Lt.quat.slerp(tmp.flat, 1 - Math.exp(-fallDt * 5.5));
       const floor = FACE.letter.t / 2 + 0.004;
@@ -297,6 +307,17 @@ export function LetterDog({ opening, hover, aim, mats, reducedMotion, onDelivere
       }
     }
     lg.matrixWorldNeedsUpdate = true;
+
+    // its soft shadow on the floor: tight and dark when close, wide and faint while high
+    const sh = shadow.current;
+    if (sh) {
+      lg.matrix.decompose(tmp.pos, tmp.rot, tmp.s);
+      const hgt = Math.max(0, tmp.pos.y);
+      sh.visible = Lt.mode !== 'held';
+      sh.position.set(tmp.pos.x, 0.003, tmp.pos.z);
+      sh.scale.setScalar(0.34 + hgt * 0.5);
+      (sh.material as THREE.MeshBasicMaterial).opacity = 0.42 * Math.exp(-hgt * 2.2);
+    }
 
     // the flap lifts once it lies before her
     const lidT = Lt.mode === 'resting' ? 1 : 0;
@@ -367,6 +388,10 @@ export function LetterDog({ opening, hover, aim, mats, reducedMotion, onDelivere
           <group ref={tail} position={TAIL_PIVOT}>
             <mesh geometry={geo.tail} position={sub([0, 0, 0], TAIL_PIVOT)} material={m.fur} />
           </group>
+          <mesh ref={shadow} rotation-x={-Math.PI / 2} visible={false} renderOrder={-1}>
+            <planeGeometry args={[1, 0.75]} />
+            <meshBasicMaterial map={getShadowTexture()} color="#000000" transparent opacity={0} depthWrite={false} />
+          </mesh>
           {/* the letter lives in the puppy's own space; its pose is set each frame */}
           <group ref={letter} matrixAutoUpdate={false}>
             <RoundedBox args={[L.w, L.h, L.t]} radius={0.004} smoothness={2} material={mats.main} />

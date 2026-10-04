@@ -8,7 +8,7 @@ import { ParticleField } from './ParticleField';
 import { CameraRig } from './CameraRig';
 import { getFloorTexture, getShadowTexture } from './glowTexture';
 import { usePointerOrbit } from '../../hooks/usePointerOrbit';
-import { hoverLight } from './sceneStore';
+import { hoverLight, roomLights } from './sceneStore';
 import { RoomSet } from './RoomSet';
 
 interface Props {
@@ -39,7 +39,9 @@ const FLOOR_Y = -0.95;
  */
 function layout(n: number, rx: number, rz: number) {
   return Array.from({ length: n }, (_, i) => {
-    const a = (i / n) * Math.PI * 2; // gift 1 in front, then around to the right
+    // turned half a step: the first gift (the box) stands front-right and the last (the
+    // letter-carrying puppy) front-left — with the heart above, a stable triangle
+    const a = ((i + 0.5) / n) * Math.PI * 2;
     const y = 0.05 + Math.sin(i * 2.3) * 0.12;
     return { pos: [Math.sin(a) * rx, y, Math.cos(a) * rz] as [number, number, number], angle: a };
   });
@@ -69,7 +71,7 @@ function Floor({ rx, rz }: { rx: number; rz: number }) {
   return (
     <group position={[0, FLOOR_Y, 0]}>
       <mesh geometry={ring} rotation-x={-Math.PI / 2} position-y={0.004} scale={[rx, rz, 1]}>
-        <meshBasicMaterial color="#f1c9d2" transparent opacity={0.12} depthWrite={false} toneMapped={false} />
+        <meshBasicMaterial color="#f1c9d2" transparent opacity={0.065} depthWrite={false} toneMapped={false} />
       </mesh>
       {/* the heart's own shadow */}
       <mesh rotation-x={-Math.PI / 2} position-y={0.006} renderOrder={-1}>
@@ -153,6 +155,16 @@ export function RoomWorld({
   useEffect(() => {
     hoverLight.target = hoverTarget;
   }, [hoverTarget]);
+  // the heart lights the room pink; a golden key falls on the puppy
+  useEffect(() => {
+    const dogIdx = gifts.findIndex((g) => g.shape === 'envelope');
+    roomLights.heart = new THREE.Vector3(0, 0.35, 0.15);
+    roomLights.character = dogIdx >= 0 ? new THREE.Vector3(ring[dogIdx].pos[0], FLOOR_Y + 0.6, ring[dogIdx].pos[2]) : null;
+    return () => {
+      roomLights.heart = null;
+      roomLights.character = null;
+    };
+  }, [gifts, ring]);
   useEffect(
     () => () => {
       hoverLight.target = null;
@@ -232,7 +244,8 @@ export function RoomWorld({
           facing={ring[i].angle}
           showcase={showcase[i]}
           floorY={FLOOR_Y}
-          size={portrait ? 0.95 : 1}
+          // the puppy reads a touch larger, the box a touch smaller: heart > puppy > gift
+          size={(portrait ? 0.95 : 1) * (g.shape === 'envelope' ? 1.12 : g.shape === 'box' ? 0.84 : 1)}
           opened={opened.includes(g.id)}
           opening={openingId === g.id}
           disabled={opening || paused}
