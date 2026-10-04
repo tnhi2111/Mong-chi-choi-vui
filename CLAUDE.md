@@ -142,6 +142,21 @@ soft blob shadow on the floor that tightens as it lands.
   plus candles, the sign, the heart and the moon. Rugs (`roomRugs`) and contact shadows
   (`furnitureBlobs`) are drawn by the floor shader. One merged mesh + `ROOM_LIGHT` shader.
   QA: `?debug` + `window.__camOverride = { pos, look }` holds a camera framing.
+- **The whole 360°**: the half behind the default view is furnished too — a writing desk
+  (letters, perfume, jewellery box, desk lamp, chair) under a memory wall of 6 frames; a
+  chest of drawers with a lamp, dried flowers, a ring dish and a painting with a picture
+  light; the (painted) door with coat hooks, a scarf, a tote, a shoe bench; a credenza with
+  a turntable, records, a mushroom lamp and a round mirror. `roomLamps` now has 8 lamps;
+  floor/wall loop over 8 lamps, 4 rugs, 8 contact shadows. QA: `qa-output/closeup.mjs`
+  shoots 8 orbit angles + gift close-ups; `qa-output/opens.mjs` films gifts 01–04 opening.
+- **Gifts are objects with their own story and opening** (Gift3D, same memory order):
+  01 box — hand-tied bow, ribbon tails, swinging brass tag; lid pops then swings open.
+  02 capsule → glass keepsake bottle (lathe), cork + twine, a rolled note, motes inside;
+  the cork pops off and the motes rise out. 03 star → leather travel journal with a gilt
+  star; the cover opens and two pages turn. 04 orb → walnut music box with brass corners
+  and key; the lid lifts, a tiny heart rises on its spindle and turns, a few chime notes.
+  All new materials go through `surface()` (one shared program, pre-warmed via
+  `createGiftMaterials`); motes reuse the hover-sparkle shader. Gift camera speed 2.0.
 - Room UI: memory indicators are medallions; the final note sits between fine rules and
   "Come closer" is ivory/blush glass (`room-ui__cta`).
 Intro particle puppy: after its lap the waving arm's points settle onto the mirror image

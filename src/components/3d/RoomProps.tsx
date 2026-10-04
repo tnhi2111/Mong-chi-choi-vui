@@ -28,7 +28,7 @@ import { getHeartGeometry } from './heartShape';
  * cluster steps out of the way, like the cut-away wall (a dolls'-house room).
  */
 
-export type Kind = 0 | 1 | 2 | 3 | 4 | 5; // wood, fabric, ceramic, paper, metal, glowing (shades)
+export type Kind = 0 | 1 | 2 | 3 | 4 | 5 | 6; // wood, fabric, ceramic, paper, metal, glowing (shades), mirror
 
 /** Where things stand (wall angles, measured like the window: atan(x, -z)). */
 export const LAYOUT = {
@@ -43,6 +43,12 @@ export const LAYOUT = {
   seat: 1.17,
   floorLamp: 1.43,
   seatTable: 0.95,
+  // the other half of the room (behind the default view)
+  desk: 2.05,
+  chest: 2.7,
+  door: -2.98,
+  hooks: -2.62,
+  credenza: -2.02,
 };
 
 /** A frame on the wall at angle `a` and radius `r`, facing the middle of the room. */
@@ -64,6 +70,10 @@ export function roomLamps(floorY: number, R: number): THREE.Vector4[] {
     p(LAYOUT.floorLamp, R - 0.4, 1.55, 1.0), // floor lamp by the loveseat
     p(-LAYOUT.sconce, R - 0.2, 2.2, 0.5), // the two sconces either side of the alcove
     p(LAYOUT.sconce, R - 0.2, 2.2, 0.5),
+    p(LAYOUT.desk - 0.06, R - 0.45, 1.25, 0.9), // the desk lamp
+    p(LAYOUT.chest + 0.06, R - 0.3, 1.38, 0.85), // the lamp on the chest of drawers
+    p(LAYOUT.hooks + 0.12, R - 0.12, 2.05, 0.45), // a small sconce by the door
+    p(LAYOUT.credenza + 0.08, R - 0.3, 1.0, 0.7), // the little lamp by the record player
   ];
 }
 
@@ -77,9 +87,11 @@ export function cakePosition(floorY: number, R: number): [number, number, number
 export function roomRugs(R: number): { at: THREE.Vector4[]; size: THREE.Vector4[] } {
   const a = onWall(-0.98, R - 1.05);
   const b = onWall(LAYOUT.seat, R - 1.1);
+  const c = onWall(LAYOUT.door, R - 0.75);
+  const d = onWall(LAYOUT.desk, R - 0.9);
   return {
-    at: [new THREE.Vector4(a.x, a.y, -0.98, 0), new THREE.Vector4(b.x, b.y, LAYOUT.seat, 0)],
-    size: [new THREE.Vector4(0.95, 0.78, 0, 0), new THREE.Vector4(1.25, 0.95, 1, 0)],
+    at: [new THREE.Vector4(a.x, a.y, -0.98, 0), new THREE.Vector4(b.x, b.y, LAYOUT.seat, 0), new THREE.Vector4(c.x, c.y, LAYOUT.door, 0), new THREE.Vector4(d.x, d.y, LAYOUT.desk, 0)],
+    size: [new THREE.Vector4(0.95, 0.78, 0, 0), new THREE.Vector4(1.25, 0.95, 1, 0), new THREE.Vector4(0.55, 0.38, 1, 0), new THREE.Vector4(0.8, 0.7, 0, 0)],
   };
 }
 
@@ -89,11 +101,20 @@ export function furnitureBlobs(R: number): THREE.Vector4[] {
     const q = onWall(a, r);
     return new THREE.Vector4(q.x, q.y, a, half);
   };
-  return [at(LAYOUT.sideboard, R - 0.3, 0.8), at(LAYOUT.seat, R - 0.75, 0.75), at(LAYOUT.shelf, R - 0.2, 0.5), at(LAYOUT.chair, R - 1.05, 0.35)];
+  return [
+    at(LAYOUT.sideboard, R - 0.3, 0.8),
+    at(LAYOUT.seat, R - 0.75, 0.75),
+    at(LAYOUT.shelf, R - 0.2, 0.5),
+    at(LAYOUT.chair, R - 1.05, 0.35),
+    at(LAYOUT.desk, R - 0.35, 0.55),
+    at(LAYOUT.chest, R - 0.25, 0.45),
+    at(LAYOUT.credenza, R - 0.25, 0.65),
+    at(LAYOUT.desk + 0.02, R - 0.95, 0.22),
+  ];
 }
 
 /** Every cluster's anchor direction (it steps aside when the camera comes round behind it). */
-const ANCHOR = { shelf: LAYOUT.shelf, window: -0.95, feature: 0, prep: LAYOUT.sideboard, seat: LAYOUT.seat };
+const ANCHOR = { shelf: LAYOUT.shelf, window: -0.95, feature: 0, prep: LAYOUT.sideboard, seat: LAYOUT.seat, desk: LAYOUT.desk, chest: LAYOUT.chest, door: -2.85, credenza: LAYOUT.credenza };
 
 class Builder {
   parts: THREE.BufferGeometry[] = [];
@@ -214,7 +235,18 @@ const GALLERY: Pic[] = [
   { a: 1.155, y: 1.44, w: 0.26, h: 0.2, tilt: -0.02, pic: 2, frame: 'cream' },
   { a: 1.235, y: 1.58, w: 0.3, h: 0.4, tilt: 0.0, pic: 3, frame: 'dark' },
 ];
-const PICS = 5;
+const PICS = 7;
+/** The memory wall above the writing desk: one larger frame, smaller ones round it, not quite aligned. */
+const MEMORY_WALL: Pic[] = [
+  { a: 2.05, y: 1.72, w: 0.4, h: 0.5, tilt: 0.0, pic: 3, frame: 'gilt' },
+  { a: 1.965, y: 1.86, w: 0.22, h: 0.28, tilt: -0.04, pic: 0, frame: 'dark' },
+  { a: 1.965, y: 1.5, w: 0.24, h: 0.18, tilt: 0.02, pic: 2, frame: 'cream' },
+  { a: 2.135, y: 1.9, w: 0.2, h: 0.2, tilt: 0.05, pic: 6, frame: 'cream' },
+  { a: 2.14, y: 1.55, w: 0.26, h: 0.32, tilt: -0.02, pic: 1, frame: 'dark' },
+  { a: 2.205, y: 1.74, w: 0.14, h: 0.18, tilt: 0.0, pic: 4, frame: 'gilt' },
+];
+/** The painting above the chest of drawers. */
+const PAINTING: Pic = { a: 2.7, y: 1.95, w: 0.86, h: 0.62, tilt: 0.0, pic: 5, frame: 'gilt' };
 function galleryFrame(f: Pic, R: number, floorY: number) {
   return wallFrame(f.a, R - 0.03, floorY)
     .multiply(new THREE.Matrix4().makeTranslation(0, f.y, 0.015))
@@ -414,6 +446,153 @@ function buildProps(floorY: number, R: number) {
     const t = f.frame === 'gilt' ? 0.02 : 0.026;
     frameBorder(b, galleryFrame(f, R, floorY), f.w, f.h, t, f.frame === 'gilt' ? BRASS : f.frame === 'dark' ? '#2e1d14' : '#e4d6c4', f.frame === 'gilt' ? 4 : 0);
   }
+
+  // ── WRITING DESK + MEMORY WALL (behind the default view, right) ────────────
+  b.setAnchor(ANCHOR.desk);
+  const DK = wallFrame(LAYOUT.desk, R - 0.32, floorY);
+  b.add(box(1.1, 0.04, 0.55), at(DK, 0, 0.74, 0), WALNUT_L, 0);
+  b.add(box(1.04, 0.12, 0.5), at(DK, 0, 0.66, -0.01), WALNUT, 0);
+  b.add(box(0.3, 0.1, 0.012), at(DK, 0.3, 0.66, 0.245), WALNUT_L, 0);
+  b.add(new THREE.SphereGeometry(0.013, 8, 6), at(DK, 0.3, 0.66, 0.255), BRASS, 4);
+  for (const [lx, lz] of [
+    [-0.52, -0.23],
+    [0.52, -0.23],
+    [-0.52, 0.23],
+    [0.52, 0.23],
+  ])
+    b.add(cyl(0.02, 0.015, 0.6, 8), at(DK, lx, 0.3, lz), WALNUT, 0);
+  // the desk lamp: a brass arm leaning over the letters
+  b.add(cyl(0.07, 0.08, 0.02, 20), at(DK, -0.4, 0.77, -0.1), BRASS, 4);
+  b.add(cyl(0.008, 0.008, 0.36, 6), at(DK, -0.4, 0.95, -0.12, 0, -0.18), BRASS, 4);
+  b.add(cyl(0.008, 0.008, 0.26, 6), at(DK, -0.34, 1.16, -0.02, 0, 0, -1.0), BRASS, 4);
+  b.add(cyl(0.035, 0.08, 0.1, 18, true), at(DK, -0.26, 1.2, 0.03, 0, 0, -0.35), '#f1dcc0', 5);
+  // letters: a tied bundle, one opened beside it with a pen, envelopes
+  b.add(box(0.2, 0.03, 0.13), at(DK, -0.1, 0.775, 0.05, 0.2), '#efe2d0', 3);
+  b.add(box(0.205, 0.032, 0.012), at(DK, -0.1, 0.776, 0.05, 0.2), '#9a2745', 1);
+  b.add(box(0.21, 0.004, 0.28), at(DK, 0.1, 0.762, 0.08, -0.12), '#f4ecdf', 3);
+  b.add(cyl(0.005, 0.005, 0.14, 6), at(DK, 0.15, 0.768, 0.12, 1.1, 0, Math.PI / 2), '#2a2a2a', 4);
+  b.add(box(0.16, 0.003, 0.11), at(DK, 0.26, 0.762, -0.05, 0.4), '#e9d9c5', 3);
+  // a perfume bottle and a little jewellery box
+  b.add(box(0.06, 0.08, 0.04), at(DK, 0.42, 0.8, -0.12, 0.3), '#e8b9bf', 2);
+  b.add(cyl(0.012, 0.012, 0.025, 10), at(DK, 0.42, 0.852, -0.12), BRASS, 4);
+  b.add(box(0.12, 0.06, 0.09), at(DK, 0.38, 0.79, 0.07, -0.2), '#a8636c', 1);
+  b.add(box(0.122, 0.012, 0.092), at(DK, 0.38, 0.826, 0.07, -0.2), BRASS, 4);
+  // the chair, pulled out a little and turned, a cushion on it
+  const DC = wallFrame(LAYOUT.desk + 0.02, R - 0.95, floorY).multiply(new THREE.Matrix4().makeRotationY(Math.PI + 0.25));
+  for (const [lx, lz] of [
+    [-0.2, -0.2],
+    [0.2, -0.2],
+    [-0.2, 0.2],
+    [0.2, 0.2],
+  ])
+    b.add(cyl(0.018, 0.014, 0.45, 8), at(DC, lx, 0.225, lz), WALNUT, 0);
+  b.add(box(0.46, 0.04, 0.46), at(DC, 0, 0.46, 0), WALNUT_L, 0);
+  b.add(pillow(0.42, 0.06, 0.42, 0.45), at(DC, 0, 0.5, 0.01, 0.1), '#d9c4b0', 1);
+  for (const lx of [-0.2, 0.2]) b.add(cyl(0.016, 0.016, 0.5, 8), at(DC, lx, 0.72, -0.21, 0, -0.08), WALNUT, 0);
+  b.add(box(0.44, 0.12, 0.025), at(DC, 0, 0.92, -0.23, 0, -0.08), WALNUT_L, 0);
+  // the memory wall's frames
+  for (const f of MEMORY_WALL) frameBorder(b, galleryFrame(f, R, floorY), f.w, f.h, f.frame === 'gilt' ? 0.02 : 0.026, f.frame === 'gilt' ? BRASS : f.frame === 'dark' ? '#2e1d14' : '#e4d6c4', f.frame === 'gilt' ? 4 : 0);
+
+  // ── CHEST OF DRAWERS + PAINTING (behind, centre-right) ─────────────────────
+  b.setAnchor(ANCHOR.chest);
+  const CD = wallFrame(LAYOUT.chest, R - 0.25, floorY);
+  b.add(box(0.95, 0.86, 0.45), at(CD, 0, 0.52, 0), WALNUT, 0);
+  b.add(box(1.0, 0.03, 0.48), at(CD, 0, 0.965, 0.01), WALNUT_L, 0);
+  for (const [lx, lz] of [
+    [-0.43, -0.18],
+    [0.43, -0.18],
+    [-0.43, 0.18],
+    [0.43, 0.18],
+  ])
+    b.add(cyl(0.018, 0.012, 0.09, 8), at(CD, lx, 0.045, lz), WALNUT, 0);
+  [0.28, 0.52, 0.76].forEach((y) => {
+    b.add(box(0.89, 0.22, 0.012), at(CD, 0, y, 0.226), WALNUT_L, 0);
+    for (const lx of [-0.24, 0.24]) b.add(box(0.1, 0.018, 0.02), at(CD, lx, y + 0.03, 0.24), BRASS, 4);
+  });
+  tableLamp(b, wallFrame(LAYOUT.chest + 0.06, R - 0.3, floorY), 0.98);
+  // a ceramic vase of dried flowers, a trinket dish with two rings, a candle in a holder
+  const CT = 0.98;
+  b.add(cyl(0.06, 0.08, 0.26, 20), at(CD, -0.3, CT + 0.13, -0.05), '#d9cbb8', 2);
+  for (let i = 0; i < 7; i++) {
+    const lean = (i - 3) * 0.12;
+    const len = 0.32 + (i % 3) * 0.06;
+    b.add(cyl(0.003, 0.003, len, 4), at(CD, -0.3 - (Math.sin(lean) * len) / 2, CT + 0.26 + (Math.cos(lean) * len) / 2, -0.05, 0, 0, lean), '#8a7458', 1);
+    b.add(new THREE.SphereGeometry(1, 6, 5), at(CD, -0.3 - Math.sin(lean) * len, CT + 0.26 + Math.cos(lean) * len, -0.05, 0, 0, lean, [0.03, 0.05, 0.03]), i % 2 ? '#b98c86' : '#d9c4a8', 1);
+  }
+  b.add(cyl(0.07, 0.05, 0.02, 24), at(CD, 0.05, CT + 0.01, 0.08), '#efe4d6', 2);
+  b.add(new THREE.TorusGeometry(0.014, 0.003, 6, 16), at(CD, 0.04, CT + 0.022, 0.08, 0, Math.PI / 2), BRASS, 4);
+  b.add(new THREE.TorusGeometry(0.012, 0.003, 6, 16), at(CD, 0.065, CT + 0.022, 0.09, 0, Math.PI / 2 - 0.3), '#e6e0d6', 4);
+  // the painting's frame and its little brass picture light
+  frameBorder(b, galleryFrame(PAINTING, R, floorY), PAINTING.w, PAINTING.h, 0.04, BRASS, 4);
+  b.add(cyl(0.012, 0.012, 0.42, 8), at(CD, 0, PAINTING.y + 0.38 - 0.0, 0.1, 0, 0, Math.PI / 2), BRASS, 4);
+  b.add(cyl(0.006, 0.006, 0.1, 6), at(CD, 0, PAINTING.y + 0.37, 0.05, 0, Math.PI / 2), BRASS, 4);
+
+  // ── THE DOOR, and coats on hooks beside it (behind, left) ──────────────────
+  b.setAnchor(ANCHOR.door);
+  const DR = wallFrame(LAYOUT.door, R - 0.03, floorY);
+  b.add(box(0.9, 2.1, 0.04), at(DR, 0, 1.05, 0.0), '#8c7660', 0); // a painted door, warm greige
+  // four raised panels on the door
+  for (const [py, ph] of [
+    [0.55, 0.75],
+    [1.5, 0.9],
+  ])
+    for (const px of [-0.2, 0.2]) b.add(box(0.3, ph, 0.012), at(DR, px, py, 0.026), '#9a836b', 0);
+  // the casing round it
+  b.add(box(0.1, 2.2, 0.03), at(DR, -0.5, 1.1, 0.02), '#c9b49a', 0);
+  b.add(box(0.1, 2.2, 0.03), at(DR, 0.5, 1.1, 0.02), '#c9b49a', 0);
+  b.add(box(1.1, 0.1, 0.03), at(DR, 0, 2.2, 0.02), '#c9b49a', 0);
+  // its brass handle
+  b.add(box(0.03, 0.14, 0.012), at(DR, 0.36, 1.0, 0.03), BRASS, 4);
+  b.add(cyl(0.01, 0.01, 0.1, 8), at(DR, 0.33, 1.02, 0.07, 0, 0, Math.PI / 2), BRASS, 4);
+  // hooks with a cardigan, a scarf and a tote bag, and a little shoe bench below
+  const HK = wallFrame(LAYOUT.hooks, R - 0.03, floorY);
+  b.add(box(0.7, 0.08, 0.025), at(HK, 0, 1.75, 0.012), WALNUT_L, 0);
+  for (const hx of [-0.24, 0, 0.24]) b.add(cyl(0.008, 0.008, 0.07, 6), at(HK, hx, 1.75, 0.06, 0, Math.PI / 2 - 0.4), BRASS, 4);
+  b.add(pillow(0.3, 0.62, 0.1, 0.5), at(HK, -0.24, 1.42, 0.08, 0.05, 0, 0.04), '#c9b8a4', 1);
+  b.add(box(0.07, 0.7, 0.02), at(HK, 0.0, 1.38, 0.08, 0, 0, 0.05), '#9a4a58', 1);
+  b.add(box(0.07, 0.6, 0.02), at(HK, 0.04, 1.42, 0.07, 0, 0, -0.08), '#9a4a58', 1);
+  b.add(box(0.3, 0.34, 0.06), at(HK, 0.24, 1.46, 0.07, 0, 0, -0.06), '#d8c7ad', 1);
+  b.add(new THREE.TorusGeometry(0.1, 0.008, 5, 18, Math.PI), at(HK, 0.24, 1.62, 0.07), '#d8c7ad', 1);
+  b.add(box(0.7, 0.04, 0.3), at(HK, 0, 0.42, 0.17), WALNUT_L, 0);
+  for (const lx of [-0.32, 0.32]) b.add(box(0.04, 0.42, 0.28), at(HK, lx, 0.21, 0.17), WALNUT, 0);
+  b.add(pillow(0.1, 0.07, 0.26), at(HK, -0.12, 0.035, 0.2, 0.1), '#6b4a3a', 1);
+  b.add(pillow(0.1, 0.07, 0.26), at(HK, 0.0, 0.035, 0.22, -0.05), '#6b4a3a', 1);
+  // the door sconce
+  const DS = wallFrame(LAYOUT.hooks + 0.12, R - 0.03, floorY);
+  b.add(box(0.08, 0.16, 0.02), at(DS, 0, 1.95, 0.01), BRASS, 4);
+  b.add(cyl(0.06, 0.085, 0.14, 18, true), at(DS, 0, 2.05, 0.1), '#f1dcc0', 5);
+
+  // ── CREDENZA: records, a turntable, a round mirror (behind, left of the bookcase) ──
+  b.setAnchor(ANCHOR.credenza);
+  const CR = wallFrame(LAYOUT.credenza, R - 0.25, floorY);
+  b.add(box(1.3, 0.5, 0.42), at(CR, 0, 0.37, 0), OAK, 0);
+  b.add(box(1.34, 0.03, 0.45), at(CR, 0, 0.635, 0.01), WALNUT_L, 0);
+  for (const [lx, lz] of [
+    [-0.6, -0.16],
+    [0.6, -0.16],
+    [-0.6, 0.16],
+    [0.6, 0.16],
+  ])
+    b.add(cyl(0.02, 0.012, 0.12, 8), at(CR, lx, 0.06, lz), WALNUT, 0);
+  b.add(box(0.6, 0.42, 0.012), at(CR, -0.32, 0.37, 0.215), '#7a5638', 0);
+  // records standing in the open half, sleeves of different colours
+  ['#3a3a40', '#b98c86', '#e0d2bc', '#4b5a6e', '#6e2634', '#c9a46e'].forEach((c, i) => b.add(box(0.012, 0.31, 0.31), at(CR, 0.12 + i * 0.03, 0.32, 0.0, 0, 0, i === 5 ? 0.18 : 0.02 * i), c, 3));
+  // the turntable
+  b.add(box(0.44, 0.08, 0.34), at(CR, -0.25, 0.69, -0.01), WALNUT_L, 0);
+  b.add(cyl(0.14, 0.14, 0.012, 32), at(CR, -0.28, 0.736, -0.01), '#1e1a1a', 3);
+  b.add(cyl(0.045, 0.045, 0.014, 20), at(CR, -0.28, 0.738, -0.01), '#b4505f', 3);
+  b.add(cyl(0.005, 0.005, 0.2, 6), at(CR, -0.13, 0.75, 0.0, 0.5, 0, Math.PI / 2), BRASS, 4);
+  // a little mushroom lamp and a trailing plant
+  const CL = wallFrame(LAYOUT.credenza + 0.08, R - 0.3, floorY);
+  b.add(cyl(0.03, 0.05, 0.22, 16), at(CL, 0, 0.76, 0), '#e7dccd', 2);
+  b.add(new THREE.SphereGeometry(0.12, 18, 10, 0, Math.PI * 2, 0, Math.PI / 2), at(CL, 0, 0.86, 0), '#f1dcc0', 5);
+  b.add(cyl(0.08, 0.06, 0.12, 18), at(CR, 0.45, 0.71, -0.05), '#cbb9a3', 2);
+  for (let i = 0; i < 9; i++) b.add(new THREE.SphereGeometry(1, 8, 6), at(CR, 0.45 + Math.cos(i * 2.2) * 0.07, 0.62 + (i % 3) * 0.06 + 0.12 - i * 0.025, 0.02 + Math.sin(i * 2.2) * 0.07, i * 2.2, 0, 1.2, [0.035, 0.06, 0.01]), i % 2 ? '#4f6b45' : SAGE, 1);
+  // the round mirror above, in a thin brass ring
+  const MR = wallFrame(LAYOUT.credenza, R - 0.03, floorY);
+  b.add(new THREE.TorusGeometry(0.36, 0.018, 8, 48), at(MR, 0, 1.55, 0.03), BRASS, 4);
+  b.add(new THREE.CircleGeometry(0.355, 40), at(MR, 0, 1.55, 0.02), '#7f8a96', 6 as Kind);
+
   return b.merge();
 }
 
@@ -522,6 +701,47 @@ function drawPhotos(): THREE.CanvasTexture {
   g.bezierCurveTo(hx - 100, hy - 10, hx - 50, hy - 90, hx, hy - 30);
   g.bezierCurveTo(hx + 50, hy - 90, hx + 100, hy - 10, hx, hy + 60);
   g.stroke();
+  // 5 — the painting: soft warm strokes, a blush sun, abstract
+  o = 5 * W;
+  grd = g.createLinearGradient(0, 0, 0, H);
+  grd.addColorStop(0, '#e9d4c0');
+  grd.addColorStop(1, '#c9a48c');
+  g.fillStyle = grd;
+  g.fillRect(o, 0, W, H);
+  g.fillStyle = 'rgba(214, 140, 140, 0.75)';
+  g.beginPath();
+  g.arc(o + W * 0.62, H * 0.38, 48, 0, Math.PI * 2);
+  g.fill();
+  [
+    ['rgba(120, 60, 60, 0.5)', 0.62, 30],
+    ['rgba(160, 110, 80, 0.55)', 0.72, 22],
+    ['rgba(90, 70, 80, 0.45)', 0.82, 26],
+  ].forEach(([col, y, th]) => {
+    g.strokeStyle = col as string;
+    g.lineWidth = th as number;
+    g.lineCap = 'round';
+    g.beginPath();
+    g.moveTo(o + 20, H * (y as number));
+    g.bezierCurveTo(o + W * 0.3, H * (y as number) - 30, o + W * 0.6, H * (y as number) + 26, o + W - 20, H * (y as number) - 8);
+    g.stroke();
+  });
+  // 6 — a pressed flower on cream paper
+  o = 6 * W;
+  g.fillStyle = '#efe4d2';
+  g.fillRect(o, 0, W, H);
+  g.strokeStyle = '#6f7a52';
+  g.lineWidth = 3;
+  g.beginPath();
+  g.moveTo(o + W * 0.5, H * 0.85);
+  g.quadraticCurveTo(o + W * 0.45, H * 0.6, o + W * 0.52, H * 0.35);
+  g.stroke();
+  g.fillStyle = 'rgba(190, 90, 110, 0.85)';
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2;
+    g.beginPath();
+    g.ellipse(o + W * 0.52 + Math.cos(a) * 18, H * 0.32 + Math.sin(a) * 18, 16, 9, a, 0, Math.PI * 2);
+    g.fill();
+  }
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   t.anisotropy = 4;
@@ -557,7 +777,7 @@ const propVertex = /* glsl */ `
 `;
 /** The room's light on a surface (shared by the props, the photos and the curtains). */
 export const ROOM_LIGHT = /* glsl */ `
-  uniform vec4 uLamps[4];
+  uniform vec4 uLamps[8];
   uniform vec4 uCandles[12];
   uniform int uCount;
   uniform float uFloorY;
@@ -569,7 +789,7 @@ export const ROOM_LIGHT = /* glsl */ `
   vec3 roomLight(vec3 P, vec3 n, float t) {
     vec3 light = vec3(0.1, 0.075, 0.085);   // the room's warm ambient
     light += vec3(0.05, 0.035, 0.03) * (0.5 + 0.5 * n.y);
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < 8; i++) {
       vec3 L = uLamps[i].xyz - P;
       float d2 = dot(L, L);
       light += vec3(1.0, 0.7, 0.42) * uLamps[i].w * (0.25 + 0.75 * max(dot(n, normalize(L)), 0.0)) * 1.1 / (1.0 + d2 * 1.5);
@@ -603,7 +823,12 @@ const propFragment = /* glsl */ `
     vec3 light = roomLight(vWorld, n, uTime);
     vec3 col;
     vec3 Hh = normalize(normalize(vec3(-0.3, 0.8, 0.4)) + V);
-    if (k > 4.5) {
+    if (k > 5.5) {
+      // the mirror: the warm room, dim, in it — brighter toward its edge, a soft streak
+      float f = pow(1.0 - max(dot(n, V), 0.0), 2.0);
+      col = mix(vec3(0.09, 0.07, 0.07), vec3(0.32, 0.22, 0.18), 0.4 + 0.6 * f) * (0.6 + length(light) * 0.6);
+      col += vec3(1.0, 0.9, 0.8) * smoothstep(0.03, 0.0, abs(dot(vWorld.xy, vec2(0.7, 0.7)) - floor(dot(vWorld.xy, vec2(0.7, 0.7)) + 0.5) + 0.1)) * 0.05;
+    } else if (k > 4.5) {
       // lamp shades: linen glowing from the bulb inside
       float rim = pow(1.0 - abs(dot(n, V)), 2.0);
       col = base * (0.7 + 0.3 * rim) + vec3(1.0, 0.66, 0.36) * 0.16;
@@ -767,7 +992,7 @@ export function RoomProps({ floorY, windowAngle, wallR, candleVec, candleCount, 
   const photoU = useMemo(() => ({ ...light, uMap: { value: photoTex } }), [light, photoTex]);
   const photoMat = useShader(photoVertex, photoFragment, photoU, { opaque: true });
   const photos = useMemo(() => {
-    const plane = (w: number, h: number, pic: number, m: THREE.Matrix4) => {
+    const plane = (w: number, h: number, pic: number, m: THREE.Matrix4, anchor: number = ANCHOR.seat) => {
       const g = new THREE.PlaneGeometry(w, h);
       const uv = g.attributes.uv as THREE.BufferAttribute;
       for (let i = 0; i < uv.count; i++) uv.setX(i, (pic + uv.getX(i)) / PICS);
@@ -776,13 +1001,15 @@ export function RoomProps({ floorY, windowAngle, wallR, candleVec, candleCount, 
       g.dispose();
       const n = f.attributes.position.count;
       const anc = new Float32Array(n * 2);
-      for (let i = 0; i < n; i++) anc.set([Math.sin(ANCHOR.seat), -Math.cos(ANCHOR.seat)], i * 2);
+      for (let i = 0; i < n; i++) anc.set([Math.sin(anchor), -Math.cos(anchor)], i * 2);
       f.setAttribute('aAnchor', new THREE.BufferAttribute(anc, 2));
       return f;
     };
     const parts = GALLERY.map((f) => plane(f.w, f.h, f.pic, galleryFrame(f, wallR, floorY).multiply(new THREE.Matrix4().makeTranslation(0, 0, 0.005))));
     // and the small one standing on the loveseat's side table
     parts.push(plane(0.12, 0.16, 4, at(wallFrame(LAYOUT.seatTable, wallR - 0.45, floorY), 0.1, 0.565 + 0.09, -0.1, -0.35, -0.12)));
+    for (const f of MEMORY_WALL) parts.push(plane(f.w, f.h, f.pic, galleryFrame(f, wallR, floorY).multiply(new THREE.Matrix4().makeTranslation(0, 0, 0.005)), ANCHOR.desk));
+    parts.push(plane(PAINTING.w, PAINTING.h, PAINTING.pic, galleryFrame(PAINTING, wallR, floorY).multiply(new THREE.Matrix4().makeTranslation(0, 0, 0.005)), ANCHOR.chest));
     return mergeAttrs(parts, ['position', 'normal', 'uv', 'aAnchor']);
   }, [floorY, wallR]);
   useEffect(() => () => photos.dispose(), [photos]);

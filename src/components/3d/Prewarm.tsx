@@ -40,7 +40,14 @@ export function Prewarm({ gifts, glass, solidHeart, delay = 500 }: { gifts: Gift
     const box = new THREE.BoxGeometry(0.01, 0.01, 0.01);
 
     const jobs: THREE.Object3D[] = [];
+    // materials that would build the same program need only one compile job (the gift
+    // surfaces all share one: see `surface()` in Gift3D)
+    const seen = new Set<string>();
     const add = (m: THREE.Material) => {
+      const p = m as THREE.MeshPhysicalMaterial;
+      const sig = [m.type, m.transparent, m.side, m.vertexColors, !!p.map, !!p.bumpMap, !!p.alphaMap, (p.transmission ?? 0) > 0, (p.iridescence ?? 0) > 0, (p.sheen ?? 0) > 0, (p.clearcoat ?? 0) > 0].join('|');
+      if (seen.has(sig)) return;
+      seen.add(sig);
       keepAlive.push(m);
       const mesh = new THREE.Mesh(box, m);
       mesh.position.set(0, 0, -1);

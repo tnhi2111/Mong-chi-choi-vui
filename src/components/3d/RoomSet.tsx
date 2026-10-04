@@ -158,10 +158,10 @@ const floorFragment = /* glsl */ `
   uniform int uCount;
   uniform vec2 uRug;
   uniform vec2 uCake;
-  uniform vec4 uLamps[4];
-  uniform vec4 uRugAt[2];
-  uniform vec4 uRugSize[2];
-  uniform vec4 uBlobs[4];
+  uniform vec4 uLamps[8];
+  uniform vec4 uRugAt[4];
+  uniform vec4 uRugSize[4];
+  uniform vec4 uBlobs[8];
   uniform float uHeart;
   uniform float uMotion;
   varying vec3 vWorld;
@@ -186,7 +186,7 @@ const floorFragment = /* glsl */ `
     float e = length(p / uRug);
     vec3 base = wood * (1.0 - 0.6 * smoothstep(1.12, 1.0, e));
     // area rugs under the armchair and the loveseat: wool, a border, a soft fringe, a little thickness
-    for (int i = 0; i < 2; i++) {
+    for (int i = 0; i < 4; i++) {
       vec2 q = p - uRugAt[i].xy;
       float ang0 = uRugAt[i].z;
       vec2 tng = vec2(cos(ang0), sin(ang0));
@@ -233,7 +233,7 @@ const floorFragment = /* glsl */ `
     vec2 qc = p - uCake;
     ao *= 1.0 - 0.45 * exp(-dot(qc, qc) * 5.0);
     // the furniture against the wall: soft contact shadows along its length
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < 8; i++) {
       vec4 b = uBlobs[i];
       vec2 tng = vec2(cos(b.z), sin(b.z));
       vec2 q = p - b.xy;
@@ -242,7 +242,7 @@ const floorFragment = /* glsl */ `
       ao *= 1.0 - 0.6 * exp(-dot(dq, dq) * 14.0);
     }
     // the lamps' warm pools on the floor below them
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < 8; i++) {
       vec2 lq = p - uLamps[i].xz;
       light += vec3(1.0, 0.7, 0.42) * uLamps[i].w * 0.6 * exp(-dot(lq, lq) * 0.5);
     }
@@ -385,7 +385,7 @@ const wallFragment = /* glsl */ `
   uniform float uFloorY;
   uniform float uMotion;
   uniform float uLove;      // seconds since she touched the window (large = never)
-  uniform vec4 uLamps[4];
+  uniform vec4 uLamps[8];
   varying vec3 vWorld;
   ${FLICK}
   ${HAZE}
@@ -448,7 +448,7 @@ const wallFragment = /* glsl */ `
     // the sign's champagne halo on the alcove behind it
     light += vec3(1.0, 0.78, 0.52) * 0.6 * exp(-sw * sw * 0.2 - (h - 2.0) * (h - 2.0) * 0.4);
     // the lamps: warm pools on the wall, brightest just above and below a shade
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < 8; i++) {
       vec3 lw = vWorld - uLamps[i].xyz;
       float lr = length(lw.xz);
       light += vec3(1.0, 0.7, 0.42) * uLamps[i].w * (0.9 * exp(-dot(lw, lw) * 0.9) + 0.45 * exp(-lr * lr * 6.0 / (0.1 + abs(lw.y) * 0.8)) * exp(-abs(lw.y) * 0.9));

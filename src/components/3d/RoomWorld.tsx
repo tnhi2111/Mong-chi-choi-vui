@@ -217,7 +217,7 @@ export function RoomWorld({
         position={camPos}
         lookAt={camLook}
         parallax={reducedMotion || opening ? 0 : 0.25}
-        speed={opening ? (gifts[openIndex]?.shape === 'envelope' ? 1.25 : 1.6) : 1.1}
+        speed={opening ? (gifts[openIndex]?.shape === 'envelope' ? 1.25 : 2.0) : 1.1}
         fov={base.fov}
         orbit={orbit}
         orbitCamera
