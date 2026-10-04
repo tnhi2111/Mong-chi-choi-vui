@@ -8,7 +8,7 @@ import { fill } from '../../lib/text';
 import { sound } from '../../lib/audio';
 import { getHeartGeometry } from './heartShape';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { RoomProps, lampPosition, lanternPosition, furnitureBlobs } from './RoomProps';
+import { RoomProps, roomLamps, roomRugs, furnitureBlobs, cakePosition, LAYOUT } from './RoomProps';
 import { BirthdaySign, metalVertex, metalFragment, satinVertex, satinFragment, mergeAll } from './BirthdaySign';
 
 /*
@@ -63,17 +63,25 @@ function fromHand(p: THREE.Vector3, away: THREE.Vector2): number {
   return dist;
 }
 
-const WALL_R = 9;
+const WALL_R = 6.9; // a small private room (the camera stands outside it: see CUT)
 const WALL_H = 6.2;
 /** Direction of the window: back-left, so the HAPPY BIRTHDAY installation owns the centre. */
-const WINDOW_ANGLE = -0.85; // measured as atan(x, -z)
+const WINDOW_ANGLE = -0.78; // measured as atan(x, -z)
 /** Where the moonlight from the window falls on the floor. */
-const MOON: [number, number] = [Math.sin(WINDOW_ANGLE) * 5.4, -Math.cos(WINDOW_ANGLE) * 5.4];
+const MOON: [number, number] = [Math.sin(WINDOW_ANGLE) * 4.9, -Math.cos(WINDOW_ANGLE) * 4.9];
 /** The stage stands this much above the wooden floor (two steps). */
 export const STAGE_STEP = 0.08;
 const MAX_CANDLES = 12;
 /** The window in the distant city that lights up for her (window-local x, y). */
-const LOVE_WIN: [number, number] = [-0.535, -1.02];
+const LOVE_WIN: [number, number] = [-0.535, -0.67];
+
+/** The dolls'-house cut: the stretch of wall between the camera and the room is not drawn. */
+const CUT = /* glsl */ `
+  bool cutAway(vec2 dir) {
+    vec2 cam = cameraPosition.xz;
+    return length(cam) > ${WALL_R.toFixed(1)} - 0.6 && dot(dir, normalize(cam)) > 0.45;
+  }
+`;
 
 interface Candle {
   x: number;
@@ -150,9 +158,10 @@ const floorFragment = /* glsl */ `
   uniform int uCount;
   uniform vec2 uRug;
   uniform vec2 uCake;
-  uniform vec3 uLamp;
-  uniform vec3 uLantern;
-  uniform vec4 uBlobs[2];
+  uniform vec4 uLamps[4];
+  uniform vec4 uRugAt[2];
+  uniform vec4 uRugSize[2];
+  uniform vec4 uBlobs[4];
   uniform float uHeart;
   uniform float uMotion;
   varying vec3 vWorld;
@@ -176,6 +185,28 @@ const floorFragment = /* glsl */ `
     // the stage stands on the floor: a soft contact shadow round its foot
     float e = length(p / uRug);
     vec3 base = wood * (1.0 - 0.6 * smoothstep(1.12, 1.0, e));
+    // area rugs under the armchair and the loveseat: wool, a border, a soft fringe, a little thickness
+    for (int i = 0; i < 2; i++) {
+      vec2 q = p - uRugAt[i].xy;
+      float ang0 = uRugAt[i].z;
+      vec2 tng = vec2(cos(ang0), sin(ang0));
+      vec2 nrm = vec2(-tng.y, tng.x);
+      vec2 lq = vec2(dot(q, tng), dot(q, nrm)) / uRugSize[i].xy;
+      float box = max(abs(lq.x), abs(lq.y));
+      float on = 1.0 - smoothstep(0.985, 1.0, box);
+      vec3 wool = uRugSize[i].z < 0.5 ? vec3(0.5, 0.44, 0.38) : vec3(0.42, 0.27, 0.27);
+      wool *= 0.9 + 0.1 * fract(sin(dot(floor(p * 110.0), vec2(12.9, 78.2))) * 43758.5);
+      float border = smoothstep(0.84, 0.86, box) * (1.0 - smoothstep(0.9, 0.92, box));
+      wool = mix(wool, wool * 0.62, border);
+      // a quiet lozenge pattern in the field
+      vec2 dm = abs(fract(lq * vec2(3.0, 2.0)) - 0.5);
+      wool *= 1.0 - 0.06 * smoothstep(0.03, 0.0, abs(dm.x + dm.y - 0.35)) * (1.0 - border);
+      float fringe = step(1.0, abs(lq.x)) * (1.0 - smoothstep(1.0, 1.05, abs(lq.x))) * step(abs(lq.y), 0.98) * step(0.4, fract(lq.y * 40.0));
+      base = mix(base, wool, on);
+      base = mix(base, vec3(0.6, 0.52, 0.44), fringe * 0.8);
+      // its edge stands a little proud of the boards
+      base *= 1.0 - 0.35 * smoothstep(1.06, 1.0, box) * (1.0 - on);
+    }
     // light: a dim room, pools of candlelight, the heart's breath, a slant of moonlight
     vec3 light = vec3(0.13, 0.09, 0.1);
     for (int i = 0; i < ${MAX_CANDLES}; i++) {
@@ -202,7 +233,7 @@ const floorFragment = /* glsl */ `
     vec2 qc = p - uCake;
     ao *= 1.0 - 0.45 * exp(-dot(qc, qc) * 5.0);
     // the furniture against the wall: soft contact shadows along its length
-    for (int i = 0; i < 2; i++) {
+    for (int i = 0; i < 4; i++) {
       vec4 b = uBlobs[i];
       vec2 tng = vec2(cos(b.z), sin(b.z));
       vec2 q = p - b.xy;
@@ -210,11 +241,11 @@ const floorFragment = /* glsl */ `
       vec2 dq = q - tng * along;
       ao *= 1.0 - 0.6 * exp(-dot(dq, dq) * 14.0);
     }
-    // the table lamp's warm pool on the floor below it
-    vec2 lq = p - uLamp.xz;
-    light += vec3(1.0, 0.7, 0.42) * 0.55 * exp(-dot(lq, lq) * 0.45);
-    vec2 nq = p - uLantern.xz;
-    light += vec3(1.0, 0.64, 0.36) * 0.3 * flick(uTime * uMotion + 9.0, 3.7) * exp(-dot(nq, nq) * 0.9);
+    // the lamps' warm pools on the floor below them
+    for (int i = 0; i < 4; i++) {
+      vec2 lq = p - uLamps[i].xz;
+      light += vec3(1.0, 0.7, 0.42) * uLamps[i].w * 0.6 * exp(-dot(lq, lq) * 0.5);
+    }
     vec3 col = base * light * ao;
     // out toward the wall the room falls into darkness
     col *= 1.0 - smoothstep(6.0, 9.0, r) * 0.7;
@@ -354,45 +385,51 @@ const wallFragment = /* glsl */ `
   uniform float uFloorY;
   uniform float uMotion;
   uniform float uLove;      // seconds since she touched the window (large = never)
-  uniform vec3 uLamp;
-  uniform vec3 uLantern;
+  uniform vec4 uLamps[4];
   varying vec3 vWorld;
   ${FLICK}
   ${HAZE}
+  ${CUT}
   float hash2(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
   void main() {
+    if (cutAway(normalize(vWorld.xz))) discard;
     float a = atan(vWorld.x, -vWorld.z) - ${WINDOW_ANGLE.toFixed(3)};
     float h = vWorld.y - uFloorY;
     float s = a * ${WALL_R.toFixed(1)};   // distance along the wall
     float t = uTime * uMotion;
 
     float sw = (a + ${WINDOW_ANGLE.toFixed(3)}) * ${WALL_R.toFixed(1)}; // along the wall from its centre (the sign)
-    float nearWin = 1.0 - step(1.35, abs(s));
+    float nearWin = 1.0 - step(1.45, abs(s));
 
-    // architecture: tall recessed arched panels between slim pilasters, over walnut wainscot
-    float bay = 2.6;
-    float bx = mod(sw + bay * 0.5, bay) - bay * 0.5;
-    float pw = 0.86;
-    float archTop0 = 3.0 + sqrt(max(0.0, 1.0 - (bx / pw) * (bx / pw))) * 0.5;
-    float inArch = step(abs(bx), pw) * step(1.38, h) * step(h, archTop0) * (1.0 - nearWin);
-    float edgeD = min(min(pw - abs(bx), h - 1.38), archTop0 - h);
-    vec3 plaster = vec3(0.17, 0.1, 0.115) * (0.93 + 0.07 * hash2(floor(vec2(sw, h) * 40.0)));
+    // a room of human height: walnut wainscot to 0.95, plaster above, a crown moulding
+    // at 3.05 and the shadowy ceiling cove above it
+    vec3 plaster = vec3(0.2, 0.145, 0.135) * (0.93 + 0.07 * hash2(floor(vec2(sw, h) * 40.0)));
     vec3 col = plaster;
-    // the recess is a shade deeper
-    col = mix(col, vec3(0.13, 0.075, 0.095), inArch);
-    // pilasters between the bays, with fine seams at their edges
-    float pil = smoothstep(bay * 0.5 - 0.3, bay * 0.5 - 0.28, abs(bx));
-    col = mix(col, vec3(0.2, 0.12, 0.13), pil * step(1.1, h));
-    float seam = smoothstep(0.008, 0.0, abs(abs(bx) - (bay * 0.5 - 0.29)));
-    col *= 1.0 - seam * 0.45 * step(1.1, h);
+    // the feature wall: an arched alcove for the HAPPY BIRTHDAY installation
+    float aw = 2.5;
+    float alcTop = 2.35 + sqrt(max(0.0, 1.0 - (sw / aw) * (sw / aw))) * 0.6;
+    float inAlc = step(abs(sw), aw) * step(h, alcTop) * step(0.95, h);
+    float alcEdge = min(aw - abs(sw), alcTop - h);
+    col = mix(col, vec3(0.27, 0.19, 0.17), inAlc);                 // a warmer blush-cream plaster
+    col *= 1.0 - inAlc * 0.35 * smoothstep(0.18, 0.0, alcEdge);    // its depth: shade at the reveal
+    // moulded panels on the plain walls, in a calm rhythm (not behind the window or alcove)
+    float pp = 1.7;
+    float px0 = mod(sw + pp * 0.5, pp) - pp * 0.5;
+    float inPanel = step(abs(px0), 0.58) * step(1.2, h) * step(h, 2.7) * (1.0 - nearWin) * step(aw + 0.75, abs(sw));
+    float pEdge = min(0.58 - abs(px0), min(h - 1.2, 2.7 - h));
+    float moulding = inPanel * smoothstep(0.014, 0.0, abs(pEdge - 0.02));
     // walnut wainscot below, in panels with a bevelled inset
     vec3 panel = vec3(0.16, 0.085, 0.05);
-    float px = mod(sw + 0.65, 1.3) - 0.65;
-    float pinset = step(abs(px), 0.5) * step(0.16, h) * step(h, 0.94);
-    float pedge = smoothstep(0.012, 0.0, abs(min(0.5 - abs(px), min(h - 0.16, 0.94 - h))));
+    float wpx = mod(sw + 0.6, 1.2) - 0.6;
+    float pinset = step(abs(wpx), 0.48) * step(0.14, h) * step(h, 0.82);
+    float pedge = smoothstep(0.012, 0.0, abs(min(0.48 - abs(wpx), min(h - 0.14, 0.82 - h))));
     panel *= 1.0 - pinset * 0.12;
     panel += vec3(0.08, 0.05, 0.03) * pedge * pinset;
-    col = mix(panel, col, smoothstep(1.08, 1.12, h));
+    col = mix(panel, col, smoothstep(0.93, 0.97, h));
+    // the crown moulding and the ceiling cove above
+    float crown = smoothstep(2.98, 3.0, h) * (1.0 - smoothstep(3.12, 3.14, h));
+    col = mix(col, vec3(0.3, 0.22, 0.19), crown);
+    col *= 1.0 - smoothstep(3.14, 3.5, h) * 0.6;
 
     // warm light from the candles below, climbing the wall (over a warm room ambient)
     vec3 light = vec3(0.16, 0.11, 0.12);
@@ -404,34 +441,36 @@ const wallFragment = /* glsl */ `
       float reach = length(c.xy) / ${WALL_R.toFixed(1)};
       light += vec3(1.0, 0.58, 0.3) * flick(t + 20.0, c.z) * 0.55 * reach * reach * exp(-d * d * 0.35) * exp(-h * 0.55);
     }
-    // indirect light: a warm wash rising inside each arched recess from a hidden cove
-    light += vec3(1.0, 0.7, 0.45) * 0.42 * inArch * exp(-(h - 1.38) * 1.5);
-    // the sign's champagne halo on the wall behind it
-    light += vec3(1.0, 0.78, 0.52) * 0.75 * exp(-sw * sw * 0.16 - (h - 2.0) * (h - 2.0) * 0.3);
-    // the table lamp: a warm pool on the wall, brightest just above and below the shade
-    vec3 lw = vWorld - uLamp;
-    float lr = length(lw.xz);
-    light += vec3(1.0, 0.7, 0.42) * (0.9 * exp(-dot(lw, lw) * 0.9) + 0.5 * exp(-lr * lr * 6.0 / (0.1 + abs(lw.y) * 0.8)) * exp(-abs(lw.y) * 0.9));
-    vec3 nw = vWorld - uLantern;
-    light += vec3(1.0, 0.64, 0.36) * 0.45 * flick(t + 9.0, 3.7) * exp(-dot(nw, nw) * 1.4);
+    // hidden architectural light: a warm wash rising in the alcove from a cove at its foot,
+    // and a soft uplight along the crown moulding
+    light += vec3(1.0, 0.7, 0.45) * 0.5 * inAlc * exp(-(h - 0.95) * 1.2);
+    light += vec3(1.0, 0.72, 0.48) * 0.22 * exp(-(h - 2.95) * (h - 2.95) * 30.0) * step(h, 3.0);
+    // the sign's champagne halo on the alcove behind it
+    light += vec3(1.0, 0.78, 0.52) * 0.6 * exp(-sw * sw * 0.2 - (h - 2.0) * (h - 2.0) * 0.4);
+    // the lamps: warm pools on the wall, brightest just above and below a shade
+    for (int i = 0; i < 4; i++) {
+      vec3 lw = vWorld - uLamps[i].xyz;
+      float lr = length(lw.xz);
+      light += vec3(1.0, 0.7, 0.42) * uLamps[i].w * (0.9 * exp(-dot(lw, lw) * 0.9) + 0.45 * exp(-lr * lr * 6.0 / (0.1 + abs(lw.y) * 0.8)) * exp(-abs(lw.y) * 0.9));
+    }
     // and a cool breath of moonlight round the window
     light += vec3(0.3, 0.42, 0.85) * 0.35 * exp(-s * s * 0.18 - (h - 2.4) * (h - 2.4) * 0.12);
     col *= light * 1.6;
     // thin champagne trims: the chair rail, the cornice, the arch outlines
-    float trims = smoothstep(0.016, 0.0, abs(h - 1.1)) + smoothstep(0.012, 0.0, abs(h - 3.72)) * 0.8 + smoothstep(0.01, 0.0, abs(edgeD)) * inArch * 0.7;
+    float trims = smoothstep(0.016, 0.0, abs(h - 0.95)) + smoothstep(0.012, 0.0, abs(h - 3.0)) * 0.8 + smoothstep(0.012, 0.0, abs(alcEdge)) * step(0.95, h) * step(abs(sw), aw + 0.02) * 0.8 + moulding * 0.45;
     col += vec3(0.86, 0.66, 0.42) * trims * (light * 0.55);
     col *= 0.5 + 0.5 * smoothstep(0.0, 0.45, h); // shadow where wall meets floor
 
     // the arched window
     float wx = s;
-    float wy = h - 2.5;
-    float archTop = 1.35 + sqrt(max(0.0, 1.0 - (wx / 0.95) * (wx / 0.95))) * 0.75;
-    float inWin = step(abs(wx), 0.95) * step(-1.3, wy) * step(wy, archTop);
-    float frame = step(abs(wx), 1.07) * step(-1.42, wy) * step(wy, archTop + 0.12) * (1.0 - inWin);
+    float wy = h - 1.85;
+    float archTop = 0.55 + sqrt(max(0.0, 1.0 - (wx / 0.95) * (wx / 0.95))) * 0.45;
+    float inWin = step(abs(wx), 0.95) * step(-0.95, wy) * step(wy, archTop);
+    float frame = step(abs(wx), 1.07) * step(-1.07, wy) * step(wy, archTop + 0.12) * (1.0 - inWin);
     if (inWin > 0.5) {
       // the night: deep blue, a big soft moon, stars
-      vec3 sky = mix(vec3(0.03, 0.04, 0.12), vec3(0.1, 0.13, 0.3), smoothstep(2.2, -1.3, wy));
-      vec2 moon = vec2(0.42, 1.25);
+      vec3 sky = mix(vec3(0.03, 0.04, 0.12), vec3(0.1, 0.13, 0.3), smoothstep(1.0, -0.95, wy));
+      vec2 moon = vec2(0.42, 0.72);
       float md = length(vec2(wx, wy) - moon);
       sky += vec3(0.9, 0.92, 1.0) * smoothstep(0.24, 0.2, md) + vec3(0.3, 0.35, 0.6) * exp(-md * md * 3.0) * 0.6;
       vec2 sg = floor(vec2(wx, wy) * 22.0);
@@ -441,7 +480,7 @@ const wallFragment = /* glsl */ `
       float col9 = floor((wx + 1.0) * 9.0);
       float bh = 0.12 + hash2(vec2(col9, 3.0)) * 0.42;
       if (abs(col9 - 4.0) < 0.5) bh = max(bh, 0.4);
-      float by = wy + 1.3;
+      float by = wy + 0.95;
       if (by < bh) {
         sky = mix(sky, vec3(0.018, 0.02, 0.045), 0.94);
         vec2 wc = vec2((wx + 1.0) * 60.0, by * 55.0);
@@ -461,7 +500,7 @@ const wallFragment = /* glsl */ `
         vec2 home = vec2(${LOVE_WIN[0].toFixed(3)}, ${LOVE_WIN[1].toFixed(3)});
         float rise = clamp((uLove - 0.8) / 3.2, 0.0, 1.0);
         float e = rise * rise * (3.0 - 2.0 * rise);
-        vec2 hp = home + vec2(sin(e * 5.0) * 0.06, e * 1.9);
+        vec2 hp = home + vec2(sin(e * 5.0) * 0.06, e * 1.25);
         float size = 0.07 * (1.0 - e * 0.75);
         vec2 q = (vec2(wx, wy) - hp) / size + vec2(0.0, 0.55);
         q.x = abs(q.x);
@@ -472,7 +511,7 @@ const wallFragment = /* glsl */ `
         sky += vec3(1.0, 0.5, 0.65) * smoothstep(0.08, -0.05, dh) * showH;
         sky += vec3(1.0, 0.6, 0.72) * exp(-dot(vec2(wx, wy) - hp, vec2(wx, wy) - hp) * 90.0) * showH * 0.5;
         // the new star stays for the rest of her visit
-        vec2 st = home + vec2(sin(5.0) * 0.06, 1.9);
+        vec2 st = home + vec2(sin(5.0) * 0.06, 1.25);
         float star = step(4.0, uLove) * step(uLove, 900.0);
         float sd = length(vec2(wx, wy) - st);
         float tw = 0.75 + 0.25 * sin(t * 3.0);
@@ -481,20 +520,20 @@ const wallFragment = /* glsl */ `
                + smoothstep(0.004, 0.0, abs(wy - st.y)) * exp(-abs(wx - st.x) * 40.0) * 0.4) * star * tw;
       }
       // mullions: a cross of glazing bars, and the city's faint glow low on the horizon
-      float bars = smoothstep(0.025, 0.0, abs(wx)) + smoothstep(0.025, 0.0, abs(wy - 0.35));
+      float bars = smoothstep(0.025, 0.0, abs(wx)) + smoothstep(0.025, 0.0, abs(wy - 0.2));
       sky = mix(sky, vec3(0.2, 0.12, 0.08), clamp(bars, 0.0, 1.0));
-      sky += vec3(0.25, 0.2, 0.35) * smoothstep(-0.9, -1.3, wy) * 0.2;
+      sky += vec3(0.25, 0.2, 0.35) * smoothstep(-0.55, -0.95, wy) * 0.2;
       // the glass: a faint reflection of the warm room in it, a soft diagonal sheen,
       // and a breath of mist low on the pane where the cold meets the warm air
       sky += vec3(0.22, 0.13, 0.1) * 0.25;
       sky += vec3(1.0, 0.8, 0.65) * smoothstep(0.05, 0.0, abs(wx * 0.7 + wy * 0.5 - 0.3)) * 0.05;
-      sky = mix(sky, vec3(0.32, 0.3, 0.38), smoothstep(-0.6, -1.3, wy) * 0.22);
+      sky = mix(sky, vec3(0.32, 0.3, 0.38), smoothstep(-0.3, -0.95, wy) * 0.22);
       col = sky;
     } else if (frame > 0.5) {
       col = vec3(0.3, 0.17, 0.1) * (light * 1.6 + vec3(0.1, 0.12, 0.2));
     }
     // the sill catches a little moonlight
-    col += vec3(0.25, 0.3, 0.5) * smoothstep(0.05, 0.0, abs(wy + 1.36)) * step(abs(wx), 1.12) * 0.6;
+    col += vec3(0.25, 0.3, 0.5) * smoothstep(0.05, 0.0, abs(wy + 1.01)) * step(abs(wx), 1.12) * 0.6;
     // up into the dark
     col *= 1.0 - smoothstep(3.6, ${WALL_H.toFixed(1)}, h) * 0.85;
     col = haze(col, vWorld);
@@ -589,6 +628,7 @@ const flameFragment = /* glsl */ `
 
 /* ── little lights: fairy lights, the tree's lights and star ─────────────── */
 const twinkleVertex = /* glsl */ `
+  ${CUT}
   uniform float uTime;
   uniform float uPixelRatio;
   uniform float uMotion;
@@ -600,6 +640,7 @@ const twinkleVertex = /* glsl */ `
   void main() {
     vec4 mv = modelViewMatrix * vec4(position, 1.0);
     gl_Position = projectionMatrix * mv;
+    if (cutAway(normalize(position.xz))) gl_Position = vec4(0.0, 0.0, 2.0, 1.0);
     // each bulb breathes at its own pace, now and then dipping low
     float tw = 0.65 + 0.35 * sin(uTime * uMotion * (0.8 + aSeed * 1.6) + aSeed * 30.0);
     tw *= 0.8 + 0.2 * step(0.2, fract(uTime * 0.13 * uMotion + aSeed * 5.0));
@@ -1133,7 +1174,7 @@ function Garland({ floorY }: { floorY: number }) {
         const u = k / per;
         const a = a0 + ((hk + u) / hooks) * (a1 - a0);
         const sag = Math.sin(u * Math.PI) * 0.32;
-        const y = floorY + 3.55 - sag;
+        const y = floorY + 2.9 - sag * 0.6;
         pts.push(Math.sin(a) * r, y, -Math.cos(a) * r);
         seed.push(Math.random());
         const c = palette[(hk * per + k) % palette.length];
@@ -1275,16 +1316,17 @@ export function RoomSet({ floorY: stageY, rx, rz, heart, reducedMotion, hoverFx,
       uCount: { value: candles.length },
       uRug: { value: new THREE.Vector2(rx + 0.95, rz + 0.95) },
       uCake: { value: new THREE.Vector2(9, 9) },
-      uLamp: { value: lampPosition(stageY - STAGE_STEP) },
-      uLantern: { value: lanternPosition(stageY - STAGE_STEP, WINDOW_ANGLE) },
-      uBlobs: { value: furnitureBlobs(WINDOW_ANGLE) },
+      uLamps: { value: roomLamps(stageY - STAGE_STEP, WALL_R) },
+      uRugAt: { value: roomRugs(WALL_R).at },
+      uRugSize: { value: roomRugs(WALL_R).size },
+      uBlobs: { value: furnitureBlobs(WALL_R) },
       uHeart: { value: heart },
       uMotion: { value: motion },
     }),
     [candleVec, candles.length, rx, rz], // eslint-disable-line react-hooks/exhaustive-deps
   );
   const wallU = useMemo(
-    () => ({ uTime: { value: 0 }, uCandles: { value: candleVec }, uCount: { value: candles.length }, uFloorY: { value: floorY }, uMotion: { value: motion }, uLove: { value: 999 }, uLamp: floorU.uLamp, uLantern: floorU.uLantern }),
+    () => ({ uTime: { value: 0 }, uCandles: { value: candleVec }, uCount: { value: candles.length }, uFloorY: { value: floorY }, uMotion: { value: motion }, uLove: { value: 999 }, uLamps: floorU.uLamps }),
     [candleVec, candles.length, floorY, floorU], // eslint-disable-line react-hooks/exhaustive-deps
   );
   const floorMat = useShader(floorVertex, floorFragment, floorU, { opaque: true });
@@ -1383,8 +1425,9 @@ export function RoomSet({ floorY: stageY, rx, rz, heart, reducedMotion, hoverFx,
   const balloons = useMemo(
     () =>
       // three, muted, loosely gathered by the sign — two on one side, one on the other
-      (portrait ? [-0.42, -0.34, 0.38] : [-0.62, -0.5, 0.47]).map((a, i) => ({
-        at: [Math.sin(a) * (WALL_R - 1.8 + [0, 0.4, 0.15][i]), floorY, -Math.cos(a) * (WALL_R - 1.8 + [0, 0.4, 0.15][i])] as [number, number, number],
+      // tied in a loose bunch by the end of the sideboard, where the party things are
+      [LAYOUT.sideboard - 0.2, LAYOUT.sideboard - 0.15, LAYOUT.sideboard - 0.24].map((a, i) => ({
+        at: [Math.sin(a) * (WALL_R - [0.55, 0.85, 0.75][i]), floorY, -Math.cos(a) * (WALL_R - [0.55, 0.85, 0.75][i])] as [number, number, number],
         length: [1.95, 1.55, 1.75][i],
         color: ['#c98a98', '#c9a56a', '#e6d6d0', '#b8788a'][i],
         heart: i === 1,
@@ -1399,10 +1442,24 @@ export function RoomSet({ floorY: stageY, rx, rz, heart, reducedMotion, hoverFx,
     setSecretFound(true);
   };
 
-  const cakeAt: [number, number, number] = portrait ? [2.5, floorY, -4.4] : [5.4, floorY, -3.9];
+  const cakeAt: [number, number, number] = cakePosition(floorY, WALL_R);
   useEffect(() => {
     floorU.uCake.value.set(cakeAt[0], cakeAt[2]);
   }, [cakeAt[0], cakeAt[2], floorU]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // the dolls'-house cut for the set pieces: whatever stands between the camera and the
+  // room (when she walks round it) steps out of the way, like the wall behind it
+  const cutGroups = useRef<(THREE.Object3D | null)[]>([]);
+  useFrame(({ camera: cam }) => {
+    const cx = cam.position.x;
+    const cz = cam.position.z;
+    const d = Math.hypot(cx, cz);
+    for (const g of cutGroups.current) {
+      if (!g) continue;
+      const a = g.userData.anchor as number;
+      g.visible = !(d > WALL_R - 0.6 && (Math.sin(a) * cx - Math.cos(a) * cz) / d > 0.42);
+    }
+  });
 
   const loveAt = useRef<number | null>(null);
   const clockNow = useRef(0);
@@ -1468,7 +1525,9 @@ export function RoomSet({ floorY: stageY, rx, rz, heart, reducedMotion, hoverFx,
       <Dust candles={candles} candleVec={candleVec} floorY={floorY} count={portrait ? 90 : 170} motion={motion} />
       {/* the window pane, as something to touch */}
       <mesh
-        position={[Math.sin(WINDOW_ANGLE) * (WALL_R - 0.12), floorY + 2.5 + 0.4, -Math.cos(WINDOW_ANGLE) * (WALL_R - 0.12)]}
+        ref={(m) => void (cutGroups.current[3] = m)}
+        userData={{ anchor: WINDOW_ANGLE }}
+        position={[Math.sin(WINDOW_ANGLE) * (WALL_R - 0.12), floorY + 1.9, -Math.cos(WINDOW_ANGLE) * (WALL_R - 0.12)]}
         rotation-y={-WINDOW_ANGLE}
         onClick={touchWindow}
         onPointerOver={(e) => {
@@ -1477,20 +1536,24 @@ export function RoomSet({ floorY: stageY, rx, rz, heart, reducedMotion, hoverFx,
         }}
         onPointerOut={() => (document.body.style.cursor = '')}
       >
-        <planeGeometry args={[1.9, 3.3]} />
+        <planeGeometry args={[1.9, 2.0]} />
         <meshBasicMaterial transparent opacity={0} depthWrite={false} colorWrite={false} />
       </mesh>
       <Garland floorY={floorY} />
-      <BirthdaySign floorY={floorY} radius={portrait ? 4.9 : 6.5} scale={portrait ? 0.6 : 1} drop={portrait ? 0.75 : 0.32} heart={heart} motion={motion} />
+      <group ref={(g) => void (cutGroups.current[0] = g)} userData={{ anchor: 0 }}>
+        <BirthdaySign floorY={floorY} radius={portrait ? 4.9 : 5.95} scale={portrait ? 0.6 : 0.95} drop={portrait ? 0.75 : 0.32} heart={heart} motion={motion} />
+      </group>
       <Stage y={stageY} rug={floorU.uRug.value} stageMat={stageMat} bandMat={bandMat} />
       <RoomProps floorY={floorY} windowAngle={WINDOW_ANGLE} wallR={WALL_R} candleVec={candleVec} candleCount={candles.length} heart={heart} motion={motion} />
       {dogSpot && <Petals spot={dogSpot} y={stageY} motion={motion} />}
-      <group position={cakeAt} scale={0.82}>
+      <group position={cakeAt} scale={0.82} ref={(g) => void (cutGroups.current[1] = g)} userData={{ anchor: LAYOUT.cake }}>
         <Cake at={[0, 0, 0]} outward={cakeAt} motion={motion} secretFound={secretFound} onSecret={findSecret} />
       </group>
-      {balloons.map((b, i) => (
-        <Balloon key={i} {...b} motion={motion} hoverFx={hoverFx} />
-      ))}
+      <group ref={(g) => void (cutGroups.current[2] = g)} userData={{ anchor: LAYOUT.sideboard }}>
+        {balloons.map((b, i) => (
+          <Balloon key={i} {...b} motion={motion} hoverFx={hoverFx} />
+        ))}
+      </group>
     </group>
   );
 }
