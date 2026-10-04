@@ -216,6 +216,22 @@ soft blob shadow on the floor that tightens as it lands.
   a rose bounce from the room, per-material highlights and contact darkening. Hover: the
   cake rises a breath (scale 1.015) with sparkles (`sparkleVertex`); the "26" topper is a
   hair heavier and leans toward the room.
+- **No flash when the camera moves through the room**: the "white flash" on clicking the cake
+  was the camera passing THROUGH the particle heart (additive points sized by 1/distance
+  filled the screen). Now every point layer caps its size and fades right in front of the
+  camera (ParticleHeart `camNear`, ParticleField, candle flames), the heart's shell / glow
+  withdraw when the camera is within ~2.8 m (Heart3D `close`), and moments use a two-beat
+  camera (`MOMENT.turnFirst`: turn toward the subject from afar, then lean in). The cake's
+  reveal: flames brighten only a little, a small warm pool, a ring of gold/pink motes runs
+  once round it (`ringVertex` in cakeModel).
+- **The puppy's face**: ears are their own meshes (`EAR_PIVOT`, `earL/earR` from the worker)
+  on damped springs driven by the head's motion (+ a hop when happy); the mouth's lines are
+  projected onto the sculpted surface (`MOUTH` in letterDogModel: upper lip, philtrum,
+  lower lip; tapered tubes); four small upper and lower teeth tucked inside the lips, a pink
+  gum, a grooved tongue that slides forward as the jaw opens; eyes = dark ball + iris disc
+  pressed onto its curve (canvas texture) + clear cornea + catch-light on the cornea, and
+  thin upper lids (open high, lowered a little when happy, closed for blinks); the eyes
+  follow her hand. Materials in `createLetterDogMaterials` (pre-warmed).
 - Room UI: memory indicators are medallions; the final note sits between fine rules and
   "Come closer" is ivory/blush glass (`room-ui__cta`).
 Intro particle puppy: after its lap the waving arm's points settle onto the mirror image

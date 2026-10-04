@@ -118,10 +118,13 @@ const vertex = /* glsl */ `
     gl_Position = projectionMatrix * mv;
     float dormantSize = wander > 0.5 ? 0.8 : 0.9;
     gl_PointSize = aSize * uPixelRatio * (10.5 / -mv.z) * mix(dormantSize, 1.0, e) * (1.0 + uBeat * 0.5 + near * 1.2);
+    // never a flash in her face: a point right in front of the camera fades and stops growing
+    float camNear = smoothstep(0.35, 1.8, -mv.z);
+    gl_PointSize = min(gl_PointSize, 36.0 * uPixelRatio);
 
     float twinkle = 0.65 + 0.35 * sin(t * (1.2 + aSeed * 2.5) + aSeed * 60.0);
     float dormantAlpha = wander > 0.5 ? 0.55 : 0.8;
-    vAlpha = twinkle * (0.8 + 0.5 * uGlow) * mix(dormantAlpha, fade, e);
+    vAlpha = twinkle * (0.8 + 0.5 * uGlow) * mix(dormantAlpha, fade, e) * camNear;
     vHot = clamp(near * 1.4 + uBeat * 0.6 + sin(e * PI) * 0.5, 0.0, 1.0);
     vColor = aColor;
   }

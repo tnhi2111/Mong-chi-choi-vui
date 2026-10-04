@@ -152,6 +152,7 @@ function idlePulse(t: number): number {
   return g(c, 0.15, 0.09) + 0.6 * g(c, 0.45, 0.09);
 }
 
+const worldPos = new THREE.Vector3();
 const DEFAULT_RING: DormantRing = { y: -1.2, radius: 1.2, tilt: 0 };
 
 const fineHover = () => typeof matchMedia !== 'undefined' && matchMedia('(hover: hover) and (pointer: fine)').matches;
@@ -268,6 +269,11 @@ export function Heart3D({
       }
     }
     const A = assembly.current;
+    // a camera passing close by (on its way to the cake or the sign) must never be filled
+    // with the heart's light: it quietly withdraws while the camera is near
+    grp.getWorldPosition(worldPos);
+    const camGap = state.camera.position.distanceTo(worldPos);
+    const close = THREE.MathUtils.smoothstep(camGap, 1.4, 2.8);
 
     if (cloud.current) {
       touch.current = Math.max(0, touch.current - dt * 1.6);
@@ -275,7 +281,7 @@ export function Heart3D({
       pBeat.current += (expand * beatAmt - pBeat.current) * (1 - Math.exp(-dt * 14));
       // (inside the quartz the light is gentler: it glows through the stone)
       const glowAmt = THREE.MathUtils.clamp(0.35 + charge * 0.35 + b.light * 0.45 + h * 0.15, 0, 1.4) * (crystal ? 0.72 : 1);
-      cloud.current.set({ beat: pBeat.current, glow: glowAmt, hoverPos: hoverLocal.current, hover: Math.max(h, touch.current) * A, assemble: A });
+      cloud.current.set({ beat: pBeat.current, glow: glowAmt * close, hoverPos: hoverLocal.current, hover: Math.max(h, touch.current) * A, assemble: A });
     }
 
     const light = 0.1 + charge * 0.28 + b.light * 0.9 + h * 0.1;
@@ -286,13 +292,13 @@ export function Heart3D({
       const m = glow.current.material as THREE.SpriteMaterial;
       m.opacity += ((asLight ? 0.07 : 0.1) + charge * 0.12 + b.light * 0.3 + h * 0.05 - m.opacity) * kk;
       glow.current.scale.setScalar((2.8 + charge * 0.8 + b.light * 1.1) * halo);
-      m.opacity *= A * (crystal ? 0.6 : 1);
+      m.opacity *= A * (crystal ? 0.6 : 1) * close;
     }
     if (inner.current) inner.current.intensity = (1.2 + light * 5) * innerLight * A * (crystal ? 0.65 : 1);
     if (crystal) {
       crystalU.uTime.value = t;
       crystalU.uGlow.value = 0.55 + charge * 0.5 + b.light * 0.6 + h * 0.25;
-      crystalU.uOn.value = A;
+      crystalU.uOn.value = A * close;
     }
   });
 

@@ -382,3 +382,44 @@ export function sparkleGeometry(count: number): THREE.BufferGeometry {
   g.setAttribute('aSeed', new THREE.BufferAttribute(sd, 1));
   return g;
 }
+
+/**
+ * The reveal: a ring of warm gold and soft pink motes that runs once round the cake,
+ * rising a little, then fades — the moment the cake "answers" her touch. `uSince` is the
+ * time since the touch (large = idle: nothing drawn).
+ */
+export const ringVertex = /* glsl */ `
+  uniform float uSince;
+  uniform float uPixelRatio;
+  attribute float aSeed;
+  varying float vA;
+  varying vec3 vCol;
+  void main() {
+    float t = clamp((uSince - 0.5) / 1.8, 0.0, 1.0);          // starts ~0.5 s after the touch
+    float a = aSeed * 6.28318 + t * 4.2;
+    float r = 0.44 + 0.04 * sin(aSeed * 40.0);
+    vec3 p = vec3(cos(a) * r, 0.28 + t * 0.32 + sin(aSeed * 23.0) * 0.03, sin(a) * r);
+    vec4 mv = modelViewMatrix * vec4(p, 1.0);
+    gl_Position = projectionMatrix * mv;
+    gl_PointSize = min((1.6 + fract(aSeed * 7.0) * 2.0) * uPixelRatio * (5.0 / -mv.z), 10.0 * uPixelRatio);
+    vA = sin(3.14159 * t) * step(uSince, 3.0) * (0.55 + 0.45 * fract(aSeed * 13.0));
+    vCol = mix(vec3(1.0, 0.82, 0.55), vec3(1.0, 0.62, 0.7), step(0.5, fract(aSeed * 3.7)));
+  }
+`;
+export const ringFragment = /* glsl */ `
+  varying float vA;
+  varying vec3 vCol;
+  void main() {
+    float d = length(gl_PointCoord - 0.5);
+    gl_FragColor = vec4(vCol * smoothstep(0.5, 0.0, d) * vA * 0.8, 1.0);
+  }
+`;
+export function ringGeometry(count: number): THREE.BufferGeometry {
+  const pos = new Float32Array(count * 3);
+  const sd = new Float32Array(count);
+  for (let i = 0; i < count; i++) sd[i] = i / count + 0.013 * Math.sin(i * 12.9);
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('aSeed', new THREE.BufferAttribute(sd, 1));
+  return g;
+}

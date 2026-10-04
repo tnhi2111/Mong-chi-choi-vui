@@ -44,10 +44,10 @@ const vertex = /* glsl */ `
 
     vec4 mv = modelViewMatrix * vec4(p, 1.0);
     gl_Position = projectionMatrix * mv;
-    gl_PointSize = uSize * aScale * uPixelRatio * (1.0 + uBurst * 1.2) * (8.0 / -mv.z);
+    gl_PointSize = min(uSize * aScale * uPixelRatio * (1.0 + uBurst * 1.2) * (8.0 / -mv.z), 28.0 * uPixelRatio);
 
     float twinkle = 0.55 + 0.45 * sin(uTime * (0.6 + aSeed * 1.4) + aSeed * 40.0);
-    vAlpha = twinkle * smoothstep(40.0, 4.0, -mv.z);
+    vAlpha = twinkle * smoothstep(40.0, 4.0, -mv.z) * smoothstep(0.3, 1.5, -mv.z);
     vSeed = aSeed;
   }
 `;

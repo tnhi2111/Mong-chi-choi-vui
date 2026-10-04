@@ -66,12 +66,17 @@ const HEAD: Part[] = [
   { kind: 'e', c: [0, 0.816, 0.468], r: [0.078, 0.056, 0.098], col: 'cream', k: 0.06 }, // muzzle (upper jaw)
   ...[-1, 1].map((s): Part => ({ kind: 'e', c: [s * 0.074, 0.8, 0.41], r: [0.07, 0.064, 0.07], col: 'cream', k: 0.06 })), // cheeks
   ...[-1, 1].map((s): Part => ({ kind: 'e', c: [s * 0.062, 0.928, 0.425], r: [0.05, 0.035, 0.04], col: 'pale', k: 0.05 })), // soft brows
-  // long, thin ears hanging from high on the sides of the head: a root, a broad drop, a heavy lobe
-  ...[-1, 1].flatMap((s): Part[] => [
-    { kind: 'e', c: [s * 0.148, 0.885, 0.3], r: [0.04, 0.075, 0.075], rot: [0, 0, s * 0.25], col: 'deep', k: 0.035, streak: 'ear' },
-    { kind: 'e', c: [s * 0.178, 0.745, 0.315], r: [0.042, 0.13, 0.088], rot: [0, 0, s * 0.12], col: 'deep', k: 0.05, streak: 'ear' },
-    { kind: 'e', c: [s * 0.185, 0.6, 0.325], r: [0.048, 0.075, 0.085], rot: [0, 0, s * 0.05], col: 'deep', k: 0.05, streak: 'ear' },
-  ]),
+  // (the ears are their own meshes now — see EAR — so they can swing after the head)
+  // the ear roots stay in the skull, so the hinge is hidden in the fur
+  ...[-1, 1].map((s): Part => ({ kind: 'e', c: [s * 0.142, 0.89, 0.3], r: [0.036, 0.06, 0.06], rot: [0, 0, s * 0.25], col: 'deep', k: 0.035, streak: 'ear' })),
+];
+
+/** Long, thin ears hanging from high on the sides of the head: a root, a broad drop, a heavy lobe. */
+export const EAR_PIVOT = (s: number): V3 => [s * 0.15, 0.905, 0.3];
+const earParts = (s: number): Part[] => [
+  { kind: 'e', c: [s * 0.148, 0.885, 0.3], r: [0.04, 0.075, 0.075], rot: [0, 0, s * 0.25], col: 'deep', k: 0.035, streak: 'ear' },
+  { kind: 'e', c: [s * 0.178, 0.745, 0.315], r: [0.042, 0.13, 0.088], rot: [0, 0, s * 0.12], col: 'deep', k: 0.05, streak: 'ear' },
+  { kind: 'e', c: [s * 0.185, 0.6, 0.325], r: [0.048, 0.075, 0.085], rot: [0, 0, s * 0.05], col: 'deep', k: 0.05, streak: 'ear' },
 ];
 
 // ── the lower jaw (hinged at JAW_PIVOT): chin and lower lip — it opens to let the letter go ──
@@ -321,6 +326,8 @@ export interface LetterDogData {
   head: MeshData;
   jaw: MeshData;
   tail: MeshData;
+  earL: MeshData;
+  earR: MeshData;
 }
 
 function toData(g: THREE.BufferGeometry): MeshData {
@@ -341,6 +348,8 @@ export function buildLetterDog(): LetterDogData {
     head: toData(mesh(HEAD, [-0.28, 0.48, 0.12], [0.28, 1.06, 0.6], 0.0095)),
     jaw: toData(mesh(JAW, [-0.1, 0.69, 0.33], [0.1, 0.83, 0.59], 0.0075)),
     tail: toData(mesh(TAIL, [-0.14, 0.42, -0.62], [0.17, 1.03, -0.2], 0.0135)),
+    earL: toData(mesh(earParts(-1), [-0.26, 0.5, 0.2], [-0.09, 0.98, 0.43], 0.0085)),
+    earR: toData(mesh(earParts(1), [0.09, 0.5, 0.2], [0.26, 0.98, 0.43], 0.0085)),
   };
 }
 
@@ -369,3 +378,48 @@ export const FACE = {
   tongue: { c: [0, 0.776, 0.468] as V3, r: [0.034, 0.011, 0.05] as V3 },
   collar: { c: [0, 0.6, 0.205] as V3, r: 0.122 },
 };
+
+// ── the mouth's lines: dark pigmented lips, found ON the sculpted surface ────────────
+/** Pull a point onto a part list's surface (a few gradient steps), then lift it off by `lift`. */
+function onSurface(f: (x: number, y: number, z: number) => number, p: V3, lift: number): V3 {
+  let [x, y, z] = p;
+  const e = 0.0008;
+  for (let i = 0; i < 10; i++) {
+    const d = f(x, y, z);
+    const gx = (f(x + e, y, z) - f(x - e, y, z)) / (2 * e);
+    const gy = (f(x, y + e, z) - f(x, y - e, z)) / (2 * e);
+    const gz = (f(x, y, z + e) - f(x, y, z - e)) / (2 * e);
+    const gl = Math.hypot(gx, gy, gz) || 1;
+    const step = d - lift;
+    x -= (gx / gl) * step;
+    y -= (gy / gl) * step;
+    z -= (gz / gl) * step;
+  }
+  return [x, y, z];
+}
+
+/**
+ * The mouth, as lines on the face (head space, closed jaw): the philtrum running down from
+ * the nose, the upper lip curving back along each side of the muzzle and lifting a little
+ * at the corners (a soft smile), and the lower lip along the jaw.
+ */
+export const MOUTH = (() => {
+  const face = field([...HEAD, ...JAW]);
+  const jaw = field(JAW);
+  const upper: V3[] = [];
+  // one continuous curve, corner to corner, through the front
+  for (let i = 0; i <= 18; i++) {
+    const u = i / 18 - 0.5; // −0.5 … 0.5
+    const phi = u * 1.45;
+    const side = Math.abs(u) * 2;
+    upper.push(onSurface(face, [Math.sin(phi) * 0.068, 0.775 + 0.012 * side * side, 0.47 + Math.cos(phi) * 0.085], 0.0016));
+  }
+  const philtrum: V3[] = [0, 1, 2].map((i) => onSurface(face, [0, 0.806 - i * 0.01, 0.56], 0.0012));
+  const lower: V3[] = [];
+  for (let i = 0; i <= 12; i++) {
+    const u = i / 12 - 0.5;
+    const phi = u * 2.0;
+    lower.push(onSurface(jaw, [Math.sin(phi) * 0.055, 0.757, 0.47 + Math.cos(phi) * 0.075], 0.0016));
+  }
+  return { upper, philtrum, lower };
+})();

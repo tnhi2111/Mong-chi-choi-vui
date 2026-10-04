@@ -6,12 +6,21 @@ export interface LetterDogGeometry {
   head: THREE.BufferGeometry;
   jaw: THREE.BufferGeometry;
   tail: THREE.BufferGeometry;
+  earL: THREE.BufferGeometry;
+  earR: THREE.BufferGeometry;
 }
 
 let ready: LetterDogGeometry | null = null;
 let pending: Promise<LetterDogGeometry> | null = null;
 
-const wrap = (d: LetterDogData): LetterDogGeometry => ({ body: toGeometry(d.body), head: toGeometry(d.head), jaw: toGeometry(d.jaw), tail: toGeometry(d.tail) });
+const wrap = (d: LetterDogData): LetterDogGeometry => ({
+  body: toGeometry(d.body),
+  head: toGeometry(d.head),
+  jaw: toGeometry(d.jaw),
+  tail: toGeometry(d.tail),
+  earL: toGeometry(d.earL),
+  earR: toGeometry(d.earR),
+});
 
 /**
  * The puppy's meshes. Sculpted once, in a worker (started early — during the welcome —

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { RoundedBox } from '@react-three/drei';
 import * as THREE from 'three';
-import { FACE, HEAD_PIVOT, HEAD_REST, JAW_PIVOT, TAIL_PIVOT, type V3 } from './letterDogModel';
+import { EAR_PIVOT, FACE, HEAD_PIVOT, HEAD_REST, JAW_PIVOT, MOUTH, TAIL_PIVOT, type V3 } from './letterDogModel';
 import { loadLetterDog, letterDogReady, type LetterDogGeometry } from './letterDogGeometry';
 import { getHeartGeometry } from './heartShape';
 import { getPaperTexture, getShadowTexture } from './glowTexture';
@@ -49,7 +49,15 @@ export function createLetterDogMaterials() {
   });
   return {
     fur,
-    eye: surface({ color: '#1a0c07', roughness: 0.1, clearcoat: 1, clearcoatRoughness: 0.04, bumpScale: 0.001 }),
+    // the eye: a deep brown ball, an iris drawn on a disc, a clear glossy cornea over it
+    eye: surface({ color: '#140904', roughness: 0.2, clearcoat: 0.6, clearcoatRoughness: 0.1, bumpScale: 0.001 }),
+    cornea: new THREE.MeshPhysicalMaterial({ color: '#ffffff', transparent: true, opacity: 0.16, roughness: 0.02, clearcoat: 1, clearcoatRoughness: 0.02, depthWrite: false }),
+    iris: new THREE.MeshBasicMaterial({ map: getIrisTexture(), color: '#a89282' }),
+    lid: surface({ color: '#cf8f48', roughness: 0.72, sheen: 0.8, sheenRoughness: 0.45, sheenColor: '#ffd6a0', bumpScale: 0.4 }),
+    // the mouth: dark pigmented lips, small white teeth, pink gums
+    lip: surface({ color: '#2a1511', roughness: 0.45, clearcoat: 0.3, clearcoatRoughness: 0.3, bumpScale: 0.05 }),
+    tooth: surface({ color: '#f3ebdf', roughness: 0.3, clearcoat: 0.35, clearcoatRoughness: 0.2, bumpScale: 0.001 }),
+    gum: surface({ color: '#bf5a6c', roughness: 0.4, clearcoat: 0.3, clearcoatRoughness: 0.3, bumpScale: 0.05 }),
     nose: surface({ color: '#3a1c13', roughness: 0.38, clearcoat: 0.55, clearcoatRoughness: 0.25, bumpScale: 0.3 }),
     ribbon: surface({ color: '#a91f3c', roughness: 0.42, sheen: 1, sheenRoughness: 0.3, sheenColor: '#ff9fb4', clearcoat: 0.05, bumpScale: 0.2 }),
     bell: surface({ color: '#d9b25a', roughness: 0.28, metalness: 0.9, clearcoat: 0.3, clearcoatRoughness: 0.2, bumpScale: 0.001 }),
@@ -59,6 +67,86 @@ export function createLetterDogMaterials() {
 }
 
 const sub = (a: V3, b: V3): V3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+
+/** A dog's iris: a soft black pupil, warm brown fibres, a darker rim. */
+let irisTex: THREE.CanvasTexture | null = null;
+function getIrisTexture(): THREE.CanvasTexture {
+  if (irisTex) return irisTex;
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const g = c.getContext('2d')!;
+  const grd = g.createRadialGradient(64, 64, 10, 64, 64, 64);
+  grd.addColorStop(0, '#000000');
+  grd.addColorStop(0.36, '#050201');
+  grd.addColorStop(0.42, '#4a240f');
+  grd.addColorStop(0.7, '#7a4a24');
+  grd.addColorStop(0.9, '#3a1c0c');
+  grd.addColorStop(1, '#120804');
+  g.fillStyle = grd;
+  g.fillRect(0, 0, 128, 128);
+  // fibres radiating from the pupil
+  for (let i = 0; i < 90; i++) {
+    const a = (i / 90) * Math.PI * 2 + Math.sin(i * 7.1) * 0.03;
+    g.strokeStyle = `rgba(${150 + (i % 5) * 12}, ${90 + (i % 3) * 10}, 40, 0.18)`;
+    g.lineWidth = 1;
+    g.beginPath();
+    g.moveTo(64 + Math.cos(a) * 26, 64 + Math.sin(a) * 26);
+    g.lineTo(64 + Math.cos(a) * 54, 64 + Math.sin(a) * 54);
+    g.stroke();
+  }
+  irisTex = new THREE.CanvasTexture(c);
+  irisTex.colorSpace = THREE.SRGBColorSpace;
+  return irisTex;
+}
+
+/** A tongue: soft and flat, a groove down its middle, a rounded tip. */
+function tongueGeometry(): THREE.BufferGeometry {
+  const g = new THREE.SphereGeometry(1, 22, 14);
+  const p = g.attributes.position as THREE.BufferAttribute;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i);
+    let y = p.getY(i);
+    const z = p.getZ(i);
+    if (y > 0) y *= 0.55 - 0.35 * Math.exp(-x * x * 18); // the groove
+    p.setXYZ(i, x * (0.9 + 0.1 * z), y, z);
+  }
+  g.computeVertexNormals();
+  return g;
+}
+/** The iris: a disc pressed onto the eyeball's curve (its planar uv keeps the radial texture). */
+function irisGeometry(R: number): THREE.BufferGeometry {
+  const g = new THREE.CircleGeometry(R * 0.74, 32, 0, Math.PI * 2);
+  const p = g.attributes.position as THREE.BufferAttribute;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i);
+    const y = p.getY(i);
+    p.setZ(i, Math.sqrt(Math.max(0, R * R - x * x - y * y)) * 1.004);
+  }
+  g.computeVertexNormals();
+  return g;
+}
+/** A line of pigment on the face: a fine tube that thins away to nothing at both ends. */
+function tube(pts: V3[], r: number): THREE.BufferGeometry {
+  const curve = new THREE.CatmullRomCurve3(pts.map((q) => new THREE.Vector3(...q)));
+  const segs = pts.length * 4;
+  const radial = 6;
+  const g = new THREE.TubeGeometry(curve, segs, r, radial, false);
+  const p = g.attributes.position as THREE.BufferAttribute;
+  const c = new THREE.Vector3();
+  const v = new THREE.Vector3();
+  for (let i = 0; i <= segs; i++) {
+    const t = i / segs;
+    const taper = Math.sin(Math.PI * t) ** 0.6;
+    curve.getPointAt(t, c);
+    for (let j = 0; j <= radial; j++) {
+      const k = i * (radial + 1) + j;
+      v.fromBufferAttribute(p, k).sub(c).multiplyScalar(taper).add(c);
+      p.setXYZ(k, v.x, v.y, v.z);
+    }
+  }
+  g.computeVertexNormals();
+  return g;
+}
 const ease = (x: number) => {
   const t = Math.min(1, Math.max(0, x));
   return t * t * (3 - 2 * t);
@@ -123,6 +211,19 @@ export function LetterDog({ opening, hover, aim, mats, reducedMotion, onDelivere
   useEffect(() => () => Object.values(m).forEach((x) => x.dispose()), [m]);
   const flap = useMemo(() => flapGeometry(FACE.letter.w * 0.98, FACE.letter.h), []);
   useEffect(() => () => flap.dispose(), [flap]);
+  // the mouth: lips found on the sculpted surface, teeth, gums, a real tongue
+  const mouthGeo = useMemo(
+    () => ({
+      // (the middle of the lip line only: its ends melt into the fur of the cheeks)
+      upper: tube(MOUTH.upper.slice(3, -3), 0.0019),
+      philtrum: tube(MOUTH.philtrum, 0.0013),
+      iris: irisGeometry(FACE.eyeR),
+      lower: tube(MOUTH.lower, 0.0022),
+      tongue: tongueGeometry(),
+    }),
+    [],
+  );
+  useEffect(() => () => Object.values(mouthGeo).forEach((g) => g.dispose()), [mouthGeo]);
 
   const root = useRef<THREE.Group>(null);
   const body = useRef<THREE.Group>(null);
@@ -133,6 +234,15 @@ export function LetterDog({ opening, hover, aim, mats, reducedMotion, onDelivere
   const anchor = useRef<THREE.Object3D>(null);
   const letter = useRef<THREE.Group>(null);
   const lid = useRef<THREE.Group>(null);
+  const eyeLids = useRef<THREE.Group[]>([]);
+  const ears = useRef<THREE.Group[]>([]);
+  const tongueRef = useRef<THREE.Mesh>(null);
+  // ears are pendulums: they swing after the head and settle (state per ear: angle, velocity)
+  const earState = useRef([
+    { ax: 0, vx: 0, az: 0, vz: 0 },
+    { ax: 0, vx: 0, az: 0, vz: 0 },
+  ]);
+  const prevHead = useRef({ look: HEAD_REST[0], turn: HEAD_REST[1], tilt: HEAD_REST[2] });
   const shadow = useRef<THREE.Mesh>(null);
 
   // the performance clock, and smoothed channels
@@ -243,11 +353,49 @@ export function LetterDog({ opening, hover, aim, mats, reducedMotion, onDelivere
     const since = now - blink.current;
     const shut = since > 0 && since < 0.14;
     if (since > 0.14) blink.current = now + 2.4 + Math.random() * 4.5;
+    // eyes: they follow her hand a little; the upper lids do the expressions — wide when it
+    // notices her, lowered into a smile when it's happy, a quick close for each blink
     eyes.current.forEach((e) => {
       if (!e) return;
-      e.scale.y = shut ? 0.12 : 1 - c.smile * 0.55;
-      e.position.y = FACE.eyes[0][1] - HEAD_PIVOT[1] + c.smile * 0.006;
+      e.rotation.y += (THREE.MathUtils.clamp(aim.current.x, -1, 1) * 0.28 * h - e.rotation.y) * k;
+      e.rotation.x += (-THREE.MathUtils.clamp(aim.current.y, -1, 1) * 0.16 * h - e.rotation.x) * k;
     });
+    // (open, the lid sits high; happy, it comes down only a little — smiling eyes, not sleepy)
+    const eyeLidT = shut ? 1.35 : -0.85 - notice * (1 - happy) * 0.15 + c.smile * 0.42;
+    eyeLids.current.forEach((l) => {
+      if (!l) return;
+      l.rotation.x += (eyeLidT - l.rotation.x) * (1 - Math.exp(-dt * (shut ? 40 : 9)));
+    });
+    // ears: driven by how fast the head turns / nods / tilts, plus a little hop when happy
+    {
+      const ph = prevHead.current;
+      const vTurn = (c.turn - ph.turn) / Math.max(dt, 1e-3);
+      const vLook = (c.look - ph.look) / Math.max(dt, 1e-3);
+      const vTilt = (c.tilt - ph.tilt) / Math.max(dt, 1e-3);
+      ph.turn = c.turn;
+      ph.look = c.look;
+      ph.tilt = c.tilt;
+      const hop = bump(T, 0.3, 0.75) * 0.35 + Math.sin(now * 1.1) * 0.015 * motion;
+      earState.current.forEach((st, i) => {
+        const side = i === 0 ? -1 : 1;
+        const tx = -vLook * 0.12 + hop * 0.6;
+        const tz = side * (-vTurn * 0.1 - vTilt * 0.25) - side * hop * 0.35;
+        // a damped spring: the ear trails, overshoots a touch, settles
+        st.vx += ((tx - st.ax) * 90 - st.vx * 9) * dt;
+        st.ax += st.vx * dt;
+        st.vz += ((tz - st.az) * 90 - st.vz * 9) * dt;
+        st.az += st.vz * dt;
+        const g = ears.current[i];
+        if (g) g.rotation.set(THREE.MathUtils.clamp(st.ax, -0.35, 0.45), 0, THREE.MathUtils.clamp(st.az, -0.4, 0.4));
+      });
+    }
+    // the tongue comes forward when the mouth opens
+    if (tongueRef.current) {
+      const out = THREE.MathUtils.smoothstep(c.jaw, 0.05, 0.3);
+      tongueRef.current.position.z = FACE.tongue.c[2] - JAW_PIVOT[2] + out * 0.032;
+      tongueRef.current.position.y = FACE.tongue.c[1] - JAW_PIVOT[1] - out * 0.004;
+      tongueRef.current.scale.set(FACE.tongue.r[0] * 1.05, FACE.tongue.r[1] * 1.2, FACE.tongue.r[2] * (1 + out * 0.35));
+    }
     if (tail.current) {
       const a = c.wagAmp;
       // a soft, slightly lopsided wag (never a vibration)
@@ -365,28 +513,68 @@ export function LetterDog({ opening, hover, aim, mats, reducedMotion, onDelivere
           </group>
           <group ref={head} position={P}>
             <mesh geometry={geo.head} position={sub([0, 0, 0], P)} material={m.fur} />
+            {/* the ears hang from hinges at their roots and swing after the head */}
+            {[-1, 1].map((sd, i) => {
+              const E = EAR_PIVOT(sd);
+              return (
+                <group key={sd} ref={(g) => void (g && (ears.current[i] = g))} position={sub(E, P)}>
+                  <mesh geometry={sd < 0 ? geo.earL : geo.earR} position={sub([0, 0, 0], E)} material={m.fur} />
+                </group>
+              );
+            })}
+            {/* the upper lip and philtrum: dark pigment on the muzzle, a soft smile at the corners */}
+            <mesh geometry={mouthGeo.upper} position={sub([0, 0, 0], P)} material={m.lip} />
+            <mesh geometry={mouthGeo.philtrum} position={sub([0, 0, 0], P)} material={m.lip} />
+            {/* a few small upper teeth, tucked just inside the lip (seen only when the mouth
+                opens — a puppy's smile, never a snarl) */}
+            {[-0.018, -0.006, 0.006, 0.018].map((x) => (
+              <mesh key={x} position={sub([x, 0.7715, 0.542 - x * x * 5], P)} scale={[0.0046, 0.0052, 0.003]} material={m.tooth}>
+                <sphereGeometry args={[1, 8, 6]} />
+              </mesh>
+            ))}
             {/* the inside of the mouth, seen only when the jaw opens */}
             <mesh position={sub(FACE.mouth.c, P)} scale={FACE.mouth.r} material={m.mouth}>
               <sphereGeometry args={[1, 18, 12]} />
             </mesh>
             <group ref={jaw} position={sub(J, P)}>
               <mesh geometry={geo.jaw} position={sub([0, 0, 0], J)} material={m.fur} />
-              <mesh position={sub(FACE.tongue.c, J)} scale={FACE.tongue.r} material={m.tongue}>
-                <sphereGeometry args={[1, 18, 12]} />
+              <mesh geometry={mouthGeo.lower} position={sub([0, 0, 0], J)} material={m.lip} />
+              {/* small lower teeth and the pink gum they sit in */}
+              {[-0.02, -0.007, 0.007, 0.02].map((x) => (
+                <mesh key={x} position={sub([x, 0.7915, 0.533 - x * x * 5], J)} scale={[0.0042, 0.005, 0.0028]} material={m.tooth}>
+                  <sphereGeometry args={[1, 8, 6]} />
+                </mesh>
+              ))}
+              <mesh position={sub([0, 0.789, 0.524], J)} scale={[0.04, 0.004, 0.016]} material={m.gum}>
+                <sphereGeometry args={[1, 14, 8]} />
               </mesh>
+              <mesh ref={tongueRef} geometry={mouthGeo.tongue} position={sub(FACE.tongue.c, J)} scale={FACE.tongue.r} material={m.tongue} />
               {/* where the letter is held (it follows the jaw until she lets go) */}
               <object3D ref={anchor} position={sub(L.c, J)} rotation={L.rot} />
             </group>
             {FACE.eyes.map((e, i) => (
-              <group key={i} ref={(g) => void (g && (eyes.current[i] = g))} position={sub(e, P)}>
-                <mesh material={m.eye}>
-                  <sphereGeometry args={[FACE.eyeR, 20, 16]} />
-                </mesh>
-                {/* a warm catch-light */}
-                <mesh position={[0.008, 0.01, FACE.eyeR * 0.92]}>
-                  <sphereGeometry args={[0.0055, 8, 6]} />
-                  <meshBasicMaterial color="#fff4e6" />
-                </mesh>
+              <group key={i} position={sub(e, P)}>
+                <group ref={(g) => void (g && (eyes.current[i] = g))}>
+                  <mesh material={m.eye}>
+                    <sphereGeometry args={[FACE.eyeR, 22, 16]} />
+                  </mesh>
+                  {/* the iris and pupil, under the clear cornea */}
+                  <mesh geometry={mouthGeo.iris} material={m.iris} />
+                  <mesh material={m.cornea} renderOrder={1}>
+                    <sphereGeometry args={[FACE.eyeR * 1.05, 22, 16]} />
+                  </mesh>
+                  {/* a small warm catch-light, on the cornea */}
+                  <mesh position={new THREE.Vector3(0.32 + (i ? -0.1 : 0.1), 0.4, 0.86).normalize().multiplyScalar(FACE.eyeR * 1.045)}>
+                    <sphereGeometry args={[0.0034, 8, 6]} />
+                    <meshBasicMaterial color="#fff4e6" />
+                  </mesh>
+                </group>
+                {/* the upper lid: it lowers into a smile, closes for a blink */}
+                <group ref={(g) => void (g && (eyeLids.current[i] = g))} rotation-x={-0.85}>
+                  <mesh material={m.lid}>
+                    <sphereGeometry args={[FACE.eyeR * 1.07, 22, 10, 0, Math.PI * 2, 0, Math.PI * 0.5]} />
+                  </mesh>
+                </group>
               </group>
             ))}
             <mesh position={sub(FACE.nose, P)} scale={[1.25, 0.82, 0.9]} material={m.nose}>

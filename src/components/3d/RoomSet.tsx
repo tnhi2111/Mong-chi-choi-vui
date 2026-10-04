@@ -10,7 +10,7 @@ import { getHeartGeometry } from './heartShape';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { RoomProps, roomLamps, roomRugs, furnitureBlobs, cakePosition, LAYOUT } from './RoomProps';
 import { surface } from './Gift3D';
-import { buildCake, cakeVertex, cakeFragment, sparkleGeometry, sparkleVertex, sparkleFragment } from './cakeModel';
+import { buildCake, cakeVertex, cakeFragment, sparkleGeometry, sparkleVertex, sparkleFragment, ringGeometry, ringVertex, ringFragment } from './cakeModel';
 import { Glow } from './Glow';
 import { BirthdaySign, metalVertex, metalFragment, satinVertex, satinFragment, mergeAll } from './BirthdaySign';
 
@@ -608,7 +608,9 @@ const flameVertex = /* glsl */ `
     vF *= 1.0 + near * 0.18 + abs(vLean) * 0.15;
     vec4 mv = modelViewMatrix * vec4(position, 1.0);
     gl_Position = projectionMatrix * mv;
-    gl_PointSize = 300.0 * uPixelRatio / -mv.z;
+    // (capped: a candle passing close to the camera stays a small flame, not a sun)
+    gl_PointSize = min(300.0 * uPixelRatio / -mv.z, 150.0 * uPixelRatio);
+    vF *= smoothstep(0.25, 0.8, -mv.z);
   }
 `;
 const flameFragment = /* glsl */ `
@@ -962,6 +964,12 @@ function Cake({
   const body = useRef<THREE.Group>(null);
   const cakeMesh = useRef<THREE.Mesh>(null);
   const flameLocal = useMemo(() => new THREE.Vector3(), []);
+  // the reveal: a ring of motes runs once round the cake after the touch
+  const touchedAt = useRef(-1);
+  const ring = useMemo(() => ringGeometry(30), []);
+  useEffect(() => () => ring.dispose(), [ring]);
+  const ringU = useMemo(() => ({ uSince: { value: 99 }, uPixelRatio: { value: Math.min(window.devicePixelRatio, 2) } }), []);
+  const ringMat = useShader(ringVertex, ringFragment, ringU);
   const flames = useMemo(() => {
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(candleTops.flatMap((p) => [p[0], p[1] + 0.03, p[2]]), 3));
@@ -1018,10 +1026,12 @@ function Cake({
     // out in a breath; after a few seconds they catch again, one by one-ish
     const lit = since < 0.12 ? 1 - since / 0.12 : since < 4 ? 0 : Math.min(1, (since - 4) / 0.6);
     // brighter when her hand is near, when she leans in, and for a moment when touched
-    flameU.uLit.value = lit * (1 + 0.22 * hover.current + 0.3 * focusAmt.current + 0.5 * flare.current);
+    // the candles answer gently — a candle's own small brightening, never a flash
+    flameU.uLit.value = lit * (1 + 0.1 * hover.current + 0.12 * focusAmt.current + 0.15 * flare.current);
+    ringU.uSince.value = touchedAt.current < 0 ? 99 : t - touchedAt.current;
     // the cake: lit by its own flames (in the world), a touch warmer when she's close
     cakeU.uTime.value = t * motion;
-    cakeU.uLit.value = lit * (1 + 0.25 * flare.current);
+    cakeU.uLit.value = lit * (1 + 0.12 * flare.current);
     cakeU.uWarm.value = Math.max(hover.current, focusAmt.current);
     sparkleU.uTime.value = t;
     sparkleU.uOn.value = Math.max(hover.current * 0.7, focusAmt.current) * (0.4 + 0.6 * lit);
@@ -1038,8 +1048,9 @@ function Cake({
     }
     if (glow.current) {
       const m = glow.current.material as THREE.SpriteMaterial;
-      m.opacity = (0.04 + 0.1 * hover.current + 0.16 * focusAmt.current + 0.12 * flare.current) * lit;
-      glow.current.scale.setScalar(1.3 + 0.3 * focusAmt.current + 0.2 * flare.current);
+      // a small warm pool round the candles (it lights the cake, not the camera)
+      m.opacity = (0.03 + 0.05 * hover.current + 0.06 * focusAmt.current) * lit;
+      glow.current.scale.setScalar(0.9 + 0.15 * focusAmt.current);
     }
     if (letter.current) (letter.current.material as THREE.MeshBasicMaterial).color.setScalar(0.75 + 0.25 * Math.sin(t * 2.2));
   });
@@ -1061,6 +1072,7 @@ function Cake({
       onTap(true);
     } else {
       flare.current = 1;
+      touchedAt.current = now.current;
       sound.chime(9, 0.035);
       onTap(false);
     }
@@ -1103,6 +1115,7 @@ function Cake({
         <group ref={body} position={[0, top, 0]}>
           <mesh ref={cakeMesh} geometry={cake.geometry} material={cakeMat} />
           <points geometry={sparkles} material={sparkleMat} frustumCulled={false} raycast={() => null} />
+          <points geometry={ring} material={ringMat} frustumCulled={false} raycast={() => null} />
         </group>
         {/* a generous invisible target, so the whole cake answers a touch */}
         <mesh position={[0, top + 0.3, 0]}>

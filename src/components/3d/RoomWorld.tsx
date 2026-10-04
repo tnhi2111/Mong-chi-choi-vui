@@ -52,6 +52,10 @@ const MOMENT = {
   sign: { back: [4.5, 7.4], lift: [0.25, 1.95], lookOffset: -0.05, text: { h: 0.55, inward: 0.45 } },
   /** how quickly the camera leans in (CameraRig speed: ~1 s to settle) */
   speed: 1.35,
+  /** the first beat: turn toward it from where she stands, then (after this) lean in —
+   *  so the camera never cuts through the heart on the way */
+  turnFirst: 0.55,
+  far: { back: [5.2, 6.4], lift: [2.2, 3.2] },
 } as const;
 type Moment = 'cake' | 'sign';
 
@@ -133,6 +137,7 @@ export function RoomWorld({
 
   // a hidden moment in progress (the cake or the sign) — see below
   const [moment, setMoment] = useState<Moment | null>(null);
+  const [momentNear, setMomentNear] = useState(false);
   const orbit = usePointerOrbit({
     enabled: !opening && !paused && !moment,
     sensitivity: 0.005,
@@ -181,6 +186,12 @@ export function RoomWorld({
     },
     [opening, paused, moment, orbit, leaveMoment],
   );
+  useEffect(() => {
+    setMomentNear(false);
+    if (!moment) return;
+    const id = window.setTimeout(() => setMomentNear(true), MOMENT.turnFirst * 1000);
+    return () => window.clearTimeout(id);
+  }, [moment]);
   useEffect(() => {
     if (!moment) return;
     // turn to face it from inside the room
@@ -343,10 +354,14 @@ export function RoomWorld({
     const d = Math.hypot(cakeAt[0], cakeAt[2]);
     const ls = MOMENT.cake.lookSide[pi];
     camLook = [cakeAt[0] - (cakeAt[2] / d) * ls, ground + MOMENT.cake.lookH, cakeAt[2] + (cakeAt[0] / d) * ls];
-    camPos = [camLook[0], camLook[1] + MOMENT.cake.lift[pi], camLook[2] + MOMENT.cake.back[pi]];
+    camPos = momentNear
+      ? [camLook[0], camLook[1] + MOMENT.cake.lift[pi], camLook[2] + MOMENT.cake.back[pi]]
+      : [camLook[0], camLook[1] + MOMENT.far.lift[pi], camLook[2] + MOMENT.far.back[pi]];
   } else if (moment === 'sign') {
     camLook = [0, ground + 2.0 - safeDrop(sign.scale, sign.drop) + MOMENT.sign.lookOffset, -sign.radius];
-    camPos = [0, camLook[1] + MOMENT.sign.lift[pi], camLook[2] + MOMENT.sign.back[pi]];
+    camPos = momentNear
+      ? [0, camLook[1] + MOMENT.sign.lift[pi], camLook[2] + MOMENT.sign.back[pi]]
+      : [0, camLook[1] + Math.max(MOMENT.far.lift[pi], MOMENT.sign.lift[pi]), camLook[2] + Math.max(MOMENT.far.back[pi], MOMENT.sign.back[pi])];
   } else if (opening && openIndex >= 0 && gifts[openIndex]?.shape === 'envelope') {
     // the puppy is a memory too: the camera walks up to it (same rig, same swing round to
     // face it) and settles a little low, the puppy's face and the letter it gives framed
