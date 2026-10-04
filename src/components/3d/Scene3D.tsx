@@ -56,12 +56,12 @@ export default function Scene3D(props: SceneProps) {
       frameloop={paused ? 'demand' : 'always'}
       camera={{ position: [0, 0, 7], fov: 40, near: 0.1, far: 60 }}
       gl={{ antialias: tier !== 'low', alpha: true, powerPreference: 'high-performance' }}
-      onCreated={({ gl, scene }) => {
+      onCreated={({ gl, scene, camera }) => {
         gl.toneMapping = THREE.ACESFilmicToneMapping;
         gl.toneMappingExposure = 1.0;
         // QA hook: lets the Playwright scripts read renderer stats
         if (import.meta.env.DEV || new URLSearchParams(location.search).has('debug')) {
-          Object.assign(window, { __gl: gl, __scene: scene });
+          Object.assign(window, { __gl: gl, __scene: scene, __camera: camera });
         }
       }}
       aria-hidden="true"

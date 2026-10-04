@@ -283,7 +283,8 @@ function Motes({ count, radius, level, seed = 1 }: { count: number; radius: numb
     uniforms.uOn.value = Math.max(0, level());
     if (pts.current) pts.current.visible = uniforms.uOn.value > 0.01;
   });
-  return <points ref={pts} geometry={geo} material={mat} frustumCulled={false} />;
+  // (motes of light are never something to touch: a Points' raycast reaches a whole metre)
+  return <points ref={pts} geometry={geo} material={mat} frustumCulled={false} raycast={() => null} />;
 }
 
 const openOf = (o: number) => THREE.MathUtils.smoothstep(o, 0.4, 0.85);
@@ -653,7 +654,7 @@ function HoverSparkles({ on }: { on: Progress }) {
   });
   const sparkMat = useShader(sparkVertex, sparkFragment, uniforms);
   return (
-    <points ref={pts} geometry={geo} frustumCulled={false} material={sparkMat} />
+    <points ref={pts} geometry={geo} frustumCulled={false} material={sparkMat} raycast={() => null} />
   );
 }
 
@@ -799,7 +800,24 @@ export function Gift3D({
     onOpened(gift.id);
   };
 
+  // The gift's invisible hit area is generous. If the pointer only passes through that empty
+  // air and lands on one of the room's hidden moments behind it (the cake, the sign), the
+  // touch belongs to that — the gift steps aside.
+  const passThrough = (e: ThreeEvent<PointerEvent | MouseEvent>) => {
+    const own = (o: THREE.Object3D | null) => {
+      for (let x = o; x; x = x.parent) if (x === spin.current) return true;
+      return false;
+    };
+    const moment = (o: THREE.Object3D | null) => {
+      for (let x = o; x; x = x.parent) if (x.userData.moment) return true;
+      return false;
+    };
+    const touchesBody = e.intersections.some((i) => own(i.object) && (i.object as THREE.Mesh).isMesh && !i.object.userData.giftHit);
+    return !touchesBody && e.intersections.some((i) => moment(i.object));
+  };
+
   const click = (e: ThreeEvent<MouseEvent>) => {
+    if (passThrough(e)) return;
     e.stopPropagation();
     if (disabled || e.delta > 8) return;
     onSelect(gift.id);
@@ -824,6 +842,7 @@ export function Gift3D({
           ref={spin}
           onClick={click}
           onPointerOver={(e) => {
+            if (passThrough(e)) return;
             e.stopPropagation();
             if (disabled) return;
             setHovered(true);
@@ -853,7 +872,7 @@ export function Gift3D({
           />
           {/* generous invisible hit area — easier to tap on phones; it reaches down over the
               gift's label too, so tapping the name opens it as well */}
-          <mesh position={isDog ? [0, 0.52, 0.02] : [0, -0.14, 0]} scale={isDog ? [0.62, 0.95, 0.95] : [1, 1.35, 1]}>
+          <mesh position={isDog ? [0, 0.52, 0.02] : [0, -0.14, 0]} scale={isDog ? [0.62, 0.95, 0.95] : [1, 1.35, 1]} userData={{ giftHit: true }}>
             <sphereGeometry args={[0.6, 12, 10]} />
             <meshBasicMaterial transparent opacity={0} depthWrite={false} colorWrite={false} />
           </mesh>

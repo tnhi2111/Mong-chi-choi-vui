@@ -98,6 +98,14 @@ export default function App() {
     };
   }, [saved.unlocked]);
 
+  // a hidden moment in the room (cake / sign): the room's edges dim, the UI steps back
+  const [moment, setMoment] = useState(false);
+  useEffect(() => {
+    const on = (e: Event) => setMoment(!!(e as CustomEvent<boolean>).detail);
+    window.addEventListener('room-moment', on);
+    return () => window.removeEventListener('room-moment', on);
+  }, []);
+
   // First visit: a quiet loading veil while the 3D scene does its one-off setup
   const [booted, setBooted] = useState(false);
   useEffect(() => {
@@ -307,7 +315,7 @@ export default function App() {
           <RoomUI
             gifts={gifts}
             opened={opened}
-            busy={!!openingId || overlayOpen || veil !== 'none'}
+            busy={!!openingId || overlayOpen || veil !== 'none' || moment}
             onSelect={selectGift}
             onFocusGift={setFocusId}
             onFinal={goFinal}

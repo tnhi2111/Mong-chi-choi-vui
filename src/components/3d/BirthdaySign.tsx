@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useShader } from './useShader';
 import { getHeartGeometry } from './heartShape';
+import { birthdayConfig } from '../../config/birthday';
 
 /*
  * The room's signature: a suspended HAPPY BIRTHDAY installation, hung behind the stage.
@@ -29,21 +30,26 @@ const CAP_PX = 128; // Cormorant's capital height at FONT_PX (approx.)
 /** Where the capitals sit in a cell: their centre is the cell's centre. */
 const BASELINE = CELL_H / 2 + CAP_PX / 2;
 
-/** A letterform style: the upright display cut, or the italic for the tender line. */
-type Style = 'r' | 'i';
-const FACES: Record<Style, string> = { r: `500 ${FONT_PX}px ${FONT}`, i: `italic 400 ${FONT_PX}px ${FONT}` };
+/** Letterform weights of the one family: the display cut, and a lighter one. */
+type Style = 'r' | 'l';
+const FACES: Record<Style, string> = { r: `500 ${FONT_PX}px ${FONT}`, l: `400 ${FONT_PX}px ${FONT}` };
 
 /**
- * The installation's words and their hierarchy (sign space, before it is hung):
- * HAPPY BIRTHDAY leads; "my baby" is the intimate, italic line; her name sits beneath,
- * small and widely spaced, like an engraved dedication.
+ * The installation as ONE composition, in one family (Cormorant Garamond, upright capitals
+ * throughout). The hierarchy comes from size, weight, spacing and metal, not from mixing
+ * styles: HAPPY BIRTHDAY leads; MY BABY, lighter and widely spaced, is held between two fine
+ * gold hairlines; her name beneath is small, spaced like an engraving, in a deeper gold.
+ * `tone` 0 = champagne ivory … 1 = warm gold. Words come from birthdayConfig.room.sign.
  */
-export const SIGN_LINES: { text: string; style: Style; h: number; cap: number; track: number }[] = [
-  { text: 'HAPPY', style: 'r', h: 2.43, cap: 0.26, track: 0.18 },
-  { text: 'BIRTHDAY', style: 'r', h: 1.99, cap: 0.38, track: 0.14 },
-  { text: 'My Baby', style: 'i', h: 1.63, cap: 0.23, track: 0.06 },
-  { text: 'TEACHER HÙ TÁ', style: 'r', h: 1.22, cap: 0.165, track: 0.36 },
+const WORDS = birthdayConfig.room.sign;
+export const SIGN_LINES: { text: string; style: Style; h: number; cap: number; track: number; tone: number }[] = [
+  { text: WORDS.headline[0], style: 'r', h: 2.43, cap: 0.26, track: 0.2, tone: 0 },
+  { text: WORDS.headline[1], style: 'r', h: 1.99, cap: 0.38, track: 0.14, tone: 0 },
+  { text: WORDS.endearment, style: 'l', h: 1.62, cap: 0.19, track: 0.46, tone: 0.35 },
+  { text: WORDS.name, style: 'r', h: 1.3, cap: 0.15, track: 0.52, tone: 1 },
 ];
+/** Which line the hairlines frame (MY BABY). */
+const FRAMED_LINE = 2;
 const LAYERS = 6;
 const DEPTH = 0.07;
 
@@ -81,8 +87,8 @@ function drawGlyphs(chars: string[]): Glyphs {
     const style = key[0] as Style;
     const ch = key.slice(1);
     g.font = FACES[style];
-    // the italic is a lighter cut: a little less extra weight
-    g.lineWidth = style === 'i' ? 6 : 9;
+    // the lighter weight gets a little less added weight
+    g.lineWidth = style === 'l' ? 7 : 9;
     const x = i * CELL_W + CELL_W / 2;
     g.fillText(ch, x, BASELINE);
     g.strokeText(ch, x, BASELINE);
@@ -111,6 +117,9 @@ function letterGeometry(glyphs: Glyphs, lines: typeof SIGN_LINES, R: number) {
   const pos: number[] = [];
   const uv: number[] = [];
   const layer: number[] = [];
+  const tone: number[] = [];
+  const halfWidths: number[] = [];
+  let lineTone = 0;
   const hpos: number[] = [];
   const huv: number[] = [];
   const quad = (out: number[], outUv: number[], s: number, h: number, w: number, hh: number, z: number, cell: number, lay: number | null) => {
@@ -128,14 +137,20 @@ function letterGeometry(glyphs: Glyphs, lines: typeof SIGN_LINES, R: number) {
       const rr = R - z;
       out.push(Math.sin(th) * rr, h + ly, -Math.cos(th) * rr);
       outUv.push((cell + u) / glyphs.count, v);
-      if (lay !== null) layer.push(lay);
+      if (lay !== null) {
+        layer.push(lay);
+        tone.push(lineTone);
+      }
     }
   };
   for (const line of lines) {
     const chars = [...line.text];
     const track = line.track;
     const widths = chars.map((c) => (c === ' ' ? 0.42 + track : (glyphs.advance.get(line.style + c) ?? 0.8) + track) * line.cap);
-    const total = widths.reduce((a, b) => a + b, 0);
+    // (the last letter's tracking isn't part of the word's width)
+    const total = widths.reduce((a, b) => a + b, 0) - track * line.cap;
+    halfWidths.push(total / 2);
+    lineTone = line.tone;
     let s = -total / 2;
     chars.forEach((c, i) => {
       const cx = s + widths[i] / 2;
@@ -153,20 +168,24 @@ function letterGeometry(glyphs: Glyphs, lines: typeof SIGN_LINES, R: number) {
   letters.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   letters.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
   letters.setAttribute('aLayer', new THREE.Float32BufferAttribute(layer, 1));
+  letters.setAttribute('aTone', new THREE.Float32BufferAttribute(tone, 1));
   const halos = new THREE.BufferGeometry();
   halos.setAttribute('position', new THREE.Float32BufferAttribute(hpos, 3));
   halos.setAttribute('uv', new THREE.Float32BufferAttribute(huv, 2));
-  return { letters, halos };
+  return { letters, halos, halfWidths };
 }
 
 const letterVertex = /* glsl */ `
   attribute float aLayer;
+  attribute float aTone;
   varying vec2 vUv;
+  varying float vTone;
   varying float vLayer;
   varying vec3 vWorld;
   void main() {
     vUv = uv;
     vLayer = aLayer;
+    vTone = aTone;
     vec4 w = modelMatrix * vec4(position, 1.0);
     vWorld = w.xyz;
     gl_Position = projectionMatrix * viewMatrix * w;
@@ -179,7 +198,10 @@ const letterFragment = /* glsl */ `
   uniform float uFloorY;
   uniform float uGlow;
   uniform float uHeart;
+  uniform float uSweep;     // where the slow band of light is, along the sign (world x)
+  uniform float uSweepAmp;  // how bright it is (more when she hovers / looks closely)
   varying vec2 vUv;
+  varying float vTone;
   varying float vLayer;
   varying vec3 vWorld;
   void main() {
@@ -201,13 +223,19 @@ const letterFragment = /* glsl */ `
     vec3 n = normalize(vec3(-gx * 3.0, -gy * 3.0, 1.0));
     vec3 L = normalize(vec3(-0.35, 0.6, 0.7));
     float dif = clamp(dot(n, L), 0.0, 1.0);
-    vec3 ivory = vec3(0.95, 0.83, 0.68);
-    vec3 gold = vec3(0.84, 0.63, 0.38);
+    // brushed champagne metal; the dedication a deeper, warmer gold
+    vec3 champagne = mix(vec3(0.93, 0.81, 0.64), vec3(0.86, 0.66, 0.41), vTone * 0.75);
+    vec3 gold = vec3(0.84, 0.62, 0.36);
     float edge = 1.0 - smoothstep(0.42, 0.78, s);
-    vec3 col = mix(ivory, gold, edge * 0.9);
+    vec3 col = mix(champagne, gold, edge * 0.85);
+    // a fine brushed grain across the face
+    col *= 0.95 + 0.05 * sin(vWorld.x * 900.0 + vWorld.y * 40.0);
     vec3 lit = col * (0.22 + 0.36 * dif);
     vec3 hv = normalize(L + vec3(0.0, 0.0, 1.0));
-    lit += vec3(1.0, 0.85, 0.6) * pow(max(dot(n, hv), 0.0), 28.0) * edge * 0.45;
+    lit += vec3(1.0, 0.85, 0.6) * pow(max(dot(n, hv), 0.0), 26.0) * (0.25 + edge * 0.45);
+    // a slow band of warm light travelling across the letters
+    float band = exp(-(vWorld.x - uSweep) * (vWorld.x - uSweep) * 2.2);
+    lit += vec3(1.0, 0.86, 0.62) * band * uSweepAmp * (0.4 + 0.6 * edge + 0.3 * dif);
     // the heart's rose light rising from the stage onto the lower letters
     lit += vec3(0.9, 0.32, 0.45) * 0.07 * uHeart * (1.0 - smoothstep(1.2, 2.6, h));
     // and their own gentle warmth, from inside
@@ -333,16 +361,20 @@ interface Props {
   /** 0..1 how awake the heart is (its light on the letters) */
   heart: number;
   motion: number;
+  /** the camera has come close to read it (RoomWorld's focus) */
+  focused?: boolean;
+  /** a touch on the sign: it has something to say */
+  onTap?: () => void;
 }
 
-export function BirthdaySign({ floorY, radius, scale, drop = 0.32, heart, motion }: Props) {
+export function BirthdaySign({ floorY, radius, scale, drop = 0.32, heart, motion, focused = false, onTap }: Props) {
   const chars = useMemo(() => [...new Set(SIGN_LINES.flatMap((l) => [...l.text.replace(/ /g, '')].map((c) => l.style + c)))], []);
-  const SAMPLE = 'HAPPY BIRTHDAY My Baby TEACHER HÙ TÁ';
-  const [fontReady, setFontReady] = useState(() => (document.fonts ? document.fonts.check(FACES.r, SAMPLE) && document.fonts.check(FACES.i, SAMPLE) : true));
+  const SAMPLE = SIGN_LINES.map((l) => l.text).join(' ');
+  const [fontReady, setFontReady] = useState(() => (document.fonts ? document.fonts.check(FACES.r, SAMPLE) && document.fonts.check(FACES.l, SAMPLE) : true));
   useEffect(() => {
     if (fontReady || !document.fonts) return;
     let alive = true;
-    Promise.all([document.fonts.load(FACES.r, SAMPLE), document.fonts.load(FACES.i, SAMPLE)]).then(() => alive && setFontReady(true), () => undefined);
+    Promise.all([document.fonts.load(FACES.r, SAMPLE), document.fonts.load(FACES.l, SAMPLE)]).then(() => alive && setFontReady(true), () => undefined);
     return () => {
       alive = false;
     };
@@ -353,7 +385,7 @@ export function BirthdaySign({ floorY, radius, scale, drop = 0.32, heart, motion
   const R = radius;
   const glyphs = useMemo(() => drawGlyphs(chars), [chars, fontReady]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => [glyphs.mask, glyphs.soft, glyphs.halo].forEach((t) => t.dispose()), [glyphs]);
-  const { letters, halos } = useMemo(
+  const { letters, halos, halfWidths } = useMemo(
     () =>
       letterGeometry(glyphs, SIGN_LINES, R),
     [glyphs, R],
@@ -425,15 +457,29 @@ export function BirthdaySign({ floorY, radius, scale, drop = 0.32, heart, motion
     };
     for (const side of [-1, 1]) {
       const foot = onArc(side * A, 1.02, 0.0);
-      const blooms = [
-        [0, 0, 0.11, ivory],
-        [0.1, 0.06, 0.08, blush],
-        [-0.09, 0.05, 0.08, blush],
-        [0.04, -0.09, 0.075, rose],
-        [-0.05, 0.12, 0.065, ivory],
-        [0.13, -0.05, 0.06, ivory],
-        [-0.12, -0.06, 0.06, rose],
-      ] as const;
+      // two posies, arranged by hand: not quite mirror images
+      const blooms = (
+        side < 0
+          ? [
+              [0, 0, 0.11, ivory],
+              [0.1, 0.06, 0.08, blush],
+              [-0.09, 0.05, 0.08, blush],
+              [0.04, -0.09, 0.075, rose],
+              [-0.05, 0.12, 0.065, ivory],
+              [0.13, -0.05, 0.06, ivory],
+              [-0.12, -0.06, 0.06, rose],
+            ]
+          : [
+              [0.01, 0.01, 0.1, ivory],
+              [0.11, 0.04, 0.085, rose],
+              [-0.08, 0.07, 0.07, blush],
+              [0.02, -0.1, 0.08, blush],
+              [0.07, 0.13, 0.06, ivory],
+              [-0.13, -0.03, 0.055, ivory],
+              [0.15, -0.08, 0.05, rose],
+              [-0.03, 0.17, 0.045, blush],
+            ]
+      ) as [number, number, number, THREE.Color][];
       for (const [dx, dy, r, c] of blooms) {
         const g = new THREE.IcosahedronGeometry(r, 1);
         g.scale(1, 1, 0.7);
@@ -441,10 +487,15 @@ export function BirthdaySign({ floorY, radius, scale, drop = 0.32, heart, motion
         satinParts.push(tint(g, c, 0));
       }
       // two ribbons, falling and curling a little
-      for (const [k, len, col] of [
-        [0, 1.05, rose],
-        [1, 0.8, blush],
-      ] as const) {
+      for (const [k, len, col] of (side < 0
+        ? [
+            [0, 1.05, rose],
+            [1, 0.8, blush],
+          ]
+        : [
+            [0, 0.86, blush],
+            [1, 1.18, rose],
+          ]) as [number, number, THREE.Color][]) {
         const segs = 18;
         const g = new THREE.PlaneGeometry(0.045, len, 1, segs);
         const pa = g.attributes.position as THREE.BufferAttribute;
@@ -500,6 +551,8 @@ export function BirthdaySign({ floorY, radius, scale, drop = 0.32, heart, motion
       uFloorY: { value: 0 },
       uGlow: { value: 1 },
       uHeart: { value: heart },
+      uSweep: { value: -9 },
+      uSweepAmp: { value: 0.1 },
     }),
     [], // eslint-disable-line react-hooks/exhaustive-deps
   );
@@ -519,15 +572,60 @@ export function BirthdaySign({ floorY, radius, scale, drop = 0.32, heart, motion
   const bulbMat = useShader(bulbVertex, bulbFragment, bulbU);
   const satinMat = useShader(satinVertex, satinFragment, satinU, { opaque: true, side: THREE.DoubleSide });
 
-  useFrame((state) => {
+  // her hand on it / the camera close to it: the sign warms a little, the band of light shows
+  const hover = useRef(0);
+  const hovered = useRef(false);
+  const focusAmt = useRef(0);
+  useFrame((state, rawDt) => {
     const t = state.clock.elapsedTime;
+    const dt = Math.min(rawDt, 0.05);
     bulbU.uTime.value = satinU.uTime.value = t;
     bulbU.uMotion.value = satinU.uMotion.value = motion;
-    // a slow breath in the sign's light — never a flicker
-    const breath = 0.92 + 0.08 * Math.sin(t * 0.6 * motion);
-    letterU.uGlow.value = haloU.uGlow.value = bulbU.uGlow.value = breath;
+    hover.current += ((hovered.current ? 1 : 0) - hover.current) * (1 - Math.exp(-dt * 5));
+    focusAmt.current += ((focused ? 1 : 0) - focusAmt.current) * (1 - Math.exp(-dt * 2.5));
+    const h = hover.current;
+    const f = focusAmt.current;
+    // a slow breath in the sign's light — almost subconscious, never a flicker
+    const breath = 0.93 + 0.07 * Math.sin(t * 0.45 * motion);
+    letterU.uGlow.value = haloU.uGlow.value = breath * (1 + 0.18 * h + 0.3 * f);
+    bulbU.uGlow.value = breath * (1 + 0.35 * h + 0.4 * f);
     letterU.uHeart.value += (heart - letterU.uHeart.value) * 0.05;
+    // the band of light crosses the letters every ~11 s (faster and brighter when she's here)
+    const period = 11 - 4 * Math.max(h, f);
+    letterU.uSweep.value = -3.4 + ((t * motion) % period) / period * 6.8;
+    letterU.uSweepAmp.value = 0.1 + 0.3 * h + 0.25 * f;
   });
+
+  // two fine gold hairlines holding MY BABY between them — the thread through the lines
+  const hairlines = useMemo(() => {
+    const line = SIGN_LINES[FRAMED_LINE];
+    const half = halfWidths[FRAMED_LINE];
+    if (half === undefined) return null;
+    const onArc = (sArc: number, h: number) => new THREE.Vector3(Math.sin(sArc / R) * (R - 0.01), h, -Math.cos(sArc / R) * (R - 0.01));
+    const parts2: THREE.BufferGeometry[] = [];
+    for (const side of [-1, 1]) {
+      const a = side * (half + 0.16);
+      const b = side * (half + 0.78);
+      parts2.push(new THREE.TubeGeometry(new THREE.LineCurve3(onArc(a, line.h), onArc(b, line.h)), 1, 0.0045, 5, false));
+      const dot = new THREE.SphereGeometry(0.014, 8, 6);
+      dot.translate(...onArc(a - side * 0.04, line.h).toArray());
+      parts2.push(dot);
+    }
+    const flat = parts2.map((g) => (g.index ? g.toNonIndexed() : g));
+    const out = new THREE.BufferGeometry();
+    for (const name of ['position', 'normal']) {
+      const total = flat.reduce((n, g) => n + g.attributes[name].array.length, 0);
+      const arr = new Float32Array(total);
+      let o = 0;
+      for (const g of flat) {
+        arr.set(g.attributes[name].array as Float32Array, o);
+        o += g.attributes[name].array.length;
+      }
+      out.setAttribute(name, new THREE.BufferAttribute(arr, 3));
+    }
+    return out;
+  }, [halfWidths, R]);
+  useEffect(() => () => hairlines?.dispose(), [hairlines]);
 
   // scale about the sign's centre (on the arc, at the height of its middle)
   const pivot: [number, number, number] = [0, 2.0, -R];
@@ -544,6 +642,30 @@ export function BirthdaySign({ floorY, radius, scale, drop = 0.32, heart, motion
           ))}
           <points geometry={parts.bulbs} material={bulbMat} frustumCulled={false} />
           <mesh geometry={parts.satin} material={satinMat} />
+          {hairlines && <mesh geometry={hairlines} material={goldMat} />}
+          {/* a generous, invisible touch target over the lettering */}
+          <mesh
+            position={[0, 1.95, -R + 0.15]}
+            userData={{ moment: true }}
+            onClick={(e) => {
+              // only when the sign is the nearest thing under her finger
+              if (e.intersections[0]?.object !== e.object || e.delta > 8) return;
+              e.stopPropagation();
+              onTap?.();
+            }}
+            onPointerOver={(e) => {
+              if (e.intersections[0]?.object !== e.object) return;
+              hovered.current = true;
+              if (onTap) document.body.style.cursor = 'pointer';
+            }}
+            onPointerOut={() => {
+              hovered.current = false;
+              document.body.style.cursor = '';
+            }}
+          >
+            <planeGeometry args={[4.6, 2.3]} />
+            <meshBasicMaterial transparent opacity={0} depthWrite={false} colorWrite={false} />
+          </mesh>
           {/* the little heart under the apex — it points down at the real one */}
           <mesh geometry={getHeartGeometry('low')} position={parts.heartAt} rotation={[0, 0, Math.PI]} scale={[0.09, 0.09, 0.04]} material={roseGoldMat} />
         </group>

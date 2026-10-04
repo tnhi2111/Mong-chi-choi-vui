@@ -10,6 +10,7 @@ import { getHeartGeometry } from './heartShape';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { RoomProps, roomLamps, roomRugs, furnitureBlobs, cakePosition, LAYOUT } from './RoomProps';
 import { surface } from './Gift3D';
+import { Glow } from './Glow';
 import { BirthdaySign, metalVertex, metalFragment, satinVertex, satinFragment, mergeAll } from './BirthdaySign';
 
 /*
@@ -64,7 +65,12 @@ function fromHand(p: THREE.Vector3, away: THREE.Vector2): number {
   return dist;
 }
 
-const WALL_R = 6.9; // a small private room (the camera stands outside it: see CUT)
+export const WALL_R = 6.9;
+/** Where the HAPPY BIRTHDAY installation hangs (shared with RoomWorld's close-up framing). */
+export const SIGN_PLACEMENT = {
+  landscape: { radius: 5.95, scale: 0.95, drop: 0.32 },
+  portrait: { radius: 4.9, scale: 0.68, drop: 0.75 },
+}; // a small private room (the camera stands outside it: see CUT)
 const WALL_H = 6.2;
 /** Direction of the window: back-left, so the HAPPY BIRTHDAY installation owns the centre. */
 const WINDOW_ANGLE = -0.78; // measured as atan(x, -z)
@@ -890,6 +896,8 @@ function Cake({
   motion,
   secretFound,
   onSecret,
+  focused = false,
+  onTap,
 }: {
   at: [number, number, number];
   /** where it stands in the room (for which way is "toward the wall") */
@@ -897,6 +905,10 @@ function Cake({
   motion: number;
   secretFound: boolean;
   onSecret: () => void;
+  /** the camera has leant in close (RoomWorld's focus) */
+  focused?: boolean;
+  /** a touch on the cake: first the camera leans in; touched again, she makes a wish */
+  onTap?: (wish: boolean) => void;
 }) {
   const TABLE_H = 0.72;
   const wood = useMemo(() => new THREE.MeshBasicMaterial({ color: '#2c170d' }), []);
@@ -995,27 +1007,56 @@ function Cake({
   const blownAt = useRef<number | null>(null);
   const now = useRef(0);
   const letter = useRef<THREE.Mesh>(null);
-  useFrame((state) => {
+  // a hand near it: the flames lean up a little, a warm glow gathers; a touch makes them flare
+  const hovered = useRef(false);
+  const hover = useRef(0);
+  const focusAmt = useRef(0);
+  const flare = useRef(0);
+  const glow = useRef<THREE.Sprite>(null);
+  useFrame((state, rawDt) => {
     const t = state.clock.elapsedTime;
+    const dt = Math.min(rawDt, 0.05);
     now.current = t;
+    hover.current += ((hovered.current ? 1 : 0) - hover.current) * (1 - Math.exp(-dt * 5));
+    focusAmt.current += ((focused ? 1 : 0) - focusAmt.current) * (1 - Math.exp(-dt * 2.2));
+    flare.current = Math.max(0, flare.current - dt * 0.9);
     flameU.uTime.value = t;
     flameU.uMotion.value = motion;
     smokeU.uTime.value = t;
     const since = blownAt.current === null ? 999 : t - blownAt.current;
     smokeU.uBlown.value = since;
     // out in a breath; after a few seconds they catch again, one by one-ish
-    flameU.uLit.value = since < 0.12 ? 1 - since / 0.12 : since < 4 ? 0 : Math.min(1, (since - 4) / 0.6);
+    const lit = since < 0.12 ? 1 - since / 0.12 : since < 4 ? 0 : Math.min(1, (since - 4) / 0.6);
+    // brighter when her hand is near, when she leans in, and for a moment when touched
+    flameU.uLit.value = lit * (1 + 0.22 * hover.current + 0.3 * focusAmt.current + 0.5 * flare.current);
+    if (glow.current) {
+      const m = glow.current.material as THREE.SpriteMaterial;
+      m.opacity = (0.04 + 0.1 * hover.current + 0.16 * focusAmt.current + 0.12 * flare.current) * lit;
+      glow.current.scale.setScalar(1.3 + 0.3 * focusAmt.current + 0.2 * flare.current);
+    }
     if (letter.current) (letter.current.material as THREE.MeshBasicMaterial).color.setScalar(0.75 + 0.25 * Math.sin(t * 2.2));
   });
 
-  const blow = (e: ThreeEvent<MouseEvent>) => {
-    e.stopPropagation();
-    if (e.delta > 8) return;
+  const blowOut = () => {
     const since = blownAt.current === null ? 999 : now.current - blownAt.current;
     if (since < 5) return;
     blownAt.current = now.current;
     sound.blow();
     setTimeout(() => sound.flourish(), 450);
+  };
+  const touch = (e: ThreeEvent<MouseEvent>) => {
+    e.stopPropagation();
+    if (e.delta > 8) return;
+    if (!onTap) return blowOut();
+    if (focused) {
+      // close enough to make a wish: she blows the candles out
+      blowOut();
+      onTap(true);
+    } else {
+      flare.current = 1;
+      sound.chime(9, 0.035);
+      onTap(false);
+    }
   };
 
   // outward from the room's centre, and along the wall — the secret hides beside the table
@@ -1038,7 +1079,19 @@ function Cake({
         <circleGeometry args={[0.56, 40]} />
       </mesh>
       {/* the cake: two tiers, a cream rim, berries on top, candles */}
-      <group onClick={blow} onPointerOver={() => (document.body.style.cursor = 'pointer')} onPointerOut={() => (document.body.style.cursor = '')}>
+      <Glow ref={glow} color="#ffc98f" size={1.3} opacity={0} position={[0, top + 0.62, 0]} />
+      <group
+        userData={{ moment: true }}
+        onClick={touch}
+        onPointerOver={() => {
+          hovered.current = true;
+          document.body.style.cursor = 'pointer';
+        }}
+        onPointerOut={() => {
+          hovered.current = false;
+          document.body.style.cursor = '';
+        }}
+      >
         <mesh position={[0, top + 0.13, 0]} material={sponge}>
           <cylinderGeometry args={[0.34, 0.35, 0.26, 40]} />
         </mesh>
@@ -1351,9 +1404,13 @@ interface Props {
   dogSpot: Spot | null;
   /** the gift box's spot (a small blush pool) */
   giftSpot: Spot | null;
+  /** a hidden moment in progress: the camera has leant in to the cake or the sign */
+  focus?: 'cake' | 'sign' | null;
+  /** the cake or the sign was touched (`wish`: touched again, close up — candles blown) */
+  onMoment?: (target: 'cake' | 'sign', wish?: boolean) => void;
 }
 
-export function RoomSet({ floorY: stageY, rx, rz, heart, reducedMotion, hoverFx, portrait, dogSpot, giftSpot }: Props) {
+export function RoomSet({ floorY: stageY, rx, rz, heart, reducedMotion, hoverFx, portrait, dogSpot, giftSpot, focus = null, onMoment }: Props) {
   // the gifts stand on the stage (stageY); the room's floor is a step below it
   const floorY = stageY - STAGE_STEP;
   const motion = reducedMotion ? 0.15 : 1;
@@ -1576,13 +1633,21 @@ export function RoomSet({ floorY: stageY, rx, rz, heart, reducedMotion, hoverFx,
       </mesh>
       <Garland floorY={floorY} />
       <group ref={(g) => void (cutGroups.current[0] = g)} userData={{ anchor: 0 }}>
-        <BirthdaySign floorY={floorY} radius={portrait ? 4.9 : 5.95} scale={portrait ? 0.68 : 0.95} drop={portrait ? 0.75 : 0.32} heart={heart} motion={motion} />
+        <BirthdaySign floorY={floorY} {...SIGN_PLACEMENT[portrait ? 'portrait' : 'landscape']} heart={heart} motion={motion} focused={focus === 'sign'} onTap={onMoment && (() => onMoment('sign'))} />
       </group>
       <Stage y={stageY} rug={floorU.uRug.value} stageMat={stageMat} bandMat={bandMat} />
       <RoomProps floorY={floorY} windowAngle={WINDOW_ANGLE} wallR={WALL_R} candleVec={candleVec} candleCount={candles.length} heart={heart} motion={motion} />
       {dogSpot && <Petals spot={dogSpot} y={stageY} motion={motion} />}
       <group position={cakeAt} scale={0.82} ref={(g) => void (cutGroups.current[1] = g)} userData={{ anchor: LAYOUT.cake }}>
-        <Cake at={[0, 0, 0]} outward={cakeAt} motion={motion} secretFound={secretFound} onSecret={findSecret} />
+        <Cake
+          at={[0, 0, 0]}
+          outward={cakeAt}
+          motion={motion}
+          secretFound={secretFound}
+          onSecret={findSecret}
+          focused={focus === 'cake'}
+          onTap={onMoment && ((wish) => onMoment('cake', wish))}
+        />
       </group>
       <group ref={(g) => void (cutGroups.current[2] = g)} userData={{ anchor: LAYOUT.sideboard }}>
         {balloons.map((b, i) => (

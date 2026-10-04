@@ -10,7 +10,10 @@ import { CameraRig } from './CameraRig';
 import { getFloorTexture, getShadowTexture } from './glowTexture';
 import { usePointerOrbit } from '../../hooks/usePointerOrbit';
 import { hoverLight, roomLights } from './sceneStore';
-import { RoomSet } from './RoomSet';
+import { RoomSet, SIGN_PLACEMENT, STAGE_STEP, WALL_R } from './RoomSet';
+import { cakePosition } from './RoomProps';
+import { Html } from '@react-three/drei';
+import { birthdayConfig } from '../../config/birthday';
 
 interface Props {
   gifts: Gift[];
@@ -32,6 +35,24 @@ interface Props {
 }
 
 const FLOOR_Y = -0.95;
+
+/**
+ * The hidden moments (touch the cake, or the HAPPY BIRTHDAY sign): how the camera leans in.
+ * Offsets are un-rotated (toward +z); the orbit swings them round to face the subject.
+ * [landscape, portrait].
+ */
+const MOMENT = {
+  // the cake's thought sits beside it (to the right as she looks; above it on a phone)
+  // (on a wide screen the camera looks a little to the cake's right: the cake sits left of
+  // centre and its thought has the right third)
+  cake: { back: [1.95, 2.9], lift: [0.5, 0.95], lookH: 1.0, lookSide: [0.3, 0], text: { side: [0.82, 0], h: [1.1, 1.95] } },
+  // (on a phone the camera must stand back to fit the sign — so it rises, and looks over
+  // the heart instead of through it)
+  sign: { back: [4.5, 7.4], lift: [0.25, 1.95], lookOffset: -0.05, text: { h: 0.55, inward: 0.45 } },
+  /** how quickly the camera leans in (CameraRig speed: ~1 s to settle) */
+  speed: 1.35,
+} as const;
+type Moment = 'cake' | 'sign';
 
 /**
  * The gifts stand on a ring around the heart, on a real floor. From the default
@@ -109,13 +130,94 @@ export function RoomWorld({
   const opening = openingId !== null;
   const openIndex = gifts.findIndex((g) => g.id === openingId);
 
+  // a hidden moment in progress (the cake or the sign) — see below
+  const [moment, setMoment] = useState<Moment | null>(null);
   const orbit = usePointerOrbit({
-    enabled: !opening && !paused,
+    enabled: !opening && !paused && !moment,
     sensitivity: 0.005,
     pitch: portrait ? [-0.45, 0.25] : [-0.25, 0.6],
     zoom: [0.78, 1.3],
     friction: 2.2,
   });
+
+  // ── hidden moments ──────────────────────────────────────────────────────────
+  const before = useRef<{ yaw: number; pitch: number; zoom: number } | null>(null);
+  const momentHit = useRef(false);
+  const ground = FLOOR_Y - STAGE_STEP;
+  const cakeAt = useMemo(() => cakePosition(ground, WALL_R), [ground]);
+  const sign = SIGN_PLACEMENT[portrait ? 'portrait' : 'landscape'];
+  const cakeTextAt = useMemo((): [number, number, number] => {
+    const d = Math.hypot(cakeAt[0], cakeAt[2]);
+    // looking out at the cake from the room, "right" is (−out.z, out.x)
+    const rx = -cakeAt[2] / d;
+    const rz = cakeAt[0] / d;
+    const k = MOMENT.cake.text.side[portrait ? 1 : 0];
+    return [cakeAt[0] + rx * k, ground + MOMENT.cake.text.h[portrait ? 1 : 0], cakeAt[2] + rz * k];
+  }, [cakeAt, ground, portrait]);
+  const leaveMoment = useCallback(() => {
+    // back exactly to where she was looking from
+    const b = before.current;
+    if (b) {
+      orbit.tYaw = b.yaw;
+      orbit.tPitch = b.pitch;
+      orbit.tZoom = b.zoom;
+    }
+    before.current = null;
+    setMoment(null);
+  }, [orbit]);
+  const onMoment = useCallback(
+    (target: Moment, wish?: boolean) => {
+      momentHit.current = true;
+      if (opening || paused) return;
+      if (wish) {
+        // a wish made, the candles out: a breath later, back to the room
+        window.setTimeout(leaveMoment, 2300);
+        return;
+      }
+      if (moment === target) return leaveMoment();
+      if (!before.current) before.current = { yaw: orbit.tYaw, pitch: orbit.tPitch, zoom: orbit.tZoom };
+      setMoment(target);
+    },
+    [opening, paused, moment, orbit, leaveMoment],
+  );
+  useEffect(() => {
+    if (!moment) return;
+    // turn to face it from inside the room
+    const a = moment === 'cake' ? Math.atan2(cakeAt[0], cakeAt[2]) : Math.PI;
+    orbit.steerYaw(-(a + Math.PI));
+    orbit.tPitch = 0;
+    orbit.tZoom = 1;
+  }, [moment, cakeAt, orbit]);
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent('room-moment', { detail: !!moment }));
+    if (!moment) return;
+    // Escape, or a touch anywhere else, brings her back
+    const key = (e: KeyboardEvent) => e.key === 'Escape' && leaveMoment();
+    const click = () => {
+      if (momentHit.current) return void (momentHit.current = false);
+      leaveMoment();
+    };
+    momentHit.current = false;
+    window.addEventListener('keydown', key);
+    const id = window.setTimeout(() => window.addEventListener('click', click), 60);
+    return () => {
+      window.clearTimeout(id);
+      window.removeEventListener('keydown', key);
+      window.removeEventListener('click', click);
+    };
+  }, [moment, leaveMoment]);
+  useEffect(() => () => void window.dispatchEvent(new CustomEvent('room-moment', { detail: false })), []);
+  // QA hook (?debug): open a hidden moment without having to aim at it
+  const momentRef = useRef(onMoment);
+  momentRef.current = onMoment;
+  useEffect(() => {
+    if (!new URLSearchParams(location.search).has('debug')) return;
+    Object.assign(window, { __moment: (t: Moment | null) => (t ? momentRef.current(t) : leaveMoment()) });
+  }, [leaveMoment]);
+  // a gift being opened (or the memory overlay) always wins
+  useEffect(() => {
+    if ((opening || paused) && moment) leaveMoment();
+  }, [opening, paused, moment, leaveMoment]);
 
   // opening a gift: swing round to face it and push in; closing: pull back out
   useEffect(() => {
@@ -131,7 +233,7 @@ export function RoomWorld({
     if (!orbit.dragging && orbit.idle() > 5) {
       orbit.tPitch += (0 - orbit.tPitch) * (1 - Math.exp(-dt * 0.4));
       // left alone, the room keeps turning slowly — but holds still while a gift opens or is read
-      if (!opening && !paused && !reducedMotion && !hoverId) orbit.tYaw += Math.min(dt, 0.05) * 0.05;
+      if (!opening && !paused && !reducedMotion && !hoverId && !moment) orbit.tYaw += Math.min(dt, 0.05) * 0.05;
     }
   });
 
@@ -234,7 +336,17 @@ export function RoomWorld({
     : { pos: [0, 3.0, 8.4] as [number, number, number], look: [0, -0.4, 0] as [number, number, number], fov: 40 };
   let camPos = base.pos;
   let camLook = base.look;
-  if (opening && openIndex >= 0 && gifts[openIndex]?.shape === 'envelope') {
+  const pi = portrait ? 1 : 0;
+  if (moment === 'cake') {
+    // leaning in to the cake, from the room's side of it
+    const d = Math.hypot(cakeAt[0], cakeAt[2]);
+    const ls = MOMENT.cake.lookSide[pi];
+    camLook = [cakeAt[0] - (cakeAt[2] / d) * ls, ground + MOMENT.cake.lookH, cakeAt[2] + (cakeAt[0] / d) * ls];
+    camPos = [camLook[0], camLook[1] + MOMENT.cake.lift[pi], camLook[2] + MOMENT.cake.back[pi]];
+  } else if (moment === 'sign') {
+    camLook = [0, ground + 2.0 - sign.drop + MOMENT.sign.lookOffset, -sign.radius];
+    camPos = [0, camLook[1] + MOMENT.sign.lift[pi], camLook[2] + MOMENT.sign.back[pi]];
+  } else if (opening && openIndex >= 0 && gifts[openIndex]?.shape === 'envelope') {
     // the puppy is a memory too: the camera walks up to it (same rig, same swing round to
     // face it) and settles a little low, the puppy's face and the letter it gives framed
     // together — the puppy stays where it stands and performs
@@ -259,8 +371,8 @@ export function RoomWorld({
       <CameraRig
         position={camPos}
         lookAt={camLook}
-        parallax={reducedMotion || opening ? 0 : 0.25}
-        speed={opening ? (gifts[openIndex]?.shape === 'envelope' ? 1.25 : 2.0) : 1.1}
+        parallax={reducedMotion || opening || moment ? 0 : 0.25}
+        speed={moment ? MOMENT.speed : opening ? (gifts[openIndex]?.shape === 'envelope' ? 1.25 : 2.0) : 1.1}
         fov={base.fov}
         orbit={orbit}
         orbitCamera
@@ -276,6 +388,8 @@ export function RoomWorld({
         portrait={portrait}
         dogSpot={spots.dog}
         giftSpot={spots.gift}
+        focus={moment}
+        onMoment={onMoment}
       />
       <Floor rx={rx} rz={rz} />
       <group position={[0, 0.3, 0]}>
@@ -305,7 +419,7 @@ export function RoomWorld({
           size={(portrait ? 0.95 : 1) * (g.shape === 'envelope' ? 1.12 : g.shape === 'box' ? 0.84 : 1)}
           opened={opened.includes(g.id)}
           opening={openingId === g.id}
-          disabled={opening || paused}
+          disabled={opening || paused || !!moment}
           focused={focusId === g.id}
           quiet={allOpened}
           glass={glass}
@@ -316,6 +430,21 @@ export function RoomWorld({
           onHover={onHover}
         />
       ))}
+      {moment === 'cake' && (
+        <Html
+          position={cakeTextAt}
+          center
+          style={{ pointerEvents: 'none' }}
+          zIndexRange={[8, 0]}
+        >
+          <Whisper lines={birthdayConfig.room.moments.cake} />
+        </Html>
+      )}
+      {moment === 'sign' && (
+        <Html position={[0, ground + MOMENT.sign.text.h, -sign.radius + MOMENT.sign.text.inward]} center style={{ pointerEvents: 'none' }} zIndexRange={[8, 0]}>
+          <Whisper lines={birthdayConfig.room.moments.sign} />
+        </Html>
+      )}
       <ParticleField
         count={Math.round(600 * particleFactor)}
         radius={11}
@@ -325,5 +454,18 @@ export function RoomWorld({
         reducedMotion={reducedMotion}
       />
     </group>
+  );
+}
+
+/** The room's whispered message: lines that arrive one after another, like a thought. */
+function Whisper({ lines }: { lines: readonly string[] }) {
+  return (
+    <div className="room-whisper" role="status">
+      {lines.map((l, i) => (
+        <span key={i} style={{ animationDelay: `${0.9 + i * 0.55}s` }}>
+          {l}
+        </span>
+      ))}
+    </div>
   );
 }

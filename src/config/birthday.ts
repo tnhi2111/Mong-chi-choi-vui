@@ -84,6 +84,22 @@ export const birthdayConfig = {
       title: 'Em tìm thấy rồi ♥',
       text: '[ROOM_SECRET] Anh biết thế nào em cũng tò mò ngó quanh bàn bánh kem mà.',
     },
+    /**
+     * Hidden moments: nothing announces them — touching the cake or the HAPPY BIRTHDAY sign
+     * brings the camera close and the room "speaks". One string per line.
+     */
+    moments: {
+      /** her age (the rose-gold wire topper on the cake is bent for 2 and 6) */
+      age: 26,
+      cake: ['26 years of you.', 'And somehow, the world feels a little warmer.'],
+      sign: ['Happy birthday, my baby.', 'This little room is only a tiny piece', 'of everything I wanted to give you.'],
+    },
+    /** The words of the HAPPY BIRTHDAY installation (one family, one composition). */
+    sign: {
+      headline: ['HAPPY', 'BIRTHDAY'],
+      endearment: 'MY BABY',
+      name: 'TEACHER HÙ TÁ',
+    },
   },
 
   letter: {

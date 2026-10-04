@@ -186,6 +186,21 @@ soft blob shadow on the floor that tightens as it lands.
   is larger to frame all four lines.
 - **"26" on the cake**: `CakeTopper` (RoomSet) — two rose-gold wire numerals (tube along
   hand-drawn paths) on picks behind the candles, facing the room, `surface()` material.
+- **Hidden moments** (nothing announces them): touching the CAKE or the SIGN. RoomWorld
+  owns `moment` ('cake' | 'sign'), saves the orbit (yaw/pitch/zoom) and restores it exactly
+  on the way out; framings in `MOMENT` (RoomWorld), sign placement in `SIGN_PLACEMENT`
+  (RoomSet). Out: Escape, a touch anywhere else, or (cake) touching it again = blowing out
+  the candles (a wish) → back after 2.3 s. Messages come from
+  `birthdayConfig.room.moments` and appear as a `Whisper` (drei Html, `.room-whisper`, line
+  by line). App listens to `room-moment` (dims the edges, hides the room UI). Hover: the
+  cake's flames brighten + a warm `Glow`; the sign warms and its band of light quickens.
+  Gift hit-spheres yield to a moment behind them (`passThrough` in Gift3D; Points never
+  raycast). QA: `?debug` → `window.__moment('cake'|'sign'|null)`, `window.__camera`;
+  `qa-output/moments.mjs` (real clicks) and `moments-hook.mjs` (any viewport).
+- **The sign is one composition in one family** (Cormorant upright capitals): words from
+  `birthdayConfig.room.sign`; size / weight (500 vs 400) / tracking / metal tone (`aTone`:
+  champagne → warm gold for her name) make the hierarchy; two gold hairlines frame MY BABY;
+  a slow band of light crosses the letters (`uSweep`); posies and ribbons differ per side.
 - Room UI: memory indicators are medallions; the final note sits between fine rules and
   "Come closer" is ivory/blush glass (`room-ui__cta`).
 Intro particle puppy: after its lap the waving arm's points settle onto the mirror image
