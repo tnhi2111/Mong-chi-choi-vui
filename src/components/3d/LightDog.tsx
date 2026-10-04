@@ -2,9 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useFrame, type ThreeEvent } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useShader } from './useShader';
-import { buildDog, EAR_ROOT_Y, JAW_HINGE, occluders, SHOULDER, TAIL_BASE, TONGUE_ROOT, type V3 } from './dogModel';
-import { growFur } from './dogFur';
-import { bindRun, BONE_COUNT, GALLOP, HEAD, HEAD_OFFSET, poseRun, RUN_SPEED, runOccluders } from './dogRun';
+import { EAR_ROOT_Y, JAW_HINGE, occluders, SHOULDER, TAIL_BASE, TONGUE_ROOT, type V3 } from './dogModel';
+import { emptyLightDogGeometry, lightDogGeometry, loadLightDog } from './lightDogData';
+import { BONE_COUNT, GALLOP, HEAD, HEAD_OFFSET, poseRun, RUN_SPEED, runOccluders } from './dogRun';
 import type { OrbitInput } from '../../hooks/usePointerOrbit';
 import { sound } from '../../lib/audio';
 
@@ -28,8 +28,6 @@ const WRIST_ALONG = 0.3;
  * down again facing her, gives one happy "woof", and stays with its tongue out,
  * panting, tail wagging. Its paw stays down afterwards (no more waving).
  */
-/** Share of the body's points that grow a strand of fur. */
-const FUR_SHARE = 0.5;
 const STAND = 0.6;
 const SIT = 0.7;
 const ACCEL = 0.7;
@@ -326,81 +324,15 @@ export function LightDog({ awake, visible, position, facing = 0, scale, density,
   const awakeP = useRef(0);
   const shown = useRef(visible ? 1 : 0);
 
-  const points = useMemo(() => {
-    const surface = buildDog(Math.round(15000 * density));
-    const bound = bindRun(surface, surface.length);
-    // a coat of fur strands over the body and legs (dogFur.ts)
-    const fur = growFur(surface, bound, FUR_SHARE);
-    const dog = [...surface, ...fur.sit];
-    const extra = Math.round(260 * density);
-    const n = dog.length + extra;
-    const pos = new Float32Array(n * 3);
-    const start = new Float32Array(n * 3);
-    const delay = new Float32Array(n);
-    const seed = new Float32Array(n);
-    const anim = new Float32Array(n);
-    const size = new Float32Array(n);
-    const color = new Float32Array(n * 3);
-    for (let i = 0; i < n; i++) {
-      const d = dog[i];
-      if (d) {
-        pos.set([d.p.x, d.p.y, d.p.z], i * 3);
-        color.set([d.col.r, d.col.g, d.col.b], i * 3);
-      }
-      // scattered across the sky around (and behind) the puppy, in its local units
-      start.set([(Math.random() - 0.5) * 9, (Math.random() - 0.4) * 5, -1 - Math.random() * 3], i * 3);
-      delay[i] = Math.random();
-      seed[i] = Math.random();
-      anim[i] = d ? d.anim : 4;
-      size[i] = d ? d.size : 0.8 + Math.pow(Math.random(), 3) * 2.2;
-    }
-    const run = {
-      pos: new Float32Array(n * 3),
-      boneA: new Float32Array(n),
-      boneB: new Float32Array(n),
-      boneW: new Float32Array(n),
+  // the points are sampled in a worker (seconds of SDF work); until they arrive, an empty
+  // stand-in keeps the shader compiled and nothing is drawn
+  const [points, setPoints] = useState<THREE.BufferGeometry>(emptyLightDogGeometry);
+  useEffect(() => {
+    let alive = true;
+    void loadLightDog(density).then((a) => alive && setPoints(lightDogGeometry(a)));
+    return () => {
+      alive = false;
     };
-    for (const [key, w] of [['pos', 3], ['boneA', 1], ['boneB', 1], ['boneW', 1]] as const) {
-      run[key].set(bound[key], 0);
-      run[key].set(fur.run[key], surface.length * w);
-    }
-    // Where the waving arm's light goes when the paw comes down: onto the mirror image of
-    // the other front leg, point for point (both lists ordered shoulder → paw, so the light
-    // flows down the leg instead of scattering). Pads and toe gaps (dark) fade out — a paw
-    // standing on the floor doesn't show them.
-    const rest = new Float32Array(n * 4);
-    const armIdx: number[] = [];
-    const legIdx: number[] = [];
-    const S = new THREE.Vector3(...SHOULDER);
-    const D = new THREE.Vector3(0.17, 0.28, 0.07).normalize();
-    const v = new THREE.Vector3();
-    dog.forEach((d, i) => {
-      if (d.anim > 1.5 && d.anim < 2.5) armIdx.push(i);
-      else if (d.part === 'fl' && d.anim < 0.05) legIdx.push(i);
-    });
-    armIdx.sort((a, b) => v.copy(dog[a].p).sub(S).dot(D) - v.copy(dog[b].p).sub(S).dot(D));
-    legIdx.sort((a, b) => dog[b].p.y - dog[a].p.y);
-    armIdx.forEach((ai, k) => {
-      const li = legIdx[Math.min(legIdx.length - 1, Math.floor((k / Math.max(1, armIdx.length - 1)) * (legIdx.length - 1)))];
-      const q = li !== undefined ? dog[li].p : dog[ai].p;
-      const c = dog[ai].col;
-      const dark = 0.299 * c.r + 0.587 * c.g + 0.114 * c.b < 0.42 ? 1 : 0;
-      rest.set([-q.x, q.y, q.z, dark], ai * 4);
-    });
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    g.setAttribute('aRest', new THREE.BufferAttribute(rest, 4));
-    g.setAttribute('aRun', new THREE.BufferAttribute(run.pos, 3));
-    g.setAttribute('aBoneA', new THREE.BufferAttribute(run.boneA, 1));
-    g.setAttribute('aBoneB', new THREE.BufferAttribute(run.boneB, 1));
-    g.setAttribute('aBoneW', new THREE.BufferAttribute(run.boneW, 1));
-    g.setAttribute('aStart', new THREE.BufferAttribute(start, 3));
-    g.setAttribute('aDelay', new THREE.BufferAttribute(delay, 1));
-    g.setAttribute('aSeed', new THREE.BufferAttribute(seed, 1));
-    g.setAttribute('aAnim', new THREE.BufferAttribute(anim, 1));
-    g.setAttribute('aSize', new THREE.BufferAttribute(size, 1));
-    g.setAttribute('aColor', new THREE.BufferAttribute(color, 3));
-    return g;
   }, [density]);
   useEffect(() => () => points.dispose(), [points]);
 

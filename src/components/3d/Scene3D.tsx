@@ -1,5 +1,6 @@
-import { Suspense } from 'react';
-import { Canvas } from '@react-three/fiber';
+import { Suspense, useRef } from 'react';
+import { Canvas, useFrame } from '@react-three/fiber';
+import { signalReady } from '../../lib/ready';
 import { PerformanceMonitor } from '@react-three/drei';
 import * as THREE from 'three';
 import type { FinalePhase, Stage } from '../../types';
@@ -66,6 +67,7 @@ export default function Scene3D(props: SceneProps) {
       aria-hidden="true"
     >
       <PerformanceMonitor flipflops={2} onDecline={() => onTierChange(lowerTier(tier))} />
+      <WarmEnvironment />
       <Suspense fallback={null}>
         <Lights mood={mood} cursorLight={finePointer && tier !== 'low' && !reducedMotion} />
       </Suspense>
@@ -119,4 +121,42 @@ export default function Scene3D(props: SceneProps) {
       )}
     </Canvas>
   );
+}
+
+/**
+ * The room's lit materials reflect a little studio environment (Lights' <Environment>).
+ * Three filters it into a reflection map the first time a lit material is drawn — a
+ * one-off, ~0.8 s synchronous job. Do it now, while the boot veil is up, instead of in the
+ * middle of the experience; then tell the page the scene is warm.
+ */
+const warmKeep: THREE.Object3D[] = [];
+function WarmEnvironment() {
+  const done = useRef(false);
+  const frames = useRef(0);
+  useFrame(({ gl, scene, camera }) => {
+    if (done.current) return;
+    frames.current++;
+    if (!scene.environment && frames.current < 90) return;
+    done.current = true;
+    if (scene.environment) {
+      const temp = new THREE.Scene();
+      temp.environment = scene.environment;
+      const geo = new THREE.SphereGeometry(0.01, 4, 4);
+      const mat = new THREE.MeshStandardMaterial();
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.set(0, 0, -1);
+      temp.add(mesh);
+      try {
+        gl.compile(temp, camera);
+      } catch {
+        /* nothing lost: it would simply happen later */
+      }
+      // kept alive on purpose: disposing it would delete a program three is still
+      // polling for its parallel compile (GL_INVALID_VALUE warnings)
+      warmKeep.push(mesh);
+    }
+    // a frame later, so the veil lifts on a drawn scene
+    requestAnimationFrame(() => signalReady('scene-warm'));
+  });
+  return null;
 }

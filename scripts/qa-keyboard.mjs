@@ -52,7 +52,10 @@ try {
   console.log('• welcome focus:', await focused());
   await snap('welcome-focus');
   await page.keyboard.press('Enter');
-  await page.waitForTimeout(3500);
+  // the room is shown once it has compiled (the veil lifts then) — wait for that, not a guess
+  await page.locator('.veil[data-on="false"]').waitFor({ state: 'attached', timeout: 15000 });
+  await page.waitForFunction(() => document.querySelector('.veil')?.getAttribute('data-on') === 'false', null, { timeout: 15000 });
+  await page.waitForTimeout(800);
 
   const count = await page.locator('.gift-nav__btn').count();
   for (let i = 0; i < count; i++) {

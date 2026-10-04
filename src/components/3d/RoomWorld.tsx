@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useFrame } from '@react-three/fiber';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useFrame, useThree } from '@react-three/fiber';
+import { resetReady, signalReady } from '../../lib/ready';
 import * as THREE from 'three';
 import type { Gift } from '../../data/gifts';
 import { Heart3D } from './Heart3D';
@@ -174,6 +175,48 @@ export function RoomWorld({
     [],
   );
 
+  // Everything in the room compiles its shaders in parallel (KHR_parallel_shader_compile)
+  // before it is shown — the page holds its veil until then — so stepping in never stalls
+  // on a dozen synchronous shader links in the first frame.
+  const root = useRef<THREE.Group>(null);
+  const gl = useThree((st) => st.gl);
+  const cam = useThree((st) => st.camera);
+  const scn = useThree((st) => st.scene);
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    const g = root.current;
+    if (!g) return;
+    let alive = true;
+    resetReady('room-ready');
+    const show = () => {
+      if (!alive) return;
+      setReady(true);
+      // draw a few frames while still veiled: the first one uploads every texture and
+      // buffer of the room — let that happen out of sight
+      let n = 0;
+      const tick = () => (++n >= 4 ? signalReady('room-ready') : requestAnimationFrame(tick));
+      requestAnimationFrame(tick);
+    };
+    // two frames later: the previous stage's objects (and its lights) are gone by then, so
+    // the programs are built for the room's real light set — not one that is about to change
+    let raf = requestAnimationFrame(() => {
+      raf = requestAnimationFrame(() => {
+        if (!alive) return;
+        // (the whole scene, not just this group: compiling a group that holds a light
+        // against its own scene counts that light twice — programs for the wrong light count)
+        g.visible = true;
+        gl.compileAsync(scn, cam).then(show, show);
+        g.visible = false;
+      });
+    });
+    const fallback = setTimeout(show, 3500);
+    return () => {
+      alive = false;
+      cancelAnimationFrame(raf);
+      clearTimeout(fallback);
+    };
+  }, [gl, cam, scn]);
+
   const showcase = useMemo(
     () =>
       ring.map(({ pos, angle }, i) => {
@@ -212,7 +255,7 @@ export function RoomWorld({
   }
 
   return (
-    <>
+    <group ref={root} visible={ready}>
       <CameraRig
         position={camPos}
         lookAt={camLook}
@@ -281,6 +324,6 @@ export function RoomWorld({
         intensity={0.45 + (opened.length / gifts.length) * 0.3}
         reducedMotion={reducedMotion}
       />
-    </>
+    </group>
   );
 }

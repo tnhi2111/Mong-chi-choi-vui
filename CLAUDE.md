@@ -166,6 +166,26 @@ soft blob shadow on the floor that tightens as it lands.
   little toward her on hover, and on click hold still for a beat while light gathers before
   rising (`oo` in Gift3D). Box 01 has a cream paper band under the satin and a hand-written
   "for you" card tag. Opening a memory fades in `.room-focus` (the room's edges dim).
+- **Smoothness (measured with a CPU profile, not guessed)** — three causes were found:
+  1. the intro's puppy of light sampled its SDF on the main thread at startup (~4 s
+     block): now `lightDog.worker.ts` / `lightDogData.ts` (`loadLightDog`), with an empty
+     stand-in geometry so its shader is compiled meanwhile;
+  2. three filters the `<Environment>` into a PMREM the first time a lit material is drawn
+     (~0.8 s, it hit the welcome): `WarmEnvironment` (Scene3D) does it at startup under the
+     `.boot` veil (CSS-only, compositor animations) and signals `scene-warm`. Its material
+     is kept alive on purpose (disposing it → GL_INVALID_VALUE warnings);
+  3. entering the room linked ~20 programs synchronously in the first frame: RoomWorld now
+     `compileAsync`s its whole group invisibly, draws 4 frames, then signals `room-ready`;
+     App keeps the dark veil (with a breathing light after 1.1 s) until then
+     (`src/lib/ready.ts`: `signalReady` / `waitReady` / `resetReady`). RoomSet no longer
+     gates itself. QA: `qa-output/longtasks.mjs` (long tasks + veil lift time),
+     `qa-output/profile2.mjs` / `profile-dev.mjs` (CPU profiles; dev for real names).
+- **The sign reads HAPPY / BIRTHDAY / My Baby / TEACHER HÙ TÁ** (`SIGN_LINES` in
+  BirthdaySign: upright display cut, an italic tender line, a small widely-spaced
+  dedication). Atlas cells keyed by style + character, taller cells (accents). The arch
+  is larger to frame all four lines.
+- **"26" on the cake**: `CakeTopper` (RoomSet) — two rose-gold wire numerals (tube along
+  hand-drawn paths) on picks behind the candles, facing the room, `surface()` material.
 - Room UI: memory indicators are medallions; the final note sits between fine rules and
   "Come closer" is ivory/blush glass (`room-ui__cta`).
 Intro particle puppy: after its lap the waving arm's points settle onto the mirror image

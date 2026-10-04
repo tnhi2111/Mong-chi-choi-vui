@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useFrame, useThree, type ThreeEvent } from '@react-three/fiber';
+import { useFrame, type ThreeEvent } from '@react-three/fiber';
 import { Html } from '@react-three/drei';
 import * as THREE from 'three';
 import { useShader } from './useShader';
@@ -9,6 +9,7 @@ import { sound } from '../../lib/audio';
 import { getHeartGeometry } from './heartShape';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { RoomProps, roomLamps, roomRugs, furnitureBlobs, cakePosition, LAYOUT } from './RoomProps';
+import { surface } from './Gift3D';
 import { BirthdaySign, metalVertex, metalFragment, satinVertex, satinFragment, mergeAll } from './BirthdaySign';
 
 /*
@@ -830,6 +831,59 @@ const smokeFragment = /* glsl */ `
 `;
 
 /** A birthday cake on a little round table. Touch it: the candles are blown out, then relit. */
+/**
+ * "26" — a fine rose-gold wire cake topper, each numeral one continuous stroke (as a
+ * jeweller would bend it), on two slim picks. Numeral units: 1 = its height.
+ */
+function numeralPaths(): THREE.Vector3[][] {
+  const two: THREE.Vector3[] = [];
+  // the bowl of the 2: an arc over the top, then a sweep down to the foot, then the base
+  for (let i = 0; i <= 14; i++) {
+    const a = THREE.MathUtils.lerp(Math.PI * 0.95, -Math.PI * 0.18, i / 14);
+    two.push(new THREE.Vector3(0.3 + Math.cos(a) * 0.27, 0.71 + Math.sin(a) * 0.27, 0));
+  }
+  two.push(new THREE.Vector3(0.36, 0.42, 0), new THREE.Vector3(0.16, 0.2, 0), new THREE.Vector3(0.02, 0.02, 0), new THREE.Vector3(0.3, 0.0, 0), new THREE.Vector3(0.64, 0.02, 0));
+  const six: THREE.Vector3[] = [new THREE.Vector3(0.56, 0.96, 0), new THREE.Vector3(0.38, 0.92, 0), new THREE.Vector3(0.18, 0.76, 0), new THREE.Vector3(0.07, 0.5, 0)];
+  // …down into the loop
+  for (let i = 0; i <= 18; i++) {
+    const a = Math.PI + (i / 18) * Math.PI * 2;
+    six.push(new THREE.Vector3(0.33 + Math.cos(a) * 0.26, 0.28 + Math.sin(a) * 0.27, 0));
+  }
+  return [two, six];
+}
+
+function CakeTopper({ y, outward }: { y: number; outward: THREE.Vector2 }) {
+  const parts = useMemo(() => {
+    const [two, six] = numeralPaths();
+    const tube = (pts: THREE.Vector3[], dx: number) => {
+      const g = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, false, 'centripetal'), 90, 0.045, 8, false);
+      g.translate(dx, 0, 0);
+      return g;
+    };
+    return { two: tube(two, -0.7), six: tube(six, 0.06) };
+  }, []);
+  useEffect(() => () => [parts.two, parts.six].forEach((g) => g.dispose()), [parts]);
+  // rose gold, restrained: it catches the candlelight and the room's lamps, never glows
+  const gold = useMemo(() => surface({ color: '#d8a48e', metalness: 0.88, roughness: 0.26, clearcoat: 0.4, clearcoatRoughness: 0.2, bumpScale: 0.02 }), []);
+  useEffect(() => () => gold.dispose(), [gold]);
+  // stands behind the candles, its face turned to the middle of the room
+  const face = Math.atan2(-outward.x, -outward.y);
+  const H = 0.19;
+  return (
+    <group position={[outward.x * 0.1, y, outward.y * 0.1]} rotation-y={face}>
+      <group position={[0, 0.12, 0]} scale={H} rotation-z={-0.03}>
+        <mesh geometry={parts.two} material={gold} />
+        <mesh geometry={parts.six} material={gold} />
+      </group>
+      {[-0.06, 0.06].map((x) => (
+        <mesh key={x} position={[x, 0.04, 0]} material={gold}>
+          <cylinderGeometry args={[0.004, 0.003, 0.17, 6]} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
 function Cake({
   at,
   outward = at,
@@ -1016,6 +1070,7 @@ function Cake({
           <meshBasicMaterial transparent opacity={0} depthWrite={false} colorWrite={false} />
         </mesh>
       </group>
+      <CakeTopper y={top + 0.46} outward={out} />
       <points geometry={flames} material={flameMat} frustumCulled={false} />
       <points geometry={smoke} material={smokeMat} frustumCulled={false} />
 
@@ -1481,31 +1536,11 @@ export function RoomSet({ floorY: stageY, rx, rz, heart, reducedMotion, hoverFx,
     [4, 5, 7].forEach((pch, i) => setTimeout(() => sound.chime(pch, 0.035), 700 + i * 160));
   };
 
-  // The room's own shaders (floor, wall, wax, flames, cake, balloons…) are compiled in the
-  // background first — the dark veil still covers the scene — and only then shown, so
-  // stepping into the room never stalls on a dozen shader compilations at once.
+  // (its shaders are compiled with the rest of the room, in parallel, before RoomWorld shows it)
   const root = useRef<THREE.Group>(null);
-  const gl = useThree((st) => st.gl);
-  const camera = useThree((st) => st.camera);
-  const scene = useThree((st) => st.scene);
-  const [ready, setReady] = useState(false);
-  useEffect(() => {
-    const g = root.current;
-    if (!g) return;
-    let alive = true;
-    const show = () => alive && setReady(true);
-    g.visible = true;
-    gl.compileAsync(g, camera, scene).then(show, show);
-    g.visible = false;
-    const fallback = setTimeout(show, 1500);
-    return () => {
-      alive = false;
-      clearTimeout(fallback);
-    };
-  }, [gl, camera, scene]);
 
   return (
-    <group ref={root} visible={ready}>
+    <group ref={root}>
       <mesh rotation-x={-Math.PI / 2} position-y={floorY - 0.002} material={floorMat} renderOrder={-4}>
         <circleGeometry args={[WALL_R, 96]} />
       </mesh>
@@ -1541,7 +1576,7 @@ export function RoomSet({ floorY: stageY, rx, rz, heart, reducedMotion, hoverFx,
       </mesh>
       <Garland floorY={floorY} />
       <group ref={(g) => void (cutGroups.current[0] = g)} userData={{ anchor: 0 }}>
-        <BirthdaySign floorY={floorY} radius={portrait ? 4.9 : 5.95} scale={portrait ? 0.6 : 0.95} drop={portrait ? 0.75 : 0.32} heart={heart} motion={motion} />
+        <BirthdaySign floorY={floorY} radius={portrait ? 4.9 : 5.95} scale={portrait ? 0.68 : 0.95} drop={portrait ? 0.75 : 0.32} heart={heart} motion={motion} />
       </group>
       <Stage y={stageY} rug={floorU.uRug.value} stageMat={stageMat} bandMat={bandMat} />
       <RoomProps floorY={floorY} windowAngle={WINDOW_ANGLE} wallR={WALL_R} candleVec={candleVec} candleCount={candles.length} heart={heart} motion={motion} />

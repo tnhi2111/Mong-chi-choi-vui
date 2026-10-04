@@ -5,6 +5,7 @@ import type { FinalePhase, Stage, Veil } from './types';
 import { loadProgress, saveProgress, clearProgress } from './lib/storage';
 import { hasWebGL, initialTier, type Tier } from './lib/quality';
 import { sound } from './lib/audio';
+import { resetReady, waitReady } from './lib/ready';
 import { assetUrl } from './lib/text';
 import { useReducedMotion } from './hooks/useReducedMotion';
 import { useViewport } from './hooks/useViewport';
@@ -66,6 +67,8 @@ export default function App() {
   const [focusId, setFocusId] = useState<string | null>(null);
   const [finalePhase, setFinalePhase] = useState<FinalePhase>('gather');
   const [webgl, setWebgl] = useState(hasWebGL);
+  const webglRef = useRef(webgl);
+  webglRef.current = webgl;
   const [tier, setTier] = useState<Tier>(initialTier);
   const busy = useRef(false);
   // remember the last colour so the veil fades out in the same colour it faded in
@@ -85,12 +88,25 @@ export default function App() {
     }
   }, []);
 
-  // Coming back later: lift the dark veil over the room.
+  // Coming back later: lift the dark veil over the room once it is ready.
   useEffect(() => {
     if (!saved.unlocked) return;
-    const id = setTimeout(() => setVeil('none'), 300);
-    return () => clearTimeout(id);
+    let alive = true;
+    void Promise.all([wait(300), waitReady('room-ready', 5000)]).then(() => alive && setVeil('none'));
+    return () => {
+      alive = false;
+    };
   }, [saved.unlocked]);
+
+  // First visit: a quiet loading veil while the 3D scene does its one-off setup
+  const [booted, setBooted] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    void waitReady('scene-warm', 7000).then(() => alive && setBooted(true));
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   useEffect(() => {
     const save = () => saveProgress({ unlocked: stage !== 'intro' && stage !== 'gate', opened, finaleSeen: saved.finaleSeen });
@@ -104,14 +120,17 @@ export default function App() {
     };
   }, [stage, opened, saved.finaleSeen]);
 
-  /** Fade out → swap stage → fade in. */
+  /** Fade out → swap stage → (wait for the room to be ready) → fade in. */
   const transition = useCallback(async (next: Stage, kind: Exclude<Veil, 'none'> = 'dark', hold = 250) => {
     if (busy.current) return;
     busy.current = true;
     setVeil(kind);
     await wait(750);
+    if (next === 'room') resetReady('room-ready');
     setStage(next);
     await wait(hold);
+    // the room compiles its shaders behind the veil; lift it once it can be shown smoothly
+    if (next === 'room' && webglRef.current) await waitReady('room-ready', 4000);
     setVeil('none');
     await wait(700);
     busy.current = false;
@@ -288,7 +307,7 @@ export default function App() {
           <RoomUI
             gifts={gifts}
             opened={opened}
-            busy={!!openingId || overlayOpen}
+            busy={!!openingId || overlayOpen || veil !== 'none'}
             onSelect={selectGift}
             onFocusGift={setFocusId}
             onFinal={goFinal}
@@ -309,7 +328,16 @@ export default function App() {
       </Suspense>
 
       <MusicToggle />
-      <div className="veil" data-kind={veilKind} data-on={veil !== 'none'} aria-hidden="true" />
+      <div className="veil" data-kind={veilKind} data-on={veil !== 'none'} aria-hidden="true">
+        <span className="veil__light" />
+      </div>
+      <div className="boot" data-on={webgl && !booted && !saved.unlocked} aria-hidden="true">
+        <span className="boot__light" />
+        <span className="boot__mote" style={{ left: '46%', animationDelay: '0s' }} />
+        <span className="boot__mote" style={{ left: '53%', animationDelay: '1.3s' }} />
+        <span className="boot__mote" style={{ left: '50%', animationDelay: '2.4s' }} />
+        <span className="boot__word">for you</span>
+      </div>
     </>
   );
 }

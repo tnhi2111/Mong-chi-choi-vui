@@ -23,9 +23,27 @@ import { getHeartGeometry } from './heartShape';
 
 const FONT = '"Cormorant Garamond", Georgia, serif';
 const CELL_W = 200;
-const CELL_H = 180;
+const CELL_H = 240; // room above the capitals for Vietnamese accents (HÙ TÁ)
 const FONT_PX = 200;
 const CAP_PX = 128; // Cormorant's capital height at FONT_PX (approx.)
+/** Where the capitals sit in a cell: their centre is the cell's centre. */
+const BASELINE = CELL_H / 2 + CAP_PX / 2;
+
+/** A letterform style: the upright display cut, or the italic for the tender line. */
+type Style = 'r' | 'i';
+const FACES: Record<Style, string> = { r: `500 ${FONT_PX}px ${FONT}`, i: `italic 400 ${FONT_PX}px ${FONT}` };
+
+/**
+ * The installation's words and their hierarchy (sign space, before it is hung):
+ * HAPPY BIRTHDAY leads; "my baby" is the intimate, italic line; her name sits beneath,
+ * small and widely spaced, like an engraved dedication.
+ */
+export const SIGN_LINES: { text: string; style: Style; h: number; cap: number; track: number }[] = [
+  { text: 'HAPPY', style: 'r', h: 2.43, cap: 0.26, track: 0.18 },
+  { text: 'BIRTHDAY', style: 'r', h: 1.99, cap: 0.38, track: 0.14 },
+  { text: 'My Baby', style: 'i', h: 1.63, cap: 0.23, track: 0.06 },
+  { text: 'TEACHER HÙ TÁ', style: 'r', h: 1.22, cap: 0.165, track: 0.36 },
+];
 const LAYERS = 6;
 const DEPTH = 0.07;
 
@@ -38,6 +56,7 @@ interface Glyphs {
   count: number;
 }
 
+/** Draw every glyph (keyed style + character) into one atlas, plus two blurred copies. */
 function drawGlyphs(chars: string[]): Glyphs {
   const n = chars.length;
   const make = () => {
@@ -50,7 +69,6 @@ function drawGlyphs(chars: string[]): Glyphs {
   const g = base.getContext('2d')!;
   g.fillStyle = '#000';
   g.fillRect(0, 0, base.width, base.height);
-  g.font = `500 ${FONT_PX}px ${FONT}`;
   g.textAlign = 'center';
   g.textBaseline = 'alphabetic';
   g.fillStyle = '#fff';
@@ -59,13 +77,17 @@ function drawGlyphs(chars: string[]): Glyphs {
   g.lineWidth = 9; // the display cut is a little heavier than the text face
   const index = new Map<string, number>();
   const advance = new Map<string, number>();
-  chars.forEach((ch, i) => {
+  chars.forEach((key, i) => {
+    const style = key[0] as Style;
+    const ch = key.slice(1);
+    g.font = FACES[style];
+    // the italic is a lighter cut: a little less extra weight
+    g.lineWidth = style === 'i' ? 6 : 9;
     const x = i * CELL_W + CELL_W / 2;
-    const y = CELL_H / 2 + CAP_PX / 2;
-    g.fillText(ch, x, y);
-    g.strokeText(ch, x, y);
-    index.set(ch, i);
-    advance.set(ch, (g.measureText(ch).width + 9) / CAP_PX);
+    g.fillText(ch, x, BASELINE);
+    g.strokeText(ch, x, BASELINE);
+    index.set(key, i);
+    advance.set(key, (g.measureText(ch).width + g.lineWidth) / CAP_PX);
   });
   const blurred = (px: number) => {
     const c = make();
@@ -85,7 +107,7 @@ function drawGlyphs(chars: string[]): Glyphs {
 }
 
 /** One quad per letter per layer (and one halo quad behind each), laid along the arc. */
-function letterGeometry(glyphs: Glyphs, lines: { text: string; h: number; cap: number }[], R: number) {
+function letterGeometry(glyphs: Glyphs, lines: typeof SIGN_LINES, R: number) {
   const pos: number[] = [];
   const uv: number[] = [];
   const layer: number[] = [];
@@ -111,14 +133,14 @@ function letterGeometry(glyphs: Glyphs, lines: { text: string; h: number; cap: n
   };
   for (const line of lines) {
     const chars = [...line.text];
-    const track = 0.16;
-    const widths = chars.map((c) => (c === ' ' ? 0.45 : (glyphs.advance.get(c) ?? 0.8) + track) * line.cap);
+    const track = line.track;
+    const widths = chars.map((c) => (c === ' ' ? 0.42 + track : (glyphs.advance.get(line.style + c) ?? 0.8) + track) * line.cap);
     const total = widths.reduce((a, b) => a + b, 0);
     let s = -total / 2;
     chars.forEach((c, i) => {
       const cx = s + widths[i] / 2;
       s += widths[i];
-      const cell = glyphs.index.get(c);
+      const cell = glyphs.index.get(line.style + c);
       if (cell === undefined) return;
       const w = (CELL_W / CAP_PX) * line.cap;
       const hh = (CELL_H / CAP_PX) * line.cap;
@@ -314,12 +336,13 @@ interface Props {
 }
 
 export function BirthdaySign({ floorY, radius, scale, drop = 0.32, heart, motion }: Props) {
-  const chars = useMemo(() => [...new Set('HAPPYBIRTHDAY'.split(''))], []);
-  const [fontReady, setFontReady] = useState(() => document.fonts?.check(`500 ${FONT_PX}px "Cormorant Garamond"`) ?? true);
+  const chars = useMemo(() => [...new Set(SIGN_LINES.flatMap((l) => [...l.text.replace(/ /g, '')].map((c) => l.style + c)))], []);
+  const SAMPLE = 'HAPPY BIRTHDAY My Baby TEACHER HÙ TÁ';
+  const [fontReady, setFontReady] = useState(() => (document.fonts ? document.fonts.check(FACES.r, SAMPLE) && document.fonts.check(FACES.i, SAMPLE) : true));
   useEffect(() => {
     if (fontReady || !document.fonts) return;
     let alive = true;
-    document.fonts.load(`500 ${FONT_PX}px "Cormorant Garamond"`).then(() => alive && setFontReady(true), () => undefined);
+    Promise.all([document.fonts.load(FACES.r, SAMPLE), document.fonts.load(FACES.i, SAMPLE)]).then(() => alive && setFontReady(true), () => undefined);
     return () => {
       alive = false;
     };
@@ -332,14 +355,7 @@ export function BirthdaySign({ floorY, radius, scale, drop = 0.32, heart, motion
   useEffect(() => () => [glyphs.mask, glyphs.soft, glyphs.halo].forEach((t) => t.dispose()), [glyphs]);
   const { letters, halos } = useMemo(
     () =>
-      letterGeometry(
-        glyphs,
-        [
-          { text: 'HAPPY', h: 2.2, cap: 0.3 },
-          { text: 'BIRTHDAY', h: 1.58, cap: 0.42 },
-        ],
-        R,
-      ),
+      letterGeometry(glyphs, SIGN_LINES, R),
     [glyphs, R],
   );
   useEffect(
@@ -353,24 +369,25 @@ export function BirthdaySign({ floorY, radius, scale, drop = 0.32, heart, motion
   // the arch, its cables and bulbs, the hanging heart, posies and ribbons
   const parts = useMemo(() => {
     const onArc = (s: number, h: number, z = 0) => new THREE.Vector3(Math.sin(s / R) * (R - z), h, -Math.cos(s / R) * (R - z));
-    const A = 2.25;
+    // the arch frames all four lines: its feet low beside her name, its crown above HAPPY
+    const A = 2.45;
     const archPts: THREE.Vector3[] = [];
     for (let i = 0; i <= 64; i++) {
       const p = -Math.PI / 2 + (i / 64) * Math.PI;
-      archPts.push(onArc(Math.sin(p) * A, 1.2 + Math.cos(p) * 1.55, 0.02));
+      archPts.push(onArc(Math.sin(p) * A, 1.02 + Math.cos(p) * 1.85, 0.02));
     }
     const archCurve = new THREE.CatmullRomCurve3(archPts);
     const arch = new THREE.TubeGeometry(archCurve, 160, 0.014, 8, false);
     // a second, finer line just inside it
     const innerPts = archPts.map((_, i) => {
       const p = -Math.PI / 2 + (i / 64) * Math.PI;
-      return onArc(Math.sin(p) * (A - 0.1), 1.24 + Math.cos(p) * 1.43, 0.02);
+      return onArc(Math.sin(p) * (A - 0.1), 1.06 + Math.cos(p) * 1.73, 0.02);
     });
     const inner = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(innerPts), 160, 0.006, 6, false);
     // cables: from the apex and the shoulders straight up into the dark
     const cables = [0, -0.62, 0.62].map((u) => {
       const p = -Math.PI / 2 + ((u + 1) / 2) * Math.PI;
-      const from = onArc(Math.sin(p) * A, 1.2 + Math.cos(p) * 1.55, 0.02);
+      const from = onArc(Math.sin(p) * A, 1.02 + Math.cos(p) * 1.85, 0.02);
       return new THREE.TubeGeometry(new THREE.LineCurve3(from, from.clone().setY(7)), 1, 0.004, 4, false);
     });
     // bulbs along the arch (and three small sparkles above the apex)
@@ -385,7 +402,7 @@ export function BirthdaySign({ floorY, radius, scale, drop = 0.32, heart, motion
       bulbSize.push(2.4);
     }
     [-0.28, 0, 0.28].forEach((s, i) => {
-      const p = onArc(s, 3.0 + (i === 1 ? 0.1 : 0), 0.02);
+      const p = onArc(s, 3.08 + (i === 1 ? 0.1 : 0), 0.02);
       bulbPos.push(p.x, p.y, p.z);
       bulbSeed.push(Math.random());
       bulbSize.push(i === 1 ? 4.2 : 3.2);
@@ -407,7 +424,7 @@ export function BirthdaySign({ floorY, radius, scale, drop = 0.32, heart, motion
       return g;
     };
     for (const side of [-1, 1]) {
-      const foot = onArc(side * A, 1.2, 0.0);
+      const foot = onArc(side * A, 1.02, 0.0);
       const blooms = [
         [0, 0, 0.11, ivory],
         [0.1, 0.06, 0.08, blush],
@@ -461,7 +478,7 @@ export function BirthdaySign({ floorY, radius, scale, drop = 0.32, heart, motion
         return flat;
       }),
     );
-    const heartAt = onArc(0, 2.62, 0.02);
+    const heartAt = onArc(0, 2.74, 0.02);
     return { arch, inner, cables, bulbs, satin, heartAt };
   }, [R]);
   useEffect(
@@ -513,7 +530,7 @@ export function BirthdaySign({ floorY, radius, scale, drop = 0.32, heart, motion
   });
 
   // scale about the sign's centre (on the arc, at the height of its middle)
-  const pivot: [number, number, number] = [0, 1.9, -R];
+  const pivot: [number, number, number] = [0, 2.0, -R];
   return (
     <group position={[0, floorY - drop, 0]}>
       <group position={pivot} scale={scale * 0.9}>
