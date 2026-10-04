@@ -94,6 +94,12 @@ export function CameraRig({ position, lookAt = [0, 0, 0], parallax = 0.25, speed
     right.set(Math.cos(sph.theta), 0, -Math.sin(sph.theta));
     camera.position.set(lx + off.x, ly + off.y + s.py, lz + off.z).addScaledVector(right, s.px);
     camera.lookAt(lx, ly, lz);
+    // QA (?debug): window.__camOverride = { pos: [x,y,z], look: [x,y,z] } holds a framing
+    const ov = (window as unknown as { __camOverride?: { pos: number[]; look: number[] } }).__camOverride;
+    if (ov) {
+      camera.position.set(ov.pos[0], ov.pos[1], ov.pos[2]);
+      camera.lookAt(ov.look[0], ov.look[1], ov.look[2]);
+    }
     (camera.userData.look ??= new THREE.Vector3()).set(lx, ly, lz);
 
     if (fov && Math.abs(camera.fov - fov) > 0.01) {

@@ -8,6 +8,7 @@ import { fill } from '../../lib/text';
 import { sound } from '../../lib/audio';
 import { getHeartGeometry } from './heartShape';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { RoomProps, lampPosition, lanternPosition, furnitureBlobs } from './RoomProps';
 import { BirthdaySign, metalVertex, metalFragment, satinVertex, satinFragment, mergeAll } from './BirthdaySign';
 
 /*
@@ -149,6 +150,9 @@ const floorFragment = /* glsl */ `
   uniform int uCount;
   uniform vec2 uRug;
   uniform vec2 uCake;
+  uniform vec3 uLamp;
+  uniform vec3 uLantern;
+  uniform vec4 uBlobs[2];
   uniform float uHeart;
   uniform float uMotion;
   varying vec3 vWorld;
@@ -173,7 +177,7 @@ const floorFragment = /* glsl */ `
     float e = length(p / uRug);
     vec3 base = wood * (1.0 - 0.6 * smoothstep(1.12, 1.0, e));
     // light: a dim room, pools of candlelight, the heart's breath, a slant of moonlight
-    vec3 light = vec3(0.1, 0.07, 0.09);
+    vec3 light = vec3(0.13, 0.09, 0.1);
     for (int i = 0; i < ${MAX_CANDLES}; i++) {
       if (i >= uCount) break;
       vec4 c = uCandles[i];
@@ -197,6 +201,20 @@ const floorFragment = /* glsl */ `
     }
     vec2 qc = p - uCake;
     ao *= 1.0 - 0.45 * exp(-dot(qc, qc) * 5.0);
+    // the furniture against the wall: soft contact shadows along its length
+    for (int i = 0; i < 2; i++) {
+      vec4 b = uBlobs[i];
+      vec2 tng = vec2(cos(b.z), sin(b.z));
+      vec2 q = p - b.xy;
+      float along = clamp(dot(q, tng), -b.w, b.w);
+      vec2 dq = q - tng * along;
+      ao *= 1.0 - 0.6 * exp(-dot(dq, dq) * 14.0);
+    }
+    // the table lamp's warm pool on the floor below it
+    vec2 lq = p - uLamp.xz;
+    light += vec3(1.0, 0.7, 0.42) * 0.55 * exp(-dot(lq, lq) * 0.45);
+    vec2 nq = p - uLantern.xz;
+    light += vec3(1.0, 0.64, 0.36) * 0.3 * flick(uTime * uMotion + 9.0, 3.7) * exp(-dot(nq, nq) * 0.9);
     vec3 col = base * light * ao;
     // out toward the wall the room falls into darkness
     col *= 1.0 - smoothstep(6.0, 9.0, r) * 0.7;
@@ -246,6 +264,9 @@ const stageFragment = /* glsl */ `
     float dh = sdHeart((cell + vec2(0.0, 0.07)) / 0.14) * 0.14;
     trim += band * smoothstep(0.006, 0.0, abs(dh)) * 0.45;
     trim += smoothstep(0.003, 0.0, abs(e - 0.83)) * 0.5 + smoothstep(0.003, 0.0, abs(e - 0.93)) * 0.5;
+    // a hand-stitched seam just inside the edge, like an upholstered top
+    float stitch = smoothstep(0.0025, 0.0, abs(e - 0.943)) * step(0.45, fract(ang * rm * 9.0));
+    base = mix(base, vec3(0.5, 0.36, 0.3), stitch * 0.55);
     // the lower step, outside the main top
     float step1 = smoothstep(0.952, 0.958, e);
     base = mix(base, vec3(0.13, 0.04, 0.055), step1);
@@ -281,6 +302,9 @@ const stageFragment = /* glsl */ `
     vec2 m = p - vec2(${MOON[0].toFixed(3)}, ${MOON[1].toFixed(3)});
     light += vec3(0.3, 0.42, 0.85) * 0.3 * exp(-dot(m, m) * 0.22);
 
+    // the puppy stands here: a soft contact shadow under its body and paws
+    float under = exp(-(hl.x * hl.x * 26.0 + (hl.y + 0.02) * (hl.y + 0.02) * 7.0));
+    light *= 1.0 - 0.5 * under;
     vec3 col = base * light * 1.25;
     col += vec3(0.86, 0.66, 0.42) * clamp(trim, 0.0, 1.0) * (light * 0.75 + 0.02);
     col = haze(col, vWorld);
@@ -330,6 +354,8 @@ const wallFragment = /* glsl */ `
   uniform float uFloorY;
   uniform float uMotion;
   uniform float uLove;      // seconds since she touched the window (large = never)
+  uniform vec3 uLamp;
+  uniform vec3 uLantern;
   varying vec3 vWorld;
   ${FLICK}
   ${HAZE}
@@ -368,8 +394,8 @@ const wallFragment = /* glsl */ `
     panel += vec3(0.08, 0.05, 0.03) * pedge * pinset;
     col = mix(panel, col, smoothstep(1.08, 1.12, h));
 
-    // warm light from the candles below, climbing the wall
-    vec3 light = vec3(0.12, 0.08, 0.1);
+    // warm light from the candles below, climbing the wall (over a warm room ambient)
+    vec3 light = vec3(0.16, 0.11, 0.12);
     for (int i = 0; i < ${MAX_CANDLES}; i++) {
       if (i >= uCount) break;
       vec4 c = uCandles[i];
@@ -382,6 +408,12 @@ const wallFragment = /* glsl */ `
     light += vec3(1.0, 0.7, 0.45) * 0.42 * inArch * exp(-(h - 1.38) * 1.5);
     // the sign's champagne halo on the wall behind it
     light += vec3(1.0, 0.78, 0.52) * 0.75 * exp(-sw * sw * 0.16 - (h - 2.0) * (h - 2.0) * 0.3);
+    // the table lamp: a warm pool on the wall, brightest just above and below the shade
+    vec3 lw = vWorld - uLamp;
+    float lr = length(lw.xz);
+    light += vec3(1.0, 0.7, 0.42) * (0.9 * exp(-dot(lw, lw) * 0.9) + 0.5 * exp(-lr * lr * 6.0 / (0.1 + abs(lw.y) * 0.8)) * exp(-abs(lw.y) * 0.9));
+    vec3 nw = vWorld - uLantern;
+    light += vec3(1.0, 0.64, 0.36) * 0.45 * flick(t + 9.0, 3.7) * exp(-dot(nw, nw) * 1.4);
     // and a cool breath of moonlight round the window
     light += vec3(0.3, 0.42, 0.85) * 0.35 * exp(-s * s * 0.18 - (h - 2.4) * (h - 2.4) * 0.12);
     col *= light * 1.6;
@@ -452,6 +484,11 @@ const wallFragment = /* glsl */ `
       float bars = smoothstep(0.025, 0.0, abs(wx)) + smoothstep(0.025, 0.0, abs(wy - 0.35));
       sky = mix(sky, vec3(0.2, 0.12, 0.08), clamp(bars, 0.0, 1.0));
       sky += vec3(0.25, 0.2, 0.35) * smoothstep(-0.9, -1.3, wy) * 0.2;
+      // the glass: a faint reflection of the warm room in it, a soft diagonal sheen,
+      // and a breath of mist low on the pane where the cold meets the warm air
+      sky += vec3(0.22, 0.13, 0.1) * 0.25;
+      sky += vec3(1.0, 0.8, 0.65) * smoothstep(0.05, 0.0, abs(wx * 0.7 + wy * 0.5 - 0.3)) * 0.05;
+      sky = mix(sky, vec3(0.32, 0.3, 0.38), smoothstep(-0.6, -1.3, wy) * 0.22);
       col = sky;
     } else if (frame > 0.5) {
       col = vec3(0.3, 0.17, 0.1) * (light * 1.6 + vec3(0.1, 0.12, 0.2));
@@ -1238,14 +1275,17 @@ export function RoomSet({ floorY: stageY, rx, rz, heart, reducedMotion, hoverFx,
       uCount: { value: candles.length },
       uRug: { value: new THREE.Vector2(rx + 0.95, rz + 0.95) },
       uCake: { value: new THREE.Vector2(9, 9) },
+      uLamp: { value: lampPosition(stageY - STAGE_STEP) },
+      uLantern: { value: lanternPosition(stageY - STAGE_STEP, WINDOW_ANGLE) },
+      uBlobs: { value: furnitureBlobs(WINDOW_ANGLE) },
       uHeart: { value: heart },
       uMotion: { value: motion },
     }),
     [candleVec, candles.length, rx, rz], // eslint-disable-line react-hooks/exhaustive-deps
   );
   const wallU = useMemo(
-    () => ({ uTime: { value: 0 }, uCandles: { value: candleVec }, uCount: { value: candles.length }, uFloorY: { value: floorY }, uMotion: { value: motion }, uLove: { value: 999 } }),
-    [candleVec, candles.length, floorY], // eslint-disable-line react-hooks/exhaustive-deps
+    () => ({ uTime: { value: 0 }, uCandles: { value: candleVec }, uCount: { value: candles.length }, uFloorY: { value: floorY }, uMotion: { value: motion }, uLove: { value: 999 }, uLamp: floorU.uLamp, uLantern: floorU.uLantern }),
+    [candleVec, candles.length, floorY, floorU], // eslint-disable-line react-hooks/exhaustive-deps
   );
   const floorMat = useShader(floorVertex, floorFragment, floorU, { opaque: true });
   const stageU = useMemo(
@@ -1342,10 +1382,10 @@ export function RoomSet({ floorY: stageY, rx, rz, heart, reducedMotion, hoverFx,
   // balloons: round and heart-shaped, tied down toward the back and sides, at different heights
   const balloons = useMemo(
     () =>
-      // four, muted, in two pairs flanking the HAPPY BIRTHDAY installation (wall angles)
-      (portrait ? [-0.42, -0.33, 0.33, 0.42] : [-0.6, -0.48, 0.48, 0.6]).map((a, i) => ({
-        at: [Math.sin(a) * (WALL_R - 1.8 + (i % 2) * 0.35), floorY, -Math.cos(a) * (WALL_R - 1.8 + (i % 2) * 0.35)] as [number, number, number],
-        length: [1.9, 1.5, 1.5, 1.9][i],
+      // three, muted, loosely gathered by the sign — two on one side, one on the other
+      (portrait ? [-0.42, -0.34, 0.38] : [-0.62, -0.5, 0.47]).map((a, i) => ({
+        at: [Math.sin(a) * (WALL_R - 1.8 + [0, 0.4, 0.15][i]), floorY, -Math.cos(a) * (WALL_R - 1.8 + [0, 0.4, 0.15][i])] as [number, number, number],
+        length: [1.95, 1.55, 1.75][i],
         color: ['#c98a98', '#c9a56a', '#e6d6d0', '#b8788a'][i],
         heart: i === 1,
         pitch: [2, 4, 5, 3][i],
@@ -1443,6 +1483,7 @@ export function RoomSet({ floorY: stageY, rx, rz, heart, reducedMotion, hoverFx,
       <Garland floorY={floorY} />
       <BirthdaySign floorY={floorY} radius={portrait ? 4.9 : 6.5} scale={portrait ? 0.6 : 1} drop={portrait ? 0.75 : 0.32} heart={heart} motion={motion} />
       <Stage y={stageY} rug={floorU.uRug.value} stageMat={stageMat} bandMat={bandMat} />
+      <RoomProps floorY={floorY} windowAngle={WINDOW_ANGLE} wallR={WALL_R} candleVec={candleVec} candleCount={candles.length} heart={heart} motion={motion} />
       {dogSpot && <Petals spot={dogSpot} y={stageY} motion={motion} />}
       <group position={cakeAt} scale={0.82}>
         <Cake at={[0, 0, 0]} outward={cakeAt} motion={motion} secretFound={secretFound} onSecret={findSecret} />

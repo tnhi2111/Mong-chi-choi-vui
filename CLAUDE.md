@@ -127,6 +127,17 @@ soft blob shadow on the floor that tightens as it lands.
   dolly, speed 1.25) and frames the puppy + the spot where the letter lands. LetterDog
   stretches the performance to match: PRESENT (0.8–1.3 s, chin up/head forward), MOUTH
   1.3, RELEASE 1.65, watches the letter go; SETTLE 0.6 s before the letter opens.
+- **Lived-in room** (`RoomProps.tsx`): a walnut console against the right wall
+  (`CONSOLE_ANGLE`) with a table lamp (the room's 2nd light, `lampPosition`), books not quite
+  square, notebook + pen, a cold cup of tea, two framed photos (canvas-drawn, non-identifying),
+  a memory box with its lid ajar, a bud vase; under the window a seat with a linen pad,
+  cushions (one askew), a knitted blanket, a face-down open book, a candle lantern
+  (`lanternPosition`, 3rd light) and a plant; linen curtains on a rod. All one merged mesh +
+  `ROOM_LIGHT` shader (lamp, lantern, candles, heart, moon, contact darkening; per-material
+  response via `aKind`). Floor/wall shaders add the lamp/lantern pools and furniture contact
+  shadows (`furnitureBlobs`). Stage top has a stitched seam; a soft shadow under the puppy.
+  QA: `?debug` + `window.__camOverride = { pos, look }` holds a camera framing
+  (`qa-output/closeup.mjs` shoots the console, the seat and the sign up close).
 - Room UI: memory indicators are medallions; the final note sits between fine rules and
   "Come closer" is ivory/blush glass (`room-ui__cta`).
 Intro particle puppy: after its lap the waving arm's points settle onto the mirror image
