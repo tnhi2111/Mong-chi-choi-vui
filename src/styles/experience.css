@@ -353,6 +353,20 @@
   transition: opacity 0.8s 0.2s;
 }
 
+/* while a memory opens, the edges of the room dim and the object stays in the light */
+.room-focus {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse 46% 52% at 50% 50%, transparent 40%, rgba(8, 3, 6, 0.55) 100%);
+  opacity: 0;
+  transition: opacity 0.9s var(--ease-out, ease);
+}
+
+.room-focus.is-on {
+  opacity: 1;
+}
+
 .gift-nav {
   display: flex;
   gap: 10px;

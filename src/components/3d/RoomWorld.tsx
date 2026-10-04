@@ -246,6 +246,7 @@ export function RoomWorld({
           scale={portrait ? 0.62 : 0.78}
           halo={allOpened ? 1.4 : 1}
           particles={heartPoints}
+          crystal
         />
       </group>
       {gifts.map((g, i) => (

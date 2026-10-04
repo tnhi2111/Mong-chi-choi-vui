@@ -7,6 +7,98 @@ import { Glow } from './Glow';
 import { ParticleHeart, type DormantRing, type ParticleHeartHandle } from './ParticleHeart';
 import type { OrbitInput } from '../../hooks/usePointerOrbit';
 import { sound } from '../../lib/audio';
+import { useShader } from './useShader';
+
+/*
+ * The room's heart as a piece of hand-made rose quartz: a translucent shell (its silhouette
+ * a little uneven, as if shaped by hand) with the points of light living INSIDE it — the
+ * light comes from within instead of drawing the heart's outline.
+ *
+ * The shell is two passes of one small shader: its inner (back) faces, deeper and darker,
+ * then — after the points of light — its outer faces: a faint rose body, a fresnel rim,
+ * crisp highlights from the room's lamps, slow caustic-like veins of light. No refraction
+ * pass and no new lit program: it stays cheap.
+ */
+export const crystalVertex = /* glsl */ `
+  varying vec3 vN;
+  varying vec3 vV;
+  varying vec3 vObj;
+  void main() {
+    vObj = position;
+    vec4 mv = modelViewMatrix * vec4(position, 1.0);
+    vN = normalize(normalMatrix * normal);
+    vV = normalize(-mv.xyz);
+    gl_Position = projectionMatrix * mv;
+  }
+`;
+export const crystalFragment = /* glsl */ `
+  uniform float uTime;
+  uniform float uGlow;
+  uniform float uOn;
+  uniform float uInner;   // 1 for the inner faces
+  varying vec3 vN;
+  varying vec3 vV;
+  varying vec3 vObj;
+  float hh(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+  float nz(vec3 x) {
+    vec3 i = floor(x); vec3 f = fract(x); f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(mix(hh(i), hh(i + vec3(1,0,0)), f.x), mix(hh(i + vec3(0,1,0)), hh(i + vec3(1,1,0)), f.x), f.y),
+               mix(mix(hh(i + vec3(0,0,1)), hh(i + vec3(1,0,1)), f.x), mix(hh(i + vec3(0,1,1)), hh(i + vec3(1,1,1)), f.x), f.y), f.z);
+  }
+  void main() {
+    vec3 n = normalize(vN);
+    if (uInner > 0.5) n = -n;
+    // the stone isn't perfectly polished: a slow, low wobble in its surface
+    n = normalize(n + (vec3(nz(vObj * 4.0), nz(vObj * 4.0 + 7.1), nz(vObj * 4.0 + 3.3)) - 0.5) * 0.22);
+    vec3 v = normalize(vV);
+    float facing = clamp(abs(dot(n, v)), 0.0, 1.0);
+    float fres = pow(1.0 - facing, 3.0);
+    float cloud = nz(vObj * 2.6 + uTime * 0.05);
+    if (uInner > 0.5) {
+      // the far wall of the stone: deeper rose, a little milky
+      vec3 c = vec3(0.42, 0.12, 0.2) * (0.6 + 0.5 * cloud) + vec3(1.0, 0.45, 0.58) * 0.08 * uGlow;
+      gl_FragColor = vec4(c, (0.26 + 0.16 * cloud) * uOn);
+      return;
+    }
+    // highlights from the room: two warm lamps, the cool moon
+    vec3 R = reflect(-v, n);
+    float sp = pow(max(dot(R, normalize(vec3(-0.45, 0.6, 0.65))), 0.0), 90.0) * 1.1
+             + pow(max(dot(R, normalize(vec3(0.7, 0.35, 0.55))), 0.0), 60.0) * 0.45;
+    float moon = pow(max(dot(R, normalize(vec3(-0.8, 0.4, -0.3))), 0.0), 30.0) * 0.25;
+    // veins of light inside the quartz, drifting very slowly
+    float vein = pow(0.5 + 0.5 * sin(dot(vObj, vec3(7.0, 11.0, 5.0)) + cloud * 4.0 + uTime * 0.25), 10.0);
+    vec3 body = vec3(0.86, 0.46, 0.55) * (0.11 + 0.08 * cloud);
+    vec3 c = body
+      + vec3(1.0, 0.5, 0.62) * pow(facing, 2.2) * 0.16 * uGlow     // light from inside
+      + vec3(1.0, 0.8, 0.84) * fres * 0.55                         // the rim
+      + vec3(1.0, 0.92, 0.82) * sp
+      + vec3(0.6, 0.72, 1.0) * moon
+      + vec3(1.0, 0.7, 0.75) * vein * facing * 0.1 * uGlow;
+    float a = 0.16 + 0.1 * cloud + fres * 0.55 + sp;
+    gl_FragColor = vec4(c, clamp(a, 0.0, 1.0) * uOn);
+  }
+`;
+
+/** A hand-shaped version of the heart: lobes not quite equal, a soft unevenness. */
+let crystalGeo: THREE.BufferGeometry | null = null;
+export function getCrystalGeometry(): THREE.BufferGeometry {
+  if (crystalGeo) return crystalGeo;
+  const g = getHeartGeometry('high').clone();
+  const p = g.attributes.position as THREE.BufferAttribute;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i);
+    const y = p.getY(i);
+    const z = p.getZ(i);
+    // the right lobe a touch fuller and higher, the tip leaning a little
+    const lobe = x > 0 ? 1.03 : 0.99;
+    const lean = (0.5 - y) * 0.025;
+    const wob = 1 + Math.sin(x * 5.1 + y * 3.7) * 0.012 + Math.sin(z * 6.3 - x * 2.2) * 0.01;
+    p.setXYZ(i, (x * lobe + lean) * wob, (y + (x > 0 ? 0.012 : 0)) * wob, z * wob * 1.04);
+  }
+  g.computeVertexNormals();
+  crystalGeo = g;
+  return g;
+}
 
 interface Props {
   /** Increment to make the heart beat once, strongly. */
@@ -36,6 +128,8 @@ interface Props {
   onAssembled?: () => void;
   /** Where the scattered light waits (heart-local space). */
   ring?: DormantRing;
+  /** The room's heart: a rose-quartz shell with the points of light living inside it. */
+  crystal?: boolean;
 }
 
 const g = (t: number, c: number, w: number) => Math.exp(-(((t - c) / w) ** 2));
@@ -78,7 +172,13 @@ export function Heart3D({
   assembled = true,
   onAssembled,
   ring = DEFAULT_RING,
+  crystal = false,
 }: Props) {
+  const crystalU = useMemo(() => ({ uTime: { value: 0 }, uGlow: { value: 0.5 }, uOn: { value: 1 }, uInner: { value: 0 } }), []);
+  const crystalInU = useMemo(() => ({ ...crystalU, uInner: { value: 1 } }), [crystalU]);
+  const shellFront = useShader(crystalVertex, crystalFragment, crystalU, { additive: false });
+  const shellBack = useShader(crystalVertex, crystalFragment, crystalInU, { additive: false, side: THREE.BackSide });
+  const shellGeo = useMemo(() => (crystal ? getCrystalGeometry() : null), [crystal]);
   const group = useRef<THREE.Group>(null);
   const tilt = useRef<THREE.Group>(null);
   const spin = useRef<THREE.Group>(null);
@@ -173,7 +273,8 @@ export function Heart3D({
       touch.current = Math.max(0, touch.current - dt * 1.6);
       const expand = Math.max(0, b.s) / 0.075;
       pBeat.current += (expand * beatAmt - pBeat.current) * (1 - Math.exp(-dt * 14));
-      const glowAmt = THREE.MathUtils.clamp(0.35 + charge * 0.35 + b.light * 0.45 + h * 0.15, 0, 1.4);
+      // (inside the quartz the light is gentler: it glows through the stone)
+      const glowAmt = THREE.MathUtils.clamp(0.35 + charge * 0.35 + b.light * 0.45 + h * 0.15, 0, 1.4) * (crystal ? 0.72 : 1);
       cloud.current.set({ beat: pBeat.current, glow: glowAmt, hoverPos: hoverLocal.current, hover: Math.max(h, touch.current) * A, assemble: A });
     }
 
@@ -185,9 +286,14 @@ export function Heart3D({
       const m = glow.current.material as THREE.SpriteMaterial;
       m.opacity += ((asLight ? 0.07 : 0.1) + charge * 0.12 + b.light * 0.3 + h * 0.05 - m.opacity) * kk;
       glow.current.scale.setScalar((2.8 + charge * 0.8 + b.light * 1.1) * halo);
-      m.opacity *= A;
+      m.opacity *= A * (crystal ? 0.6 : 1);
     }
-    if (inner.current) inner.current.intensity = (1.2 + light * 5) * innerLight * A;
+    if (inner.current) inner.current.intensity = (1.2 + light * 5) * innerLight * A * (crystal ? 0.65 : 1);
+    if (crystal) {
+      crystalU.uTime.value = t;
+      crystalU.uGlow.value = 0.55 + charge * 0.5 + b.light * 0.6 + h * 0.25;
+      crystalU.uOn.value = A;
+    }
   });
 
   const handle = (e: ThreeEvent<MouseEvent>) => {
@@ -228,7 +334,13 @@ export function Heart3D({
                 sound.hoverEnd('heart');
               }}
             />
-            {asLight && <ParticleHeart ref={cloud} count={particles} reducedMotion={reducedMotion} ring={ring} />}
+            {crystal && shellGeo && <mesh geometry={shellGeo} material={shellBack} renderOrder={0} scale={1.05} raycast={() => null} />}
+            {asLight && (
+              <group scale={crystal ? 0.84 : 1}>
+                <ParticleHeart ref={cloud} count={particles} reducedMotion={reducedMotion} ring={ring} />
+              </group>
+            )}
+            {crystal && shellGeo && <mesh geometry={shellGeo} material={shellFront} renderOrder={2} scale={1.05} raycast={() => null} />}
           </group>
         </group>
       </group>

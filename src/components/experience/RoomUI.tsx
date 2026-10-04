@@ -17,6 +17,8 @@ export function RoomUI({ gifts, opened, busy, onSelect, onFocusGift, onFinal }: 
 
   return (
     <div className={`layer room-ui${busy ? ' is-busy' : ''}`}>
+      {/* opening a memory: the room around it softens into the dark */}
+      <div className={`room-focus${busy ? ' is-on' : ''}`} aria-hidden="true" />
       <header className="room-ui__head fade" style={{ animationDelay: '0.8s' }}>
         <p className="eyebrow">
           {opened.length} / {gifts.length}

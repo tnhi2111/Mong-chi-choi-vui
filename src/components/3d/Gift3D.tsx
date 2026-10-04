@@ -163,7 +163,7 @@ export function createGiftMaterials(gift: Pick<Gift, 'shape' | 'tint'>, _glass?:
         clearcoat: 0.3,
         clearcoatRoughness: 0.25,
       });
-      return { main, ribbon, metal: brass() };
+      return { main, ribbon, metal: brass(), paper: paperSurface('#efe3d2') };
     }
     case 'capsule': {
       // a little glass keepsake bottle: cork, twine, a rolled note inside
@@ -206,6 +206,38 @@ function useGiftMaterials(gift: Gift, glass: boolean): GiftMaterials {
     [mats],
   );
   return mats;
+}
+
+/** A little card tag with "for you" written by hand. */
+let tagTex: THREE.CanvasTexture | null = null;
+function getTagTexture(): THREE.CanvasTexture {
+  if (tagTex) return tagTex;
+  const c = document.createElement('canvas');
+  c.width = 256;
+  c.height = 160;
+  const g = c.getContext('2d')!;
+  g.fillStyle = '#f3e9da';
+  g.fillRect(0, 0, 256, 160);
+  for (let i = 0; i < 300; i++) {
+    g.fillStyle = `rgba(120, 90, 60, ${0.03 + Math.random() * 0.04})`;
+    g.fillRect(Math.random() * 256, Math.random() * 160, 2, 1);
+  }
+  g.strokeStyle = 'rgba(150, 110, 80, 0.5)';
+  g.lineWidth = 3;
+  g.strokeRect(10, 10, 236, 140);
+  g.fillStyle = '#6e2634';
+  g.font = '500 58px "Dancing Script", "Segoe Script", cursive';
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.save();
+  g.translate(128, 84);
+  g.rotate(-0.06);
+  g.fillText('for you', 0, 0);
+  g.restore();
+  tagTex = new THREE.CanvasTexture(c);
+  tagTex.colorSpace = THREE.SRGBColorSpace;
+  tagTex.anisotropy = 4;
+  return tagTex;
 }
 
 /** The bottle's profile (radius, height), turned on a lathe: a round body, shoulders, a neck. */
@@ -365,6 +397,10 @@ function GiftBody({
       return (
         <group>
           <RoundedBox args={[0.6, 0.48, 0.6]} radius={0.035} smoothness={4} material={mats.main} />
+          {/* a wide band of cream paper under the satin: wrapped in two layers, by hand */}
+          <mesh material={mats.paper} rotation-y={0.015}>
+            <boxGeometry args={[0.22, 0.482, 0.603]} />
+          </mesh>
           <mesh material={mats.ribbon}>
             <boxGeometry args={[0.1, 0.485, 0.605]} />
           </mesh>
@@ -377,9 +413,15 @@ function GiftBody({
             <mesh position={[0, -0.05, 0.004]} material={mats.ribbon}>
               <cylinderGeometry args={[0.002, 0.002, 0.1, 4]} />
             </mesh>
-            <group position={[0.012, -0.13, 0.008]} rotation={[0.08, 0, 0.18]}>
-              <RoundedBox args={[0.085, 0.055, 0.006]} radius={0.008} smoothness={2} material={mats.metal} />
-              <mesh geometry={getHeartGeometry('low')} position={[0, 0, 0.004]} scale={[0.012, 0.012, 0.003]} material={mats.ribbon} />
+            <group position={[0.012, -0.135, 0.008]} rotation={[0.08, 0, 0.18]}>
+              {/* a card tag, written by hand, with a little brass eyelet */}
+              <mesh>
+                <planeGeometry args={[0.12, 0.075]} />
+                <meshBasicMaterial map={getTagTexture()} color="#b9aa9a" side={THREE.DoubleSide} />
+              </mesh>
+              <mesh position={[0, 0.03, 0.002]} material={mats.metal}>
+                <torusGeometry args={[0.007, 0.0022, 6, 12]} />
+              </mesh>
             </group>
           </group>
           {/* lid hinged on the back edge */}
@@ -686,30 +728,43 @@ export function Gift3D({
     const real = Math.min(rawDt, 0.25);
     progress.current = opening ? Math.min(1, progress.current + real * speed) : Math.max(0, progress.current - real * 1.6);
     const o = progress.current;
-    const e = o * o * (3 - 2 * o);
+    // opening: a breath of stillness first (the light gathers), then it rises to her
+    const oo = THREE.MathUtils.clamp((o - 0.14) / 0.86, 0, 1);
+    const e = oo * oo * (3 - 2 * oo);
     hover.current += ((active ? 1 : 0) - hover.current) * (1 - Math.exp(-dt * 6));
     const h = hover.current;
 
     // floating at home; lifts a little when hovered; rises toward the camera while opening
     // (the letter-carrying puppy stands on the floor: it doesn't float or lift)
-    const bob = reducedMotion || isDog ? 0 : Math.sin(t * 0.9 + phase) * 0.06;
-    const up = lift.step(active && !isDog ? 0.16 : 0, 9, dt);
-    tmp.copy(homeV).setY((isDog ? floorY : homeV.y) + bob + up).lerp(showV, isDog ? 0 : e);
+    // each one floats on its own slow rhythm, drifting a little — never in step with the others
+    const still = reducedMotion || isDog ? 0 : 1;
+    const bob = (Math.sin(t * (0.62 + index * 0.11) + phase) * 0.055 + Math.sin(t * (0.23 + index * 0.05) + phase * 2) * 0.025) * still;
+    const dx = Math.sin(t * (0.17 + index * 0.04) + phase) * 0.04 * still;
+    const dz = Math.cos(t * (0.21 + index * 0.03) + phase) * 0.04 * still;
+    const up = lift.step(active && !isDog ? 0.1 : 0, 7, dt);
+    // hovered, it comes a little toward her
+    toCam.copy(state.camera.position).sub(homeV).setY(0).normalize().multiplyScalar(isDog ? 0 : 0.14 * h);
+    tmp.copy(homeV).setY((isDog ? floorY : homeV.y) + bob + up);
+    tmp.x += dx + toCam.x;
+    tmp.z += dz + toCam.z;
+    tmp.lerp(showV, isDog ? 0 : e);
     r.position.copy(tmp);
     // a gentle squash-and-rise "breath" when the opening begins
-    const kick = Math.sin(Math.min(1, o * 3) * Math.PI) * 0.06 * (reducedMotion ? 0 : 1);
+    const kick = Math.sin(Math.min(1, o * 3) * Math.PI) * 0.035 * (reducedMotion ? 0 : 1);
     r.scale.setScalar(size * (isDog ? 1 : 1 + kick + e * 0.12));
 
     // idle sway; turns toward her hand when hovered; squares up to the camera while opening
-    const idleY = reducedMotion ? 0 : Math.sin(t * 0.45 + phase) * (isDog ? 0.12 : 0.35);
+    const idleY = reducedMotion ? 0 : Math.sin(t * (0.3 + index * 0.07) + phase) * (isDog ? 0.12 : 0.3);
     s.rotation.y = THREE.MathUtils.lerp(s.rotation.y, opening ? face : restFacing + idleY * (1 - h), Math.min(1, dt * 3));
-    s.rotation.x = isDog ? 0 : tiltX.step(opening ? 0.18 * (1 - e) + 0.12 : 0.1 + aim.current.y * 0.22 * h, 7, dt);
-    s.rotation.z = isDog ? 0 : tiltZ.step(opening ? 0 : -aim.current.x * 0.22 * h, 7, dt);
+    const wob = still * (1 - h);
+    s.rotation.x = isDog ? 0 : tiltX.step(opening ? 0.18 * (1 - e) + 0.12 : 0.1 + Math.sin(t * (0.37 + index * 0.06) + phase) * 0.05 * wob + aim.current.y * 0.16 * h, 6, dt);
+    s.rotation.z = isDog ? 0 : tiltZ.step(opening ? 0 : Math.sin(t * (0.29 + index * 0.05) + phase * 1.3) * 0.05 * wob - aim.current.x * 0.16 * h, 6, dt);
 
     if (glow.current) {
       const m = glow.current.material as THREE.SpriteMaterial;
       const base = opened ? 0.08 : 0.14;
-      const target = base + h * 0.22 + THREE.MathUtils.smoothstep(o, 0.45, 1) * (isDog ? 0.12 : 1.1);
+      // light gathers round it first (the pause), then flares as it opens
+      const target = base + h * 0.16 + THREE.MathUtils.smoothstep(o, 0.0, 0.2) * 0.3 * (isDog ? 0.3 : 1) + THREE.MathUtils.smoothstep(o, 0.45, 1) * (isDog ? 0.12 : 1.1);
       m.opacity += (target - m.opacity) * Math.min(1, dt * 5);
       glow.current.scale.setScalar(1.5 + h * 0.4 + THREE.MathUtils.smoothstep(o, 0.5, 1) * 4);
     }

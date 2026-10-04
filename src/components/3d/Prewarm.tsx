@@ -3,6 +3,7 @@ import { useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { Gift } from '../../data/gifts';
 import { createGiftMaterials } from './Gift3D';
+import { crystalVertex, crystalFragment, getCrystalGeometry } from './Heart3D';
 import { createFloorMaterial } from './RoomWorld';
 import { createSwarmMaterial } from './FinalWorld';
 import { createHeartMaterial } from './heartMaterial';
@@ -59,6 +60,20 @@ export function Prewarm({ gifts, glass, solidHeart, delay = 500 }: { gifts: Gift
     void loadLetterDog();
     Object.values(createLetterDogMaterials()).forEach(add);
     if (solidHeart) add(createHeartMaterial(glass).material);
+    // the room's rose-quartz heart: shape its shell now, and compile both of its passes
+    getCrystalGeometry();
+    for (const side of [THREE.FrontSide, THREE.BackSide]) {
+      add(
+        new THREE.ShaderMaterial({
+          vertexShader: crystalVertex,
+          fragmentShader: crystalFragment,
+          uniforms: { uTime: { value: 0 }, uGlow: { value: 0.5 }, uOn: { value: 1 }, uInner: { value: side === THREE.BackSide ? 1 : 0 } },
+          transparent: true,
+          depthWrite: false,
+          side,
+        }),
+      );
+    }
     const swarm = createSwarmMaterial();
     keepAlive.push(swarm);
     const inst = new THREE.InstancedMesh(box, swarm, 1);

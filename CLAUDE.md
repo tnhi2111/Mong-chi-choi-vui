@@ -157,6 +157,15 @@ soft blob shadow on the floor that tightens as it lands.
   and key; the lid lifts, a tiny heart rises on its spindle and turns, a few chime notes.
   All new materials go through `surface()` (one shared program, pre-warmed via
   `createGiftMaterials`); motes reuse the hover-sparkle shader. Gift camera speed 2.0.
+- **The room's heart is rose quartz** (`Heart3D` `crystal`, set by RoomWorld): a hand-shaped
+  shell (`getCrystalGeometry`: lobes not quite equal, a soft wobble) drawn in two passes of
+  one small shader (inner faces deeper/milky, then outer faces: rose body, fresnel rim, lamp
+  highlights, slow veins of light), with the points of light scaled 0.84 INSIDE it and
+  dimmed (glow ×0.72, halo ×0.6, inner point light ×0.65). No refraction pass.
+- Gifts float on their own rhythms (per-index frequencies, small drift and wobble), come a
+  little toward her on hover, and on click hold still for a beat while light gathers before
+  rising (`oo` in Gift3D). Box 01 has a cream paper band under the satin and a hand-written
+  "for you" card tag. Opening a memory fades in `.room-focus` (the room's edges dim).
 - Room UI: memory indicators are medallions; the final note sits between fine rules and
   "Come closer" is ivory/blush glass (`room-ui__cta`).
 Intro particle puppy: after its lap the waving arm's points settle onto the mirror image
