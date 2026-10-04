@@ -45,9 +45,25 @@ const WORDS = birthdayConfig.room.sign;
 export const SIGN_LINES: { text: string; style: Style; h: number; cap: number; track: number; tone: number }[] = [
   { text: WORDS.headline[0], style: 'r', h: 2.43, cap: 0.26, track: 0.2, tone: 0 },
   { text: WORDS.headline[1], style: 'r', h: 1.99, cap: 0.38, track: 0.14, tone: 0 },
-  { text: WORDS.endearment, style: 'l', h: 1.62, cap: 0.19, track: 0.46, tone: 0.35 },
-  { text: WORDS.name, style: 'r', h: 1.3, cap: 0.15, track: 0.52, tone: 1 },
+  { text: WORDS.endearment, style: 'l', h: 1.63, cap: 0.19, track: 0.46, tone: 0.35 },
+  { text: WORDS.name, style: 'r', h: 1.345, cap: 0.155, track: 0.5, tone: 1 },
 ];
+/**
+ * The lettering's safe area: the lowest line's letters always keep this much air (m above
+ * the floor) — clear of the alcove's foot and the chair rail at 0.95 m. The sign rises by
+ * itself if a placement would bring them lower (see `safeDrop`).
+ */
+export const SIGN_SAFE_FLOOR = 1.22;
+/** The sign's own pivot height (its middle), and how its scale is applied. */
+const PIVOT_H = 2.0;
+const INNER_SCALE = 0.9;
+/** How far down a placement may hang the sign without breaking the safe area. */
+export function safeDrop(scale: number, drop: number): number {
+  const k = scale * INNER_SCALE;
+  const low = SIGN_LINES[SIGN_LINES.length - 1];
+  const bottom = PIVOT_H + (low.h - low.cap / 2 - PIVOT_H) * k; // before the drop
+  return Math.min(drop, bottom - SIGN_SAFE_FLOOR);
+}
 /** Which line the hairlines frame (MY BABY). */
 const FRAMED_LINE = 2;
 const LAYERS = 6;
@@ -252,6 +268,24 @@ const haloFragment = /* glsl */ `
     gl_FragColor = vec4(vec3(1.0, 0.7, 0.42) * a * a * 0.32 * uGlow, 1.0);
   }
 `;
+/* a soft shadow just behind and below each letter: they stand off the alcove */
+const shadowFragment = /* glsl */ `
+  uniform sampler2D uHalo;
+  varying vec2 vUv;
+  void main() {
+    float a = texture2D(uHalo, vUv).r;
+    gl_FragColor = vec4(vec3(0.06, 0.02, 0.03), a * 0.5);
+  }
+`;
+const shadowVertex = /* glsl */ `
+  varying vec2 vUv;
+  void main() {
+    vUv = uv;
+    vec4 w = modelMatrix * vec4(position, 1.0);
+    w.y -= 0.045;   // light from above: the shadow falls a little low
+    gl_Position = projectionMatrix * viewMatrix * w;
+  }
+`;
 const haloVertex = /* glsl */ `
   varying vec2 vUv;
   void main() {
@@ -416,6 +450,22 @@ export function BirthdaySign({ floorY, radius, scale, drop = 0.32, heart, motion
       return onArc(Math.sin(p) * (A - 0.1), 1.06 + Math.cos(p) * 1.73, 0.02);
     });
     const inner = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(innerPts), 160, 0.006, 6, false);
+    // a back rail, 9 cm deeper, tied to the front one every so often: a frame with depth
+    const backPts = archPts.map((_, i) => {
+      const p = -Math.PI / 2 + (i / 64) * Math.PI;
+      return onArc(Math.sin(p) * A, 1.02 + Math.cos(p) * 1.85, -0.07);
+    });
+    const back = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(backPts), 160, 0.011, 6, false);
+    const ties: THREE.BufferGeometry[] = [];
+    for (let i = 4; i <= 60; i += 7) ties.push(new THREE.TubeGeometry(new THREE.LineCurve3(archPts[i], backPts[i]), 1, 0.006, 5, false));
+    // two small brass rosettes where the arch meets its shoulders
+    for (const side of [-1, 1]) {
+      const p = -Math.PI / 2 + ((side * 0.62 + 1) / 2) * Math.PI;
+      const g = new THREE.SphereGeometry(0.026, 12, 8);
+      g.scale(1, 1, 0.55);
+      g.translate(...onArc(Math.sin(p) * A, 1.02 + Math.cos(p) * 1.85, 0.03).toArray());
+      ties.push(g);
+    }
     // cables: from the apex and the shoulders straight up into the dark
     const cables = [0, -0.62, 0.62].map((u) => {
       const p = -Math.PI / 2 + ((u + 1) / 2) * Math.PI;
@@ -434,7 +484,7 @@ export function BirthdaySign({ floorY, radius, scale, drop = 0.32, heart, motion
       bulbSize.push(2.4);
     }
     [-0.28, 0, 0.28].forEach((s, i) => {
-      const p = onArc(s, 3.08 + (i === 1 ? 0.1 : 0), 0.02);
+      const p = onArc(s, 3.0 + (i === 1 ? 0.07 : 0), 0.02);
       bulbPos.push(p.x, p.y, p.z);
       bulbSeed.push(Math.random());
       bulbSize.push(i === 1 ? 4.2 : 3.2);
@@ -480,6 +530,14 @@ export function BirthdaySign({ floorY, radius, scale, drop = 0.32, heart, motion
               [-0.03, 0.17, 0.045, blush],
             ]
       ) as [number, number, number, THREE.Color][];
+      const leafCol = new THREE.Color('#5f7350');
+      for (let k = 0; k < (side < 0 ? 4 : 5); k++) {
+        const g = new THREE.SphereGeometry(1, 8, 6);
+        g.scale(0.022, 0.065, 0.006);
+        g.rotateZ(side * (0.9 + k * 0.45) + (k % 2) * 0.3);
+        g.translate(foot.x + side * (0.13 + (k % 3) * 0.03), foot.y - 0.05 + k * 0.045, foot.z + 0.02);
+        satinParts.push(tint(g.index ? g.toNonIndexed() : g, leafCol, 0));
+      }
       for (const [dx, dy, r, c] of blooms) {
         const g = new THREE.IcosahedronGeometry(r, 1);
         g.scale(1, 1, 0.7);
@@ -530,12 +588,14 @@ export function BirthdaySign({ floorY, radius, scale, drop = 0.32, heart, motion
       }),
     );
     const heartAt = onArc(0, 2.74, 0.02);
-    return { arch, inner, cables, bulbs, satin, heartAt };
+    return { arch, inner, back, ties: mergeSimple(ties), cables, bulbs, satin, heartAt };
   }, [R]);
   useEffect(
     () => () => {
       parts.arch.dispose();
       parts.inner.dispose();
+      parts.back.dispose();
+      parts.ties.dispose();
       parts.cables.forEach((c) => c.dispose());
       parts.bulbs.dispose();
       parts.satin.dispose();
@@ -567,6 +627,7 @@ export function BirthdaySign({ floorY, radius, scale, drop = 0.32, heart, motion
 
   const letterMat = useShader(letterVertex, letterFragment, letterU, { opaque: true });
   const haloMat = useShader(haloVertex, haloFragment, haloU);
+  const shadowMat = useShader(shadowVertex, shadowFragment, haloU, { additive: false });
   const goldMat = useShader(metalVertex, metalFragment, goldU, { opaque: true });
   const roseGoldMat = useShader(metalVertex, metalFragment, roseGoldU, { opaque: true });
   const bulbMat = useShader(bulbVertex, bulbFragment, bulbU);
@@ -628,15 +689,19 @@ export function BirthdaySign({ floorY, radius, scale, drop = 0.32, heart, motion
   useEffect(() => () => hairlines?.dispose(), [hairlines]);
 
   // scale about the sign's centre (on the arc, at the height of its middle)
-  const pivot: [number, number, number] = [0, 2.0, -R];
+  const pivot: [number, number, number] = [0, PIVOT_H, -R];
+  const hang = safeDrop(scale, drop);
   return (
-    <group position={[0, floorY - drop, 0]}>
-      <group position={pivot} scale={scale * 0.9}>
+    <group position={[0, floorY - hang, 0]}>
+      <group position={pivot} scale={scale * INNER_SCALE}>
         <group position={[-pivot[0], -pivot[1], -pivot[2]]}>
+          <mesh geometry={halos} material={shadowMat} renderOrder={-3} />
           <mesh geometry={halos} material={haloMat} renderOrder={-2} />
           <mesh geometry={letters} material={letterMat} />
           <mesh geometry={parts.arch} material={goldMat} />
           <mesh geometry={parts.inner} material={goldMat} />
+          <mesh geometry={parts.back} material={goldMat} />
+          <mesh geometry={parts.ties} material={goldMat} />
           {parts.cables.map((c, i) => (
             <mesh key={i} geometry={c} material={goldMat} />
           ))}
@@ -690,5 +755,23 @@ export function mergeAll(parts: THREE.BufferGeometry[]): THREE.BufferGeometry {
     out.setAttribute(name, new THREE.BufferAttribute(arr, size));
   }
   parts.forEach((g) => g.dispose());
+  return out;
+}
+
+function mergeSimple(parts: THREE.BufferGeometry[]): THREE.BufferGeometry {
+  const flat = parts.map((g) => (g.index ? g.toNonIndexed() : g));
+  const out = new THREE.BufferGeometry();
+  for (const name of ['position', 'normal']) {
+    const total = flat.reduce((n, g) => n + g.attributes[name].array.length, 0);
+    const arr = new Float32Array(total);
+    let o = 0;
+    for (const g of flat) {
+      arr.set(g.attributes[name].array as Float32Array, o);
+      o += g.attributes[name].array.length;
+    }
+    out.setAttribute(name, new THREE.BufferAttribute(arr, 3));
+  }
+  parts.forEach((g) => g.dispose());
+  flat.forEach((g) => g.dispose());
   return out;
 }

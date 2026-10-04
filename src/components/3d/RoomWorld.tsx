@@ -11,6 +11,7 @@ import { getFloorTexture, getShadowTexture } from './glowTexture';
 import { usePointerOrbit } from '../../hooks/usePointerOrbit';
 import { hoverLight, roomLights } from './sceneStore';
 import { RoomSet, SIGN_PLACEMENT, STAGE_STEP, WALL_R } from './RoomSet';
+import { safeDrop } from './BirthdaySign';
 import { cakePosition } from './RoomProps';
 import { Html } from '@react-three/drei';
 import { birthdayConfig } from '../../config/birthday';
@@ -344,7 +345,7 @@ export function RoomWorld({
     camLook = [cakeAt[0] - (cakeAt[2] / d) * ls, ground + MOMENT.cake.lookH, cakeAt[2] + (cakeAt[0] / d) * ls];
     camPos = [camLook[0], camLook[1] + MOMENT.cake.lift[pi], camLook[2] + MOMENT.cake.back[pi]];
   } else if (moment === 'sign') {
-    camLook = [0, ground + 2.0 - sign.drop + MOMENT.sign.lookOffset, -sign.radius];
+    camLook = [0, ground + 2.0 - safeDrop(sign.scale, sign.drop) + MOMENT.sign.lookOffset, -sign.radius];
     camPos = [0, camLook[1] + MOMENT.sign.lift[pi], camLook[2] + MOMENT.sign.back[pi]];
   } else if (opening && openIndex >= 0 && gifts[openIndex]?.shape === 'envelope') {
     // the puppy is a memory too: the camera walks up to it (same rig, same swing round to

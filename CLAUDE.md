@@ -201,6 +201,21 @@ soft blob shadow on the floor that tightens as it lands.
   `birthdayConfig.room.sign`; size / weight (500 vs 400) / tracking / metal tone (`aTone`:
   champagne → warm gold for her name) make the hierarchy; two gold hairlines frame MY BABY;
   a slow band of light crosses the letters (`uSweep`); posies and ribbons differ per side.
+- **Sign safe area**: `SIGN_SAFE_FLOOR` (1.22 m) — `safeDrop()` lifts the sign so its lowest
+  line (TEACHER HÙ TÁ) always clears the alcove foot / chair rail (0.95 m) at any placement;
+  RoomWorld frames the sign close-up from the same `safeDrop`. The alcove behind it is a
+  full-height niche (no rail / wainscot inside it), so from no camera angle does a horizontal
+  border cross the words. Letters cast a soft shadow
+  (blurred mask offset down) for depth; the arch has a back rail + ties + brass rosettes;
+  leaves in the posies differ per side.
+- **The cake** (`cakeModel.ts`, `buildCake`): one merged mesh (one draw call) — lathe tiers
+  with soft edges and an uneven hand-smoothed side, piped shell borders, sugar pearls,
+  rosettes, strawberries off a perfect ring, sugar flowers, tiny hearts, a thin raspberry
+  glaze with drips, four wax candles (drip + wick) whose flame positions drive the flames.
+  Its shader is lit by those flames (`uFlames`, world space, flicker, out when blown),
+  a rose bounce from the room, per-material highlights and contact darkening. Hover: the
+  cake rises a breath (scale 1.015) with sparkles (`sparkleVertex`); the "26" topper is a
+  hair heavier and leans toward the room.
 - Room UI: memory indicators are medallions; the final note sits between fine rules and
   "Come closer" is ivory/blush glass (`room-ui__cta`).
 Intro particle puppy: after its lap the waving arm's points settle onto the mirror image

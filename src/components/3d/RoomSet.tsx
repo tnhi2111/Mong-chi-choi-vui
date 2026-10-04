@@ -10,6 +10,7 @@ import { getHeartGeometry } from './heartShape';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { RoomProps, roomLamps, roomRugs, furnitureBlobs, cakePosition, LAYOUT } from './RoomProps';
 import { surface } from './Gift3D';
+import { buildCake, cakeVertex, cakeFragment, sparkleGeometry, sparkleVertex, sparkleFragment } from './cakeModel';
 import { Glow } from './Glow';
 import { BirthdaySign, metalVertex, metalFragment, satinVertex, satinFragment, mergeAll } from './BirthdaySign';
 
@@ -68,8 +69,9 @@ function fromHand(p: THREE.Vector3, away: THREE.Vector2): number {
 export const WALL_R = 6.9;
 /** Where the HAPPY BIRTHDAY installation hangs (shared with RoomWorld's close-up framing). */
 export const SIGN_PLACEMENT = {
+  // (the drop is a wish: BirthdaySign's safe area may hang it higher — `safeDrop`)
   landscape: { radius: 5.95, scale: 0.95, drop: 0.32 },
-  portrait: { radius: 4.9, scale: 0.68, drop: 0.75 },
+  portrait: { radius: 4.55, scale: 0.68, drop: 0.75 },
 }; // a small private room (the camera stands outside it: see CUT)
 const WALL_H = 6.2;
 /** Direction of the window: back-left, so the HAPPY BIRTHDAY installation owns the centre. */
@@ -415,7 +417,9 @@ const wallFragment = /* glsl */ `
     // the feature wall: an arched alcove for the HAPPY BIRTHDAY installation
     float aw = 2.5;
     float alcTop = 2.35 + sqrt(max(0.0, 1.0 - (sw / aw) * (sw / aw))) * 0.6;
-    float inAlc = step(abs(sw), aw) * step(h, alcTop) * step(0.95, h);
+    // (a full-height niche: no rail or wainscot runs behind the lettering, so from no
+    //  angle does a horizontal border cross the words)
+    float inAlc = step(abs(sw), aw) * step(h, alcTop);
     float alcEdge = min(aw - abs(sw), alcTop - h);
     col = mix(col, vec3(0.27, 0.19, 0.17), inAlc);                 // a warmer blush-cream plaster
     col *= 1.0 - inAlc * 0.35 * smoothstep(0.18, 0.0, alcEdge);    // its depth: shade at the reveal
@@ -432,7 +436,7 @@ const wallFragment = /* glsl */ `
     float pedge = smoothstep(0.012, 0.0, abs(min(0.48 - abs(wpx), min(h - 0.14, 0.82 - h))));
     panel *= 1.0 - pinset * 0.12;
     panel += vec3(0.08, 0.05, 0.03) * pedge * pinset;
-    col = mix(panel, col, smoothstep(0.93, 0.97, h));
+    col = mix(panel, col, max(smoothstep(0.93, 0.97, h), inAlc));
     // the crown moulding and the ceiling cove above
     float crown = smoothstep(2.98, 3.0, h) * (1.0 - smoothstep(3.12, 3.14, h));
     col = mix(col, vec3(0.3, 0.22, 0.19), crown);
@@ -450,7 +454,7 @@ const wallFragment = /* glsl */ `
     }
     // hidden architectural light: a warm wash rising in the alcove from a cove at its foot,
     // and a soft uplight along the crown moulding
-    light += vec3(1.0, 0.7, 0.45) * 0.5 * inAlc * exp(-(h - 0.95) * 1.2);
+    light += vec3(1.0, 0.7, 0.45) * 0.5 * inAlc * exp(-max(h - 0.6, 0.0) * 1.1);
     light += vec3(1.0, 0.72, 0.48) * 0.22 * exp(-(h - 2.95) * (h - 2.95) * 30.0) * step(h, 3.0);
     // the sign's champagne halo on the alcove behind it
     light += vec3(1.0, 0.78, 0.52) * 0.6 * exp(-sw * sw * 0.2 - (h - 2.0) * (h - 2.0) * 0.4);
@@ -464,7 +468,7 @@ const wallFragment = /* glsl */ `
     light += vec3(0.3, 0.42, 0.85) * 0.35 * exp(-s * s * 0.18 - (h - 2.4) * (h - 2.4) * 0.12);
     col *= light * 1.6;
     // thin champagne trims: the chair rail, the cornice, the arch outlines
-    float trims = smoothstep(0.016, 0.0, abs(h - 0.95)) + smoothstep(0.012, 0.0, abs(h - 3.0)) * 0.8 + smoothstep(0.012, 0.0, abs(alcEdge)) * step(0.95, h) * step(abs(sw), aw + 0.02) * 0.8 + moulding * 0.45;
+    float trims = smoothstep(0.016, 0.0, abs(h - 0.95)) * (1.0 - inAlc) + smoothstep(0.012, 0.0, abs(h - 3.0)) * 0.8 + smoothstep(0.012, 0.0, abs(alcEdge)) * step(abs(sw), aw + 0.02) * 0.8 + moulding * 0.45;
     col += vec3(0.86, 0.66, 0.42) * trims * (light * 0.55);
     col *= 0.5 + 0.5 * smoothstep(0.0, 0.45, h); // shadow where wall meets floor
 
@@ -862,7 +866,7 @@ function CakeTopper({ y, outward }: { y: number; outward: THREE.Vector2 }) {
   const parts = useMemo(() => {
     const [two, six] = numeralPaths();
     const tube = (pts: THREE.Vector3[], dx: number) => {
-      const g = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, false, 'centripetal'), 90, 0.045, 8, false);
+      const g = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, false, 'centripetal'), 96, 0.05, 10, false);
       g.translate(dx, 0, 0);
       return g;
     };
@@ -877,7 +881,7 @@ function CakeTopper({ y, outward }: { y: number; outward: THREE.Vector2 }) {
   const H = 0.19;
   return (
     <group position={[outward.x * 0.1, y, outward.y * 0.1]} rotation-y={face}>
-      <group position={[0, 0.12, 0]} scale={H} rotation-z={-0.03}>
+      <group position={[0, 0.12, 0]} scale={H} rotation={[0.12, 0, -0.03]}>
         <mesh geometry={parts.two} material={gold} />
         <mesh geometry={parts.six} material={gold} />
       </group>
@@ -926,52 +930,38 @@ function Cake({
     useMemo(() => ({}), []),
     { opaque: true },
   );
-  const sponge = useShader(
-    waxVertex,
-    /* glsl */ `
-      varying float vY;
-      varying vec3 vN;
-      void main() {
-        // pink buttercream, a darker berry drip round the top edge, lit from above
-        vec3 cream = vec3(0.96, 0.66, 0.72);
-        float drip = step(0.78, vY + 0.08 * sin(vN.x * 30.0 + vN.z * 21.0));
-        vec3 c = mix(cream, vec3(0.62, 0.12, 0.25), drip);
-        float lit = 0.55 + 0.45 * vY + 0.15 * abs(vN.z);
-        gl_FragColor = vec4(c * lit, 1.0);
-      }
-    `,
-    useMemo(() => ({}), []),
-    { opaque: true },
-  );
   const icing = useMemo(() => new THREE.MeshBasicMaterial({ color: '#fbe6ea' }), []);
-  const berry = useMemo(() => new THREE.MeshBasicMaterial({ color: '#b4122e' }), []);
-  const stripe = useShader(
-    waxVertex,
-    /* glsl */ `
-      varying float vY;
-      void main() {
-        // a twisted candy-stripe birthday candle
-        float s = step(0.5, fract(vY * 5.0));
-        gl_FragColor = vec4(mix(vec3(0.95, 0.9, 0.85), vec3(0.9, 0.35, 0.5), s), 1.0);
-      }
-    `,
-    useMemo(() => ({}), []),
-    { opaque: true },
-  );
   useEffect(
     () => () => {
       wood.dispose();
       icing.dispose();
-      berry.dispose();
     },
-    [wood, icing, berry],
+    [wood, icing],
   );
 
   const top = TABLE_H + 0.02;
-  const candleTops = useMemo(
-    () => [-0.14, -0.05, 0.05, 0.14].map((x, i) => [x, top + 0.46 + 0.14, (i % 2 ? 0.05 : -0.04)] as [number, number, number]),
-    [top],
+  // the cake model (built once); its flames are where its candles' wicks are
+  const cake = useMemo(buildCake, []);
+  useEffect(() => () => cake.geometry.dispose(), [cake]);
+  const candleTops = useMemo(() => cake.flames.map(([x, y, z]) => [x, top + y - 0.03, z] as [number, number, number]), [cake, top]);
+  const cakeU = useMemo(
+    () => ({
+      uFlames: { value: cake.flames.map(() => new THREE.Vector3()) },
+      uLit: { value: 1 },
+      uTime: { value: 0 },
+      uWarm: { value: 0 },
+      uRoomDir: { value: new THREE.Vector3(-outward[0], 0, -outward[2]).normalize() },
+    }),
+    [cake], // eslint-disable-line react-hooks/exhaustive-deps
   );
+  const cakeMat = useShader(cakeVertex, cakeFragment, cakeU, { opaque: true });
+  const sparkles = useMemo(() => sparkleGeometry(18), []);
+  useEffect(() => () => sparkles.dispose(), [sparkles]);
+  const sparkleU = useMemo(() => ({ uTime: { value: 0 }, uOn: { value: 0 }, uPixelRatio: { value: Math.min(window.devicePixelRatio, 2) } }), []);
+  const sparkleMat = useShader(sparkleVertex, sparkleFragment, sparkleU);
+  const body = useRef<THREE.Group>(null);
+  const cakeMesh = useRef<THREE.Mesh>(null);
+  const flameLocal = useMemo(() => new THREE.Vector3(), []);
   const flames = useMemo(() => {
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(candleTops.flatMap((p) => [p[0], p[1] + 0.03, p[2]]), 3));
@@ -1029,6 +1019,23 @@ function Cake({
     const lit = since < 0.12 ? 1 - since / 0.12 : since < 4 ? 0 : Math.min(1, (since - 4) / 0.6);
     // brighter when her hand is near, when she leans in, and for a moment when touched
     flameU.uLit.value = lit * (1 + 0.22 * hover.current + 0.3 * focusAmt.current + 0.5 * flare.current);
+    // the cake: lit by its own flames (in the world), a touch warmer when she's close
+    cakeU.uTime.value = t * motion;
+    cakeU.uLit.value = lit * (1 + 0.25 * flare.current);
+    cakeU.uWarm.value = Math.max(hover.current, focusAmt.current);
+    sparkleU.uTime.value = t;
+    sparkleU.uOn.value = Math.max(hover.current * 0.7, focusAmt.current) * (0.4 + 0.6 * lit);
+    const m = cakeMesh.current;
+    if (m) {
+      m.updateWorldMatrix(true, false);
+      cake.flames.forEach((f, i) => cakeU.uFlames.value[i].copy(flameLocal.set(f[0], f[1], f[2]).applyMatrix4(m.matrixWorld)));
+    }
+    // her hand near it: the cake rises a breath and grows a hair — nothing more
+    if (body.current) {
+      const h = hover.current * (1 - focusAmt.current * 0.5);
+      body.current.scale.setScalar(1 + 0.015 * h);
+      body.current.position.y = top + 0.006 * h + Math.sin(t * 1.2) * 0.002 * h;
+    }
     if (glow.current) {
       const m = glow.current.material as THREE.SpriteMaterial;
       m.opacity = (0.04 + 0.1 * hover.current + 0.16 * focusAmt.current + 0.12 * flare.current) * lit;
@@ -1092,31 +1099,11 @@ function Cake({
           document.body.style.cursor = '';
         }}
       >
-        <mesh position={[0, top + 0.13, 0]} material={sponge}>
-          <cylinderGeometry args={[0.34, 0.35, 0.26, 40]} />
-        </mesh>
-        <mesh position={[0, top + 0.26, 0]} rotation-x={-Math.PI / 2} material={icing}>
-          <circleGeometry args={[0.34, 40]} />
-        </mesh>
-        <mesh position={[0, top + 0.36, 0]} material={sponge}>
-          <cylinderGeometry args={[0.22, 0.23, 0.2, 36]} />
-        </mesh>
-        <mesh position={[0, top + 0.46, 0]} rotation-x={-Math.PI / 2} material={icing}>
-          <circleGeometry args={[0.22, 36]} />
-        </mesh>
-        {Array.from({ length: 10 }, (_, i) => {
-          const a = (i / 10) * Math.PI * 2;
-          return (
-            <mesh key={i} position={[Math.sin(a) * 0.3, top + 0.28, Math.cos(a) * 0.3]} material={berry}>
-              <sphereGeometry args={[0.03, 10, 8]} />
-            </mesh>
-          );
-        })}
-        {candleTops.map((p, i) => (
-          <mesh key={i} position={[p[0], p[1] - 0.07, p[2]]} material={stripe}>
-            <cylinderGeometry args={[0.012, 0.012, 0.14, 8]} />
-          </mesh>
-        ))}
+        {/* the cake itself: tiers, piping, pearls, rosettes, berries, flowers, candles */}
+        <group ref={body} position={[0, top, 0]}>
+          <mesh ref={cakeMesh} geometry={cake.geometry} material={cakeMat} />
+          <points geometry={sparkles} material={sparkleMat} frustumCulled={false} raycast={() => null} />
+        </group>
         {/* a generous invisible target, so the whole cake answers a touch */}
         <mesh position={[0, top + 0.3, 0]}>
           <sphereGeometry args={[0.5, 10, 8]} />
