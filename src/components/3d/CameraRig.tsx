@@ -95,10 +95,15 @@ export function CameraRig({ position, lookAt = [0, 0, 0], parallax = 0.25, speed
     camera.position.set(lx + off.x, ly + off.y + s.py, lz + off.z).addScaledVector(right, s.px);
     camera.lookAt(lx, ly, lz);
     // QA (?debug): window.__camOverride = { pos: [x,y,z], look: [x,y,z] } holds a framing
-    const ov = (window as unknown as { __camOverride?: { pos: number[]; look: number[] } }).__camOverride;
+    // (with `in: 'name'`, pos and look are local to window.__<name> — e.g. the puppy's head)
+    const w = window as unknown as Record<string, unknown> & { __camOverride?: { pos: number[]; look: number[]; in?: string } };
+    const ov = w.__camOverride;
     if (ov) {
-      camera.position.set(ov.pos[0], ov.pos[1], ov.pos[2]);
-      camera.lookAt(ov.look[0], ov.look[1], ov.look[2]);
+      const obj = ov.in ? (w[`__${ov.in}`] as THREE.Object3D | undefined) : undefined;
+      obj?.updateWorldMatrix(true, false);
+      const at = (v: number[]) => (obj ? obj.localToWorld(new THREE.Vector3(v[0], v[1], v[2])) : new THREE.Vector3(v[0], v[1], v[2]));
+      camera.position.copy(at(ov.pos));
+      camera.lookAt(at(ov.look));
     }
     (camera.userData.look ??= new THREE.Vector3()).set(lx, ly, lz);
 

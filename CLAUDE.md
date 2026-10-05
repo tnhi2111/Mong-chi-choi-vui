@@ -225,10 +225,19 @@ soft blob shadow on the floor that tightens as it lands.
   reveal: flames brighten only a little, a small warm pool, a ring of gold/pink motes runs
   once round it (`ringVertex` in cakeModel).
 - **The puppy's face**: ears are their own meshes (`EAR_PIVOT`, `earL/earR` from the worker)
-  on damped springs driven by the head's motion (+ a hop when happy); the mouth's lines are
-  projected onto the sculpted surface (`MOUTH` in letterDogModel: upper lip, philtrum,
-  lower lip; tapered tubes); four small upper and lower teeth tucked inside the lips, a pink
-  gum, a grooved tongue that slides forward as the jaw opens; eyes = dark ball + iris disc
+  on damped springs driven by the head's motion (+ a hop when happy). **The mouth is part of
+  the SDF surface, not separate meshes** (owner rejected drawn-on lip tubes): HEAD/JAW parts
+  have skin colours (`lip`, `tongue`, `cavity`), `sub: true` parts are smooth subtractions
+  (`-smin(-d, di, k)`) whose carved walls take the carve's colour — the mouth recess under
+  the upper lips, the hollow of the lower jaw (dark inside) with the tongue lying in it
+  (parts listed after a carve win their colour there). Vertex colours are a soft blend of
+  nearby parts (no stair-stepped borders). Removed because they looked artificial at the
+  mesh resolution: SDF teeth/gum, the philtrum groove (it meshed into a box). The dark
+  cavity sphere (`FACE.mouth`) sits fully behind the lips. Ribbon = flat satin bands
+  (`band()` / `ribbonTail()` extrusions), not tori. Dog moment camera: portrait lens
+  (fov 26 desktop / 20 portrait). QA: `?debug` exposes `window.__dogHead`;
+  `__camOverride = { pos, look, in: 'dogHead' }` frames in head space
+  (`qa-output/dogmouth.mjs`). Eyes = dark ball + iris disc
   pressed onto its curve (canvas texture) + clear cornea + catch-light on the cornea, and
   thin upper lids (open high, lowered a little when happy, closed for blinks); the eyes
   follow her hand. Materials in `createLetterDogMaterials` (pre-warmed).

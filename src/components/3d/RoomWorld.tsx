@@ -348,6 +348,7 @@ export function RoomWorld({
     : { pos: [0, 3.0, 8.4] as [number, number, number], look: [0, -0.4, 0] as [number, number, number], fov: 40 };
   let camPos = base.pos;
   let camLook = base.look;
+  let camFov = base.fov;
   const pi = portrait ? 1 : 0;
   if (moment === 'cake') {
     // leaning in to the cake, from the room's side of it
@@ -369,9 +370,12 @@ export function RoomWorld({
     const [px, , pz] = ring[openIndex].pos;
     const a = ring[openIndex].angle;
     const near = portrait ? 0.55 : 0.35; // look a little in front of it: where the letter lands
-    camLook = [px + Math.sin(a) * near, FLOOR_Y + (portrait ? 0.42 : 0.55), pz + Math.cos(a) * near];
+    camLook = [px + Math.sin(a) * near, FLOOR_Y + (portrait ? 0.62 : 0.55), pz + Math.cos(a) * near];
     const back = Math.min(portrait ? 4.6 : 3.7, 8.1 - Math.hypot(px, pz));
-    camPos = [camLook[0], camLook[1] + (portrait ? 1.55 : 0.95), camLook[2] + back];
+    camPos = [camLook[0], camLook[1] + (portrait ? 1.15 : 0.95), camLook[2] + back];
+    // a portrait lens (≈ 60 mm): the head, chest and ribbon, the paws and the letter —
+    // flatter, calmer perspective than the room's wide view
+    camFov = portrait ? 20 : 26;
   } else if (opening && openIndex >= 0) {
     // frame the rising gift from straight in front, closer. The offset is given
     // un-rotated: the orbit yaw (steered to the gift's angle) swings it round.
@@ -389,7 +393,7 @@ export function RoomWorld({
         lookAt={camLook}
         parallax={reducedMotion || opening || moment ? 0 : 0.25}
         speed={moment ? MOMENT.speed : opening ? (gifts[openIndex]?.shape === 'envelope' ? 1.25 : 2.0) : 1.1}
-        fov={base.fov}
+        fov={camFov}
         orbit={orbit}
         orbitCamera
         fit={portrait ? (yaw) => 1 + 0.42 * Math.sin(yaw) ** 2 : undefined}
