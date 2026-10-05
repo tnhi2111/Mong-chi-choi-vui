@@ -49,7 +49,7 @@ export function FallbackScene({
     const n = gifts.length;
     return (
       <div className="fallback fallback--room" aria-hidden="true">
-        <span key={pulseKey} className={`css-heart css-heart--center${allOpened ? ' is-awake' : ''}`} />
+        <span key={pulseKey} className={`css-orb css-orb--center${allOpened ? ' is-awake' : ''}`} />
         {gifts.map((g, i) => {
           const a = Math.PI / 2 + (i / n) * Math.PI * 2; // same layout as the 3D room: first gift on top
           const style = {
@@ -74,7 +74,7 @@ export function FallbackScene({
   if (stage === 'final') {
     return (
       <div className="fallback fallback--final" aria-hidden="true">
-        <span className={`css-heart css-heart--big${finalePhase !== 'gather' ? ' is-awake' : ''}`} />
+        <span className={`css-orb css-orb--big${finalePhase !== 'gather' ? ' is-awake' : ''}`} />
       </div>
     );
   }

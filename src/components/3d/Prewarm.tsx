@@ -3,9 +3,8 @@ import { useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { Gift } from '../../data/gifts';
 import { createGiftMaterials } from './Gift3D';
-import { crystalVertex, crystalFragment, getCrystalGeometry } from './Heart3D';
+import { celestialVertex, celestialFragment, orbGlassVertex, orbGlassFragment, lineVertex, lineFragment, getOrbGeometry } from './MemoryCelestial';
 import { createFloorMaterial } from './RoomWorld';
-import { createSwarmMaterial } from './FinalWorld';
 import { createHeartMaterial } from './heartMaterial';
 import { createLetterDogMaterials } from './LetterDog';
 import { loadLetterDog } from './letterDogGeometry';
@@ -60,25 +59,18 @@ export function Prewarm({ gifts, glass, solidHeart, delay = 500 }: { gifts: Gift
     void loadLetterDog();
     Object.values(createLetterDogMaterials()).forEach(add);
     if (solidHeart) add(createHeartMaterial(glass).material);
-    // the room's rose-quartz heart: shape its shell now, and compile both of its passes
-    getCrystalGeometry();
-    for (const side of [THREE.FrontSide, THREE.BackSide]) {
-      add(
-        new THREE.ShaderMaterial({
-          vertexShader: crystalVertex,
-          fragmentShader: crystalFragment,
-          uniforms: { uTime: { value: 0 }, uGlow: { value: 0.5 }, uOn: { value: 1 }, uInner: { value: side === THREE.BackSide ? 1 : 0 } },
-          transparent: true,
-          depthWrite: false,
-          side,
-        }),
-      );
-    }
-    const swarm = createSwarmMaterial();
-    keepAlive.push(swarm);
-    const inst = new THREE.InstancedMesh(box, swarm, 1);
-    inst.setColorAt(0, new THREE.Color('#ffffff'));
-    jobs.push(inst);
+    // the memory celestial (room + finale): shape its glass now, compile its glass passes,
+    // its motes and its lines (the anchor stars are tiny and compile with the room)
+    getOrbGeometry();
+    const shader = (vertexShader: string, fragmentShader: string, side: THREE.Side = THREE.FrontSide, additive = true) => {
+      const m = new THREE.ShaderMaterial({ vertexShader, fragmentShader, transparent: true, depthWrite: false, side, blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending });
+      keepAlive.push(m);
+      jobs.push(new THREE.Mesh(box, m));
+    };
+    shader(orbGlassVertex, orbGlassFragment, THREE.FrontSide, false);
+    shader(orbGlassVertex, orbGlassFragment, THREE.BackSide, false);
+    shader(celestialVertex, celestialFragment);
+    shader(lineVertex, lineFragment);
 
     const compileOne = async (obj: THREE.Object3D, target: THREE.WebGLRenderTarget | null) => {
       const temp = new THREE.Scene();

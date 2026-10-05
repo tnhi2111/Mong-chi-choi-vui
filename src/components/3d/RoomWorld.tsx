@@ -3,7 +3,7 @@ import { useFrame, useThree } from '@react-three/fiber';
 import { resetReady, signalReady } from '../../lib/ready';
 import * as THREE from 'three';
 import type { Gift } from '../../data/gifts';
-import { Heart3D } from './Heart3D';
+import { MemoryCelestial } from './MemoryCelestial';
 import { Gift3D } from './Gift3D';
 import { ParticleField } from './ParticleField';
 import { CameraRig } from './CameraRig';
@@ -413,17 +413,17 @@ export function RoomWorld({
       />
       <Floor rx={rx} rz={rz} />
       <group position={[0, 0.3, 0]}>
-        <Heart3D
-          pulseKey={pulseKey}
+        {/* the centerpiece: a little universe of their memories, kept in glass. Touch
+            plays its constellation reveal; once every memory is open, the touch also
+            leads on to the finale (as the heart did), while the orb opens */}
+        <MemoryCelestial
+          count={heartPoints}
           charge={allOpened ? 1 : 0.25 + (opened.length / gifts.length) * 0.5}
-          interactive={allOpened && !opening && !paused}
-          onTap={onHeartTap}
+          interactive={!opening && !paused && !moment}
+          onTap={allOpened ? onHeartTap : undefined}
+          tapAfter={1100}
           reducedMotion={reducedMotion}
-          glass={glass}
-          scale={portrait ? 0.62 : 0.78}
-          halo={allOpened ? 1.4 : 1}
-          particles={heartPoints}
-          crystal
+          scale={portrait ? 0.7 : 0.86}
         />
       </group>
       {gifts.map((g, i) => (

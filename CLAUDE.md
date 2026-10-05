@@ -157,11 +157,23 @@ soft blob shadow on the floor that tightens as it lands.
   and key; the lid lifts, a tiny heart rises on its spindle and turns, a few chime notes.
   All new materials go through `surface()` (one shared program, pre-warmed via
   `createGiftMaterials`); motes reuse the hover-sparkle shader. Gift camera speed 2.0.
-- **The room's heart is rose quartz** (`Heart3D` `crystal`, set by RoomWorld): a hand-shaped
-  shell (`getCrystalGeometry`: lobes not quite equal, a soft wobble) drawn in two passes of
-  one small shader (inner faces deeper/milky, then outer faces: rose body, fresnel rim, lamp
-  highlights, slow veins of light), with the points of light scaled 0.84 INSIDE it and
-  dimmed (glow ×0.72, halo ×0.6, inner point light ×0.65). No refraction pass.
+- **The centerpiece is NOT a heart any more — the "memory celestial"** (`MemoryCelestial.tsx`,
+  used by RoomWorld and by FinalWorld; owner: "do not make another heart"). A hand-shaped glass
+  orb (`getOrbGeometry`, welded icosphere — unwelded it lit facet by facet) holding a small
+  universe: ONE points draw (all motion in `celestialVertex`: star dust with clouds/voids,
+  warm motes on 5 tilted `BANDS`, a few bright motes near the core; breath, DOF-ish blur,
+  rare pulses, distance-compensated size so it reads from across the room), a tiny warm core
+  (two Glow sprites) + the one coloured point light (keep exactly one: light count changes
+  lit programs). Hover: nearby motes lean to the cursor, brighten, ripple. Touch (`SEQ`
+  6.2 s): contact (orbital clock pauses, converge) → expansion (glass + orbital paths show)
+  → 5 abstract constellations (~34 CPU anchor stars, lines grow one by one) → memory words
+  = real gift titles only (placeholders containing `[` are skipped) → return. Touched again
+  once calm: collapse + one slow wave + "our little universe". Room: interactive whenever not
+  opening/paused/in a moment; when all gifts are open the touch also calls `onTap` after
+  1.1 s (→ finale). Finale: `assemble` ref gathers scattered motes; "one more thing" calls
+  `wave()`. Shaders are pre-warmed in Prewarm. QA: `qa-output/celestial.mjs` (room
+  sequence), `qa-output/celclose.mjs` (close views from 3 sides). No-WebGL fallback: `.css-orb`.
+  (Heart3D now only serves the intro.) QA flags: `node scripts/qa.mjs --gpu --size=390x844 --mobile`.
 - Gifts float on their own rhythms (per-index frequencies, small drift and wobble), come a
   little toward her on hover, and on click hold still for a beat while light gathers before
   rising (`oo` in Gift3D). Box 01 has a cream paper band under the satin and a hand-written

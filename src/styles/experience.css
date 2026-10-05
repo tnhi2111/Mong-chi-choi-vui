@@ -940,13 +940,20 @@ html[data-reduce] .room-whisper span {
 }
 
 .finale__title {
-  text-shadow: 0 0 40px rgba(255, 200, 212, 0.35);
+  /* a film title, not a web heading: light, airy, warm — lit by the orb above it */
+  font-weight: 300;
+  letter-spacing: 0.015em;
+  color: #f4e6d6;
+  text-shadow: 0 0 34px rgba(232, 176, 150, 0.22);
 }
 
 .finale__heart {
+  /* kept, but only as a whisper */
   color: var(--blush);
-  font-size: 0.7em;
-  vertical-align: 0.12em;
+  font-size: 0.3em;
+  opacity: 0.4;
+  vertical-align: 0.7em;
+  margin-left: 0.18em;
 }
 
 .finale__message {
@@ -1064,12 +1071,6 @@ body:has(.sheet) .music {
   opacity: 0.8;
 }
 
-.fallback--room .css-heart--center {
-  position: absolute;
-  left: calc(50% - 60px);
-  top: calc(44% - 60px);
-}
-
 .css-heart.is-awake {
   filter: drop-shadow(0 0 60px rgba(255, 210, 220, 1));
 }
@@ -1101,10 +1102,40 @@ body:has(.sheet) .music {
   50% { translate: 0 -8px; }
 }
 
-.fallback--final .css-heart--big {
-  --s: 120px;
-  transform: translateY(-14vh) scale(2.2);
-  animation: none;
+/* the little universe, without WebGL: a glass orb with a warm core and a few stars */
+.css-orb {
+  position: absolute;
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  border: 1px solid rgba(240, 212, 190, 0.16);
+  background:
+    radial-gradient(circle at 50% 50%, rgba(255, 238, 218, 0.95) 0 2px, rgba(247, 185, 162, 0.35) 5px, transparent 14px),
+    radial-gradient(circle at 30% 62%, rgba(255, 226, 200, 0.8) 0 1px, transparent 2px),
+    radial-gradient(circle at 68% 34%, rgba(255, 210, 196, 0.7) 0 1px, transparent 2px),
+    radial-gradient(circle at 58% 72%, rgba(240, 200, 230, 0.6) 0 1px, transparent 2px),
+    radial-gradient(circle at 50% 50%, rgba(160, 80, 100, 0.16), transparent 64%),
+    radial-gradient(circle at 34% 26%, rgba(255, 255, 255, 0.14), transparent 34%);
+  box-shadow: inset 0 0 22px rgba(240, 200, 180, 0.18), 0 0 46px rgba(200, 120, 130, 0.12);
+  animation: orb-breathe 7s ease-in-out infinite;
+}
+.css-orb.is-awake {
+  box-shadow: inset 0 0 26px rgba(240, 200, 180, 0.26), 0 0 60px rgba(214, 150, 140, 0.2);
+}
+.fallback--room .css-orb--center {
+  left: calc(50% - 60px);
+  top: calc(44% - 60px);
+}
+.fallback--final .css-orb--big {
+  left: calc(50% - 60px);
+  top: calc(50% - 60px - 14vh);
+  transform: scale(2);
+}
+@keyframes orb-breathe {
+  50% { filter: brightness(1.12); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .css-orb { animation: none; }
 }
 
 /* ── Small screens ──────────────────────────────────────────────────────── */
