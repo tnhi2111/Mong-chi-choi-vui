@@ -193,6 +193,16 @@ export function RoomBuild({ points, from, onDrawn, reducedMotion = false }: Prop
     uniforms.uFrom.value.set(...from);
   }, [from, uniforms]);
 
+  // new points = a new drawing: start the clock again (otherwise a second arming would
+  // never hand the room over, and the room would never be shown)
+  useEffect(() => {
+    told.current = false;
+    t.current = 0;
+    wait.current = reducedMotion ? 0 : 0.3;
+    uniforms.uFade.value = 0;
+    uniforms.uT.value = 0;
+  }, [points, reducedMotion, uniforms]);
+
   useFrame((_, rawDt) => {
     if (!geometry) return;
     const dt = Math.min(rawDt, 0.05);

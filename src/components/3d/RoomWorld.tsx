@@ -354,8 +354,16 @@ export function RoomWorld({
     if (!g) return;
     let alive = true;
     resetReady('room-ready');
+    // ONCE. It used to be called twice — by the compile and again by the fallback below —
+    // and the second call armed the light that draws the room a second time, after the
+    // room had already been handed over: the room then stayed invisible for good.
+    let shown = false;
+    let fallback = 0;
+    let safety = 0;
     const show = () => {
-      if (!alive) return;
+      if (!alive || shown) return;
+      shown = true;
+      clearTimeout(fallback);
       // the room opens out of its orb: the camera starts right in front of it (where the
       // last world's camera dove into its own light) and the rig pulls back from there
       const c = cam as THREE.PerspectiveCamera;
@@ -372,6 +380,8 @@ export function RoomWorld({
         if (pts) {
           setBuild(pts);
           setDrawn(false);
+          // whatever happens to that light, the room is hers a few seconds later
+          safety = window.setTimeout(() => alive && setDrawn(true), 4000);
         }
       }
       // draw a few frames while still veiled: the first one uploads every texture and
@@ -392,11 +402,12 @@ export function RoomWorld({
         g.visible = false;
       });
     });
-    const fallback = setTimeout(show, 3500);
+    fallback = window.setTimeout(show, 3500);
     return () => {
       alive = false;
       cancelAnimationFrame(raf);
       clearTimeout(fallback);
+      clearTimeout(safety);
     };
   }, [gl, cam, scn, reducedMotion, drawIn]);
 
@@ -474,7 +485,7 @@ export function RoomWorld({
 
   return (
     <>
-      <group ref={root} visible={ready && drawn}>
+      <group ref={root} visible={ready && drawn} userData={{ roomRoot: true }}>
         {ready && (
           // mounted once the room is ready, so it starts from the orb (see `show`)
           <CameraRig
