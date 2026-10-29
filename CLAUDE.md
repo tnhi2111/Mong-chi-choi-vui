@@ -402,6 +402,15 @@ something, never a white/black cover.
   waits) — click a `.gift-nav__btn` and screenshot.
   Without a GPU, 3D runs ~1–5 fps while CSS runs in real time — judge timing with `--gpu`.
 
+## Design references (`reference/`)
+
+- `reference/VIDEO_ANALYSIS.md` — the owner's 3 reference videos, analysed.
+- `reference/awesome-design-md/` — a copy (no git history) of
+  https://github.com/VoltAgent/awesome-design-md (commit `fcc7028`, MIT): ~80 `DESIGN.md`
+  files describing well-known sites' design systems (`design-md/<brand>/`). The owner added
+  it as reading material; it is not part of the build. Don't copy a brand's identity —
+  take principles only, and keep this site's own voice (Cormorant, wine/champagne).
+
 ## Running & testing
 
 ```bash
