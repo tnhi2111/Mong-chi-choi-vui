@@ -183,7 +183,10 @@ export default function App() {
       setVeil('none');
       // the motes clear from the centre outward, so the new hero is seen first
       setDust({ phase: 'open', color, mode });
-      await wait(quick ? 450 : 1600);
+      // the way in tells its story inside the room (the light lands on it), so she may
+      // touch things as soon as she can see them — the lock is only for a second change
+      // of world, not for her hand
+      await wait(quick ? 450 : mode === 'warp' ? 900 : 1600);
       setDust({ phase: 'none', color, mode });
       busy.current = false;
     },

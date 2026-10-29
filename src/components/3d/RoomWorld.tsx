@@ -11,6 +11,7 @@ import { getFloorTexture, getShadowTexture } from './glowTexture';
 import { usePointerOrbit } from '../../hooks/usePointerOrbit';
 import { useDive } from '../../hooks/useDive';
 import { RoomBuild, sampleRoom, type BuildPoints } from './RoomBuild';
+import { motion as MOTION } from '../../config/motion';
 import { hoverLight, roomLights } from './sceneStore';
 import { RoomSet, SIGN_PLACEMENT, STAGE_STEP, WALL_R } from './RoomSet';
 import { safeDrop } from './BirthdaySign';
@@ -281,6 +282,20 @@ export function RoomWorld({
   useEffect(() => {
     hoverLight.target = hoverTarget;
   }, [hoverTarget]);
+  /**
+   * Her hand resting on a thing is interest, not yet a decision (storyboard C): after a
+   * quarter of a second the camera leans in a tenth of the way toward it — the way a person
+   * moves their head before they reach out. Moving on cancels it at once.
+   */
+  const [near, setNear] = useState<number>(-1);
+  useEffect(() => {
+    if (hoverIndex < 0 || opening || moment) {
+      setNear(-1);
+      return;
+    }
+    const id = setTimeout(() => setNear(hoverIndex), MOTION.hand.dwellMs);
+    return () => clearTimeout(id);
+  }, [hoverIndex, opening, moment]);
   // the heart lights the room pink; a golden key falls on the puppy
   useEffect(() => {
     const dogIdx = gifts.findIndex((g) => g.shape === 'envelope');
@@ -427,6 +442,12 @@ export function RoomWorld({
       camLook = [0, ORB_Y, 0];
       camFov = ORB_CLOSE.fov;
     }
+  } else if (near >= 0 && !opening && ring[near]) {
+    // a lean toward the thing under her hand: a little closer, looking a little at it
+    const [gx, , gz] = ring[near].pos;
+    const k = MOTION.hand.approach;
+    camPos = [base.pos[0] + (gx - base.pos[0]) * k, base.pos[1] * (1 - k * 0.5), base.pos[2] + (gz - base.pos[2]) * k];
+    camLook = [base.look[0] + gx * k * 1.6, base.look[1] + 0.25 * k * 1.6, base.look[2] + gz * k * 1.6];
   } else if (opening && openIndex >= 0 && gifts[openIndex]?.shape === 'envelope') {
     // the puppy is a memory too: the camera walks up to it (same rig, same swing round to
     // face it) and settles a little low, the puppy's face and the letter it gives framed
@@ -459,7 +480,23 @@ export function RoomWorld({
             position={camPos}
             lookAt={camLook}
             parallax={reducedMotion || opening || moment || leaving ? 0 : 0.25}
-            speed={leaving ? (divePhase === 'pull' ? 2.2 : 1.35) : moment ? MOMENT.speed : opening ? (gifts[openIndex]?.shape === 'envelope' ? 1.25 : 2.0) : arriving ? 0.75 : 1.1}
+            speed={
+            leaving
+              ? divePhase === 'pull'
+                ? 2.2
+                : 1.35
+              : moment
+                ? MOMENT.speed
+                : opening
+                  ? gifts[openIndex]?.shape === 'envelope'
+                    ? 1.25
+                    : 2.0
+                  : arriving
+                    ? 0.75
+                    : near >= 0
+                      ? 0.55
+                      : 1.1
+          }
             fov={camFov}
             orbit={orbit}
             orbitCamera

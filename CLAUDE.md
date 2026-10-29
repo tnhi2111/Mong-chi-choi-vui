@@ -508,6 +508,32 @@ QA: `qa-output/tmp/dustprobe.mjs` films it (timestamps in the file names). Measu
 luminance 30–35 through the landing, near-white ≤ 0.7 %, no empty frame between the light
 and the room.
 
+## Her hand in the room (storyboard C — first pass)
+
+`motion.hand` holds the numbers.
+- **Interest before action**: the pointer resting on a gift for 250 ms (`dwellMs`) makes the
+  camera lean a tenth of the way toward it on a slow spring (`near` in RoomWorld, speed
+  0.55) — the way a person moves their head before reaching out. Moving away cancels it.
+  (It does move the thing a little on screen; the lean is small on purpose.)
+- **Weight**: `MOTION.hand.spring` gives a lacquered box and a music box a slower spring
+  than a glass bottle or a journal (`heavy` in Gift3D), and a heavier lid takes longer to
+  lift (`HOLD_SECS` × 1.25 / 0.85). The same number drives lift and tilt.
+- **Opening is a gesture, not a button**: `onClick` is gone from Gift3D. Pressing lifts the
+  lid under her finger (box lid, bottle cork, journal cover, music-box lid all answer to
+  `hold`), the light inside leaks out through the crack, and it opens when the lift is
+  complete. Letting go before a third of the way lets it fall shut with a knock
+  (`sound.thump`). A quick tap (< 260 ms) finishes the lift by itself, so a tap still works
+  and still has weight. The gift-nav buttons and the keyboard path are unchanged.
+- The transition lock is released as soon as the room can be touched (900 ms after the
+  light starts landing), not after the whole settle.
+QA: `?debug` → `window.__giftHold` = `{ id, hold, held }`; `qa-output/tmp/hold.mjs
+[--short]` films a press, a hold and an early release (the camera leans in, the lid lifts,
+it opens — or falls shut).
+
+**Not done in this pass** (next): procedural close-up materials (wood, paper, cloth, metal
+from `.claude/skills`), zoom that follows the cursor with inertia, and blowing the candles
+out with a gesture. The brief for them is in `reference/STORYBOARD.md` C.
+
 ## Design references (`reference/`)
 
 - `reference/VIDEO_ANALYSIS.md` — the owner's reference videos, analysed (3 in the first

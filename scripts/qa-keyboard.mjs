@@ -55,6 +55,9 @@ try {
   // the room is shown once it has compiled (the iris opens then) — wait for that, not a guess
   await page.locator('.gift-nav__btn').first().waitFor({ timeout: 20000 });
   await page.waitForFunction(() => document.querySelector('.iris')?.getAttribute('data-on') === 'false', null, { timeout: 20000 });
+  // the room is hers once the gift buttons answer again (the way in holds them while the
+  // light is still landing)
+  await page.locator('.gift-nav__btn:not([disabled])').first().waitFor({ timeout: 20000 });
   await page.waitForTimeout(2800);
 
   const count = await page.locator('.gift-nav__btn').count();

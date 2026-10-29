@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useFrame, type ThreeEvent } from '@react-three/fiber';
 import { RoundedBox } from '@react-three/drei';
 import { ScreenLabel } from './ScreenLabel';
+import { motion as MOTION } from '../../config/motion';
 import { ShotTitle } from './ShotTitle';
 import * as THREE from 'three';
 import { useShader } from './useShader';
@@ -292,10 +293,15 @@ function Motes({ count, radius, level, seed = 1 }: { count: number; radius: numb
 }
 
 const openOf = (o: number) => THREE.MathUtils.smoothstep(o, 0.4, 0.85);
+/** How long a steady press takes to lift a lid all the way (seconds). */
+const HOLD_SECS = 0.7;
+/** QA (?debug): window.__giftHold shows which lid is being lifted, and how far. */
+const DEBUG = typeof location !== 'undefined' && new URLSearchParams(location.search).has('debug');
 
 function GiftBody({
   gift,
   progress,
+  hold,
   hover,
   glass,
   aim,
@@ -305,6 +311,8 @@ function GiftBody({
 }: {
   gift: Gift;
   progress: Progress;
+  /** 0..1 — how far her press has lifted the lid, before the opening itself begins. */
+  hold: Progress;
   hover: Progress;
   glass: boolean;
   aim: { current: { x: number; y: number } };
@@ -347,13 +355,16 @@ function GiftBody({
     const o = progress.current;
     const h = hover.current;
     const open = openOf(o);
+    // her press, before the opening itself: enough to feel the thing give, never enough to
+    // see inside — that is what the opening is for (storyboard C)
+    const lift = hold.current * (1 - open);
     switch (gift.shape) {
       case 'box':
         if (lid.current) {
           // the lid lifts a breath first, then swings open on its back edge
           const pop = THREE.MathUtils.smoothstep(o, 0.25, 0.45);
-          lid.current.rotation.x = -open * 1.35;
-          lid.current.position.y = 0.24 + pop * 0.04 + open * 0.08;
+          lid.current.rotation.x = -open * 1.35 - lift * 0.22;
+          lid.current.position.y = 0.24 + pop * 0.04 + open * 0.08 + lift * 0.035;
         }
         // the little brass tag swings on its thread — a touch more when her hand is near
         if (tag.current) tag.current.rotation.z = Math.sin(t * 1.3 * motion + 0.6) * (0.05 + h * 0.12) * motion + open * 0.4;
@@ -362,14 +373,14 @@ function GiftBody({
         // the cork works loose and lifts off, tilting; the motes inside rise out
         if (cork.current) {
           const pop = THREE.MathUtils.smoothstep(o, 0.3, 0.6);
-          cork.current.position.y = 0.3 + pop * 0.22 + open * 0.1 + Math.sin(t * 40) * 0.003 * h * (1 - pop);
-          cork.current.rotation.z = pop * 0.6;
+          cork.current.position.y = 0.3 + pop * 0.22 + open * 0.1 + lift * 0.04 + Math.sin(t * 40) * 0.003 * h * (1 - pop);
+          cork.current.rotation.z = pop * 0.6 + lift * 0.12;
           cork.current.position.x = pop * 0.08;
         }
         break;
       case 'star':
         // the journal's cover swings open, then two pages turn after it
-        if (cover.current) cover.current.rotation.z = open * 2.5 + h * 0.06 * (1 - open);
+        if (cover.current) cover.current.rotation.z = open * 2.5 + lift * 0.3 + h * 0.06 * (1 - open);
         pages.current.forEach((pg, i) => {
           if (!pg) return;
           const d = THREE.MathUtils.smoothstep(o, 0.62 + i * 0.1, 0.95 + i * 0.03);
@@ -379,7 +390,7 @@ function GiftBody({
         break;
       case 'orb':
         // the music box: the lid lifts, the little heart rises on its spindle and turns
-        if (lid.current) lid.current.rotation.x = -open * 1.75;
+        if (lid.current) lid.current.rotation.x = -open * 1.75 - lift * 0.3;
         if (figure.current) {
           figure.current.position.y = -0.075 + open * 0.24; // tucked under the lid until it opens
           figure.current.rotation.y = t * 1.6 * open;
@@ -390,7 +401,7 @@ function GiftBody({
     }
     if (light.current) {
       // a warm breath of light from inside — it shows the inside, it doesn't blind
-      (light.current.material as THREE.SpriteMaterial).opacity = open * 0.32;
+      (light.current.material as THREE.SpriteMaterial).opacity = open * 0.32 + lift * 0.12;
       light.current.scale.setScalar(0.4 + open * 0.9);
       light.current.position.y = (gift.shape === 'capsule' ? 0.3 : 0.1) + open * 0.4;
     }
@@ -712,6 +723,12 @@ export function Gift3D({
   const tiltX = useMemo(() => new Spring(0), []);
   const tiltZ = useMemo(() => new Spring(0), []);
   const aim = useRef({ x: 0, y: 0 });
+  /** Her finger is on it; how far the lid has been lifted (0..1); the lift is finishing. */
+  const held = useRef(false);
+  const hold = useRef(0);
+  const finish = useRef(false);
+  const pressedAt = useRef(0);
+  const asked = useRef(false);
   const notified = useRef(false);
   const [hovered, setHovered] = useState(false);
   const phase = useMemo(() => index * 1.7, [index]);
@@ -723,9 +740,22 @@ export function Gift3D({
   // (wrapped to −π…π so turning between the two always takes the short way)
   const face = useMemo(() => Math.atan2(Math.sin(facing), Math.cos(facing)), [facing]);
   const restFacing = face * (gift.shape === 'star' ? 0.12 : 0.45);
+  /**
+   * Weight (storyboard C): a lacquered box and a music box are heavy and answer slowly; a
+   * glass bottle and a journal are light and answer at once. One number, used by every
+   * spring the thing has and by how long its lid takes to lift.
+   */
+  const heavy = gift.shape === 'box' || gift.shape === 'orb';
+  const [stiff, damp] = MOTION.hand.spring[heavy ? 'heavy' : 'light'];
 
   useEffect(() => {
-    if (!opening) notified.current = false;
+    if (opening) return;
+    notified.current = false;
+    // the lid is shut again: her next press starts from the beginning
+    asked.current = false;
+    finish.current = false;
+    held.current = false;
+    hold.current = 0;
   }, [opening]);
 
   useEffect(() => {
@@ -748,14 +778,31 @@ export function Gift3D({
     const real = Math.min(rawDt, 0.25);
     progress.current = opening ? Math.min(1, progress.current + real * speed) : Math.max(0, progress.current - real * 1.6);
     // QA (?debug): window.__shotHold = 0.8 holds an opening product shot at that point
-    const hold = (window as unknown as { __shotHold?: number }).__shotHold;
-    if (opening && hold !== undefined) progress.current = Math.min(progress.current, hold);
+    const shotHold = (window as unknown as { __shotHold?: number }).__shotHold;
+    if (opening && shotHold !== undefined) progress.current = Math.min(progress.current, shotHold);
     const o = progress.current;
     // opening: a breath of stillness first (the light gathers), then it rises to her
     const oo = THREE.MathUtils.clamp((o - 0.14) / 0.86, 0, 1);
     const e = oo * oo * (3 - 2 * oo);
     hover.current += ((active ? 1 : 0) - hover.current) * (1 - Math.exp(-dt * 6));
     const h = hover.current;
+
+    // the lid under her finger: it lifts while she presses, carries itself the rest of the
+    // way once she has lifted it far enough, and falls shut if she lets go too early
+    if (!opening && !disabled) {
+      if (finish.current) hold.current = Math.min(1, hold.current + dt * 2.6);
+      else if (held.current) hold.current = Math.min(1, hold.current + dt / (HOLD_SECS * (heavy ? 1.25 : 0.85)));
+      else hold.current = Math.max(0, hold.current - dt * 2.2);
+      if (hold.current >= 0.999 && !asked.current) {
+        asked.current = true;
+        onSelect(gift.id);
+      }
+      if (DEBUG && (held.current || hold.current > 0)) {
+        (window as unknown as { __giftHold?: unknown }).__giftHold = { id: gift.id, hold: +hold.current.toFixed(2), held: held.current };
+      }
+    } else if (opening) {
+      hold.current = 1;
+    }
 
     // floating at home; lifts a little when hovered; rises toward the camera while opening
     // (the letter-carrying puppy stands on the floor: it doesn't float or lift)
@@ -764,7 +811,7 @@ export function Gift3D({
     const bob = (Math.sin(t * (0.62 + index * 0.11) + phase) * 0.055 + Math.sin(t * (0.23 + index * 0.05) + phase * 2) * 0.025) * still;
     const dx = Math.sin(t * (0.17 + index * 0.04) + phase) * 0.04 * still;
     const dz = Math.cos(t * (0.21 + index * 0.03) + phase) * 0.04 * still;
-    const up = lift.step(active && !isDog ? 0.1 : 0, 7, dt);
+    const up = lift.step(active && !isDog ? 0.1 : 0, stiff * damp, dt);
     // hovered, it comes a little toward her
     toCam.copy(state.camera.position).sub(homeV).setY(0).normalize().multiplyScalar(isDog ? 0 : 0.14 * h);
     tmp.copy(homeV).setY((isDog ? floorY : homeV.y) + bob + up);
@@ -829,8 +876,8 @@ export function Gift3D({
     const idleY = reducedMotion ? 0 : Math.sin(t * (0.3 + index * 0.07) + phase) * (isDog ? 0.12 : 0.3);
     s.rotation.y = THREE.MathUtils.lerp(s.rotation.y, opening ? face : restFacing + idleY * (1 - h), Math.min(1, dt * 3));
     const wob = still * (1 - h);
-    s.rotation.x = isDog ? 0 : tiltX.step(opening ? 0.18 * (1 - e) + 0.12 : 0.1 + Math.sin(t * (0.37 + index * 0.06) + phase) * 0.05 * wob + aim.current.y * 0.16 * h, 6, dt);
-    s.rotation.z = isDog ? 0 : tiltZ.step(opening ? 0 : Math.sin(t * (0.29 + index * 0.05) + phase * 1.3) * 0.05 * wob - aim.current.x * 0.16 * h, 6, dt);
+    s.rotation.x = isDog ? 0 : tiltX.step(opening ? 0.18 * (1 - e) + 0.12 : 0.1 + Math.sin(t * (0.37 + index * 0.06) + phase) * 0.05 * wob + aim.current.y * 0.16 * h, stiff * 0.62, dt);
+    s.rotation.z = isDog ? 0 : tiltZ.step(opening ? 0 : Math.sin(t * (0.29 + index * 0.05) + phase * 1.3) * 0.05 * wob - aim.current.x * 0.16 * h, stiff * 0.62, dt);
 
     if (glow.current) {
       const m = glow.current.material as THREE.SpriteMaterial;
@@ -888,12 +935,39 @@ export function Gift3D({
     return !touchesBody && e.intersections.some((i) => moment(i.object));
   };
 
-  const click = (e: ThreeEvent<MouseEvent>) => {
+  /**
+   * Opening is a gesture, not a button (storyboard C): she presses and the lid lifts under
+   * her finger, the light inside leaks out, and it opens when she has lifted it far enough.
+   * Letting go early lets it fall shut with a soft knock. A quick tap still works — it just
+   * finishes the lift by itself, so the thing always has weight.
+   */
+  const press = (e: ThreeEvent<PointerEvent>) => {
     if (passThrough(e)) return;
     e.stopPropagation();
-    if (disabled || e.delta > 8) return;
-    onSelect(gift.id);
+    if (disabled) return;
+    held.current = true;
+    pressedAt.current = performance.now();
   };
+  const letGo = useCallback(() => {
+    if (!held.current) return;
+    held.current = false;
+    // a quick tap is a tap (it finishes the lift by itself); anything past a third of the
+    // way is a decision. Only a press that stops in between lets the lid fall back.
+    const quick = performance.now() - pressedAt.current < 260;
+    if (quick || hold.current > 0.35) {
+      finish.current = true; // carry the lift the rest of the way, then it opens
+    } else if (hold.current > 0.06) {
+      sound.thump(0.35); // it falls shut again
+    }
+  }, []);
+  useEffect(() => {
+    window.addEventListener('pointerup', letGo);
+    window.addEventListener('pointercancel', letGo);
+    return () => {
+      window.removeEventListener('pointerup', letGo);
+      window.removeEventListener('pointercancel', letGo);
+    };
+  }, [letGo]);
 
   useEffect(() => {
     if (disabled) return;
@@ -949,7 +1023,7 @@ export function Gift3D({
         )}
         <group
           ref={spin}
-          onClick={click}
+          onPointerDown={press}
           onPointerOver={(e) => {
             if (passThrough(e)) return;
             e.stopPropagation();
@@ -972,6 +1046,7 @@ export function Gift3D({
           <GiftBody
             gift={gift}
             progress={progress}
+            hold={hold}
             hover={hover}
             glass={glass}
             aim={aim}
