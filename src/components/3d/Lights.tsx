@@ -2,7 +2,7 @@ import { useMemo, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { Environment, Lightformer } from '@react-three/drei';
 import * as THREE from 'three';
-import { hoverLight, roomLights } from './sceneStore';
+import { finaleLights, hoverLight, roomLights } from './sceneStore';
 
 export type Mood = 'intro' | 'room' | 'final';
 
@@ -50,13 +50,16 @@ export function Lights({ mood = 'intro', cursorLight = false }: { mood?: Mood; c
     const ease = (o: { intensity: number } | null, v: number) => {
       if (o) o.intensity += (v - o.intensity) * k;
     };
-    ease(ambient.current, m.ambient);
-    ease(key.current, m.key);
-    ease(fill.current, m.fill);
-    ease(rimA.current, m.rimA);
-    ease(rimB.current, m.rimB);
-    ease(top.current, m.top);
-    scene.environmentIntensity += (m.env - scene.environmentIntensity) * k;
+    // the finale's surprise: the world grows quiet around the last gift, which gets a warm key
+    const hush = mood === 'final' ? finaleLights.hush : 0;
+    const gift = mood === 'final' ? finaleLights.gift : null;
+    ease(ambient.current, m.ambient * (1 - hush * 0.35));
+    ease(key.current, m.key * (1 - hush * 0.45));
+    ease(fill.current, m.fill * (1 - hush * 0.3));
+    ease(rimA.current, m.rimA * (1 - hush * 0.6));
+    ease(rimB.current, m.rimB * (1 - hush * 0.4));
+    ease(top.current, gift ? 17 : m.top);
+    scene.environmentIntensity += (m.env * (1 - hush * 0.3) - scene.environmentIntensity) * k;
 
     // the room re-aims two of the lights at its story (no lights are added or removed)
     const kp = 1 - Math.exp(-Math.min(dt, 0.05) * 2);
@@ -67,7 +70,7 @@ export function Lights({ mood = 'intro', cursorLight = false }: { mood?: Mood; c
       rimB.current.distance += ((heart ? 7 : 14) - rimB.current.distance) * kp;
     }
     if (top.current) {
-      const ch = mood === 'room' ? roomLights.character : null;
+      const ch = mood === 'room' ? roomLights.character : gift;
       if (ch) {
         top.current.position.lerp(tmpV.copy(ch).add(KEY_OFFSET), kp);
         topTarget.position.lerp(ch, kp);

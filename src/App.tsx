@@ -265,7 +265,55 @@ export default function App() {
     setFinalePhase('secret');
   }, []);
 
-  const backToRoom = useCallback(() => void transition('room'), [transition]);
+  /* ── The final surprise: a small state machine that only moves forward ── */
+  const surpriseSeen = useRef(false);
+  const advanceSurprise = useCallback((next: FinalePhase) => {
+    setFinalePhase((cur) => {
+      const allowed: Partial<Record<FinalePhase, FinalePhase[]>> = {
+        secret: ['quiet'],
+        quiet: ['question'],
+        question: ['sure', 'reveal'],
+        sure: ['reveal'],
+        reveal: ['waiting'],
+      };
+      return allowed[cur]?.includes(next) ? next : cur;
+    });
+  }, []);
+  // the timed steps (the choices are hers): secret → quiet → question, reveal → waiting
+  useEffect(() => {
+    if (stage !== 'final') return;
+    const s = birthdayConfig.surprise;
+    const fast = reducedMotion;
+    let id: ReturnType<typeof setTimeout> | undefined;
+    if (finalePhase === 'secret' && !surpriseSeen.current) {
+      // the last words finish rising (≈ 7.5 s), then a little calm — then the world changes
+      const lines = birthdayConfig.final.secretMessage.length;
+      id = setTimeout(() => {
+        surpriseSeen.current = true;
+        sound.duck(0.6);
+        advanceSurprise('quiet');
+      }, (1.8 + lines * 1.6 + 1.2 + s.delay) * 1000);
+    } else if (finalePhase === 'quiet') {
+      id = setTimeout(() => advanceSurprise('question'), fast ? 900 : 3000);
+    } else if (finalePhase === 'reveal') {
+      id = setTimeout(() => advanceSurprise('waiting'), fast ? 5200 : 10500);
+    }
+    return () => clearTimeout(id);
+  }, [stage, finalePhase, reducedMotion, advanceSurprise]);
+  const chooseDone = useCallback(() => {
+    sound.chime(2, 0.05);
+    advanceSurprise('sure');
+  }, [advanceSurprise]);
+  const chooseMore = useCallback(() => {
+    sound.flourish();
+    sound.duck(0.75);
+    advanceSurprise('reveal');
+  }, [advanceSurprise]);
+
+  const backToRoom = useCallback(() => {
+    sound.duck(0);
+    void transition('room');
+  }, [transition]);
 
   const replay = useCallback(() => {
     clearProgress();
@@ -348,7 +396,7 @@ export default function App() {
         )}
         {stage === 'final' && (
           <Suspense fallback={null}>
-            <FinalReveal phase={finalePhase} onOneMore={oneMore} onBackToRoom={backToRoom} onReplay={replay} />
+            <FinalReveal phase={finalePhase} onOneMore={oneMore} onBackToRoom={backToRoom} onReplay={replay} onChooseDone={chooseDone} onChooseMore={chooseMore} />
           </Suspense>
         )}
       </main>

@@ -22,3 +22,13 @@ export const roomLights = {
   heart: null as THREE.Vector3 | null,
   character: null as THREE.Vector3 | null,
 };
+
+/**
+ * The finale's final surprise, steered by FinalWorld:
+ *  • gift — where the last gift box sits: the top spot becomes its warm key light
+ *  • hush — 0..1, how quiet the rest of the world has grown (rims, key, environment dim)
+ */
+export const finaleLights = {
+  gift: null as THREE.Vector3 | null,
+  hush: 0,
+};

@@ -420,6 +420,28 @@ its own (index: `.claude/skills/README.md`). E.g. `video-to-superprompt`, `itera
 `no-ai-design-slop`. They are generic: when one disagrees with this file (theme, palette,
 push-to-main), this file wins.
 
+## The final surprise (after the finale's last words)
+
+A forward-only state machine in `App.tsx` (`advanceSurprise`, allowed moves only;
+`surpriseSeen` ref so it runs once per visit): `secret` → (last line + `surprise.delay` s)
+`quiet` → 3 s → `question` → her answer: `sure` ("I think so." → "Are you sure?", the gift
+peeks, then "There's more?") or straight to `reveal` → 10.5 s → `waiting` (stays).
+`FinalePhase` / `SURPRISE_PHASES` in `types.ts`. All words in `birthdayConfig.surprise`.
+- Words: `FinalReveal.tsx` (`.surprise*` in experience.css): "ink" reveal (clip + blur, delay
+  via the `--d` CSS var because reveal lines run two animations), glass answer buttons with
+  hover / focus-visible / press / selected (the other answer fades), focus moves to the first
+  answer, then into the words (`tabIndex=-1`) once the buttons are gone.
+- 3D: `FinalWorld` — the orb stops turning and eases to face her, a warm light (`beacon`)
+  leaves the orb and settles below it, the camera dollies down; on reveal the camera moves to
+  `FinalGift.tsx` (wine paper, champagne satin via `surface()`, flat bow loops, notched tails
+  that stir, a blank card, a light pool), the orb is hushed (`hush`), ParticleField quietens.
+  `waiting` reframes so the gift sits in the upper third above the last words.
+- Lights: no light added — `finaleLights` (sceneStore) steers the shared rig: the top spot
+  becomes the gift's warm key, `hush` dims the rims/key/env. Music ducks (`sound.duck`).
+- QA: `node qa-output/surprise.mjs W H [mobile] [path=a|b] [reduced] [again]` (seeds a visit with
+  every gift open, runs to the waiting scene; `again` re-enters the finale and checks it does not
+  run twice). `scripts/qa-keyboard.mjs` walks it by keyboard (and now waits for the iris, not `.veil`).
+
 ## Running & testing
 
 ```bash

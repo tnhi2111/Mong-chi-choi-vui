@@ -998,6 +998,234 @@ html[data-reduce] .room-whisper span {
   margin-top: 8px;
 }
 
+/* ── The final surprise ──────────────────────────────────────────────────── */
+/* the last words step back as the world grows still */
+.finale__block--secret.is-leaving {
+  opacity: 0;
+  transform: translateY(-10px);
+  filter: blur(3px);
+  transition: opacity 1.6s ease, transform 2s var(--ease-out), filter 1.6s ease;
+  pointer-events: none;
+}
+
+.surprise {
+  gap: 18px;
+}
+.surprise:focus {
+  outline: none;
+}
+
+/* words appear as if written: a soft left-to-right reveal, out of a slight blur */
+.surprise__ink {
+  opacity: 0;
+  animation: surprise-ink 1.6s var(--ease-out) var(--d, 0s) forwards;
+}
+@keyframes surprise-ink {
+  from {
+    opacity: 0;
+    filter: blur(6px);
+    clip-path: inset(-30% 100% -30% 0);
+    transform: translateY(6px);
+  }
+  60% {
+    opacity: 1;
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+    clip-path: inset(-30% -5% -30% 0);
+    transform: none;
+  }
+}
+
+.surprise__question {
+  margin: 0;
+  font-family: var(--serif);
+  font-weight: 300;
+  font-style: italic;
+  font-size: clamp(28px, 4.6vw, 48px);
+  line-height: 1.15;
+  color: #f4e6d6;
+  text-shadow: 0 0 30px rgba(232, 176, 150, 0.2);
+}
+.surprise__question--sure {
+  font-size: clamp(34px, 5.6vw, 58px);
+}
+.surprise__hint {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: clamp(17px, 2vw, 21px);
+  color: var(--text-dim);
+}
+
+.surprise__choices {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 14px;
+  margin-top: 10px;
+}
+
+/* an answer: a pane of warm glass with the words set in the page's serif */
+.surprise__choice {
+  appearance: none;
+  position: relative;
+  min-height: 52px;
+  min-width: 168px;
+  padding: 0 30px;
+  border-radius: 999px;
+  border: 1px solid rgba(241, 211, 214, 0.3);
+  background: linear-gradient(180deg, rgba(255, 236, 226, 0.09), rgba(255, 236, 226, 0.03));
+  backdrop-filter: blur(6px);
+  color: var(--text);
+  font-family: var(--serif);
+  font-size: clamp(19px, 2vw, 22px);
+  font-style: italic;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition:
+    transform 0.5s var(--ease-out),
+    border-color 0.4s ease,
+    background 0.4s ease,
+    box-shadow 0.5s ease,
+    opacity 0.5s ease,
+    filter 0.5s ease;
+}
+.surprise__choice:hover {
+  transform: translateY(-2px);
+  border-color: rgba(241, 211, 214, 0.62);
+  background: linear-gradient(180deg, rgba(255, 236, 226, 0.14), rgba(255, 236, 226, 0.05));
+  box-shadow: 0 10px 34px -12px rgba(212, 154, 165, 0.45);
+}
+.surprise__choice:focus-visible {
+  outline: none;
+  border-color: rgba(246, 220, 196, 0.9);
+  box-shadow:
+    0 0 0 3px rgba(11, 6, 8, 0.9),
+    0 0 0 5px rgba(232, 196, 160, 0.75);
+}
+.surprise__choice:active {
+  transform: translateY(0) scale(0.97);
+  transition-duration: 0.12s;
+}
+/* "There's more?" carries a faint warm light from inside */
+.surprise__choice--more {
+  border-color: rgba(232, 196, 160, 0.45);
+  box-shadow: inset 0 0 18px rgba(232, 176, 140, 0.12);
+}
+/* the chosen answer glows and holds; the other steps back */
+.surprise__choice[data-selected] {
+  transform: scale(1.04);
+  border-color: rgba(246, 220, 196, 0.95);
+  background: linear-gradient(180deg, rgba(255, 226, 206, 0.24), rgba(255, 226, 206, 0.08));
+  box-shadow:
+    0 0 40px rgba(232, 176, 140, 0.35),
+    inset 0 0 20px rgba(255, 220, 190, 0.18);
+}
+.surprise__choice:disabled {
+  opacity: 0;
+  filter: blur(4px);
+  transform: scale(0.96);
+  cursor: default;
+}
+.surprise[data-chosen] .surprise__question {
+  opacity: 0.5;
+  transition: opacity 0.5s ease;
+}
+
+/* the reveal: two lines, then — on their own — three words */
+.surprise__line {
+  margin: 0;
+  font-family: var(--serif);
+  font-weight: 300;
+  font-size: clamp(22px, 3.1vw, 34px);
+  line-height: 1.3;
+  color: #f4e6d6;
+}
+.surprise__line--first {
+  animation:
+    surprise-ink 1.6s var(--ease-out) var(--d, 0s) forwards,
+    surprise-recede 1.4s ease 5.8s forwards;
+}
+@keyframes surprise-recede {
+  to {
+    opacity: 0.38;
+  }
+}
+.surprise__look {
+  margin: 14px 0 0;
+  font-family: var(--serif);
+  font-style: italic;
+  font-weight: 400;
+  font-size: clamp(30px, 4.8vw, 52px);
+  letter-spacing: 0.02em;
+  color: #f7e3cf;
+  text-shadow: 0 0 36px rgba(240, 180, 140, 0.32);
+}
+
+/* the last words: a lead line, three quieter ones, and the wish in her handwriting font */
+.surprise--final {
+  gap: 12px;
+  max-width: 42em;
+}
+.surprise__lead {
+  font-family: var(--serif);
+  font-weight: 300;
+  font-size: clamp(24px, 3.2vw, 36px);
+  color: #f4e6d6;
+  line-height: 1.25;
+}
+.surprise__para {
+  font-family: var(--serif);
+  font-size: clamp(18px, 2.1vw, 22px);
+  line-height: 1.55;
+  color: rgba(246, 236, 231, 0.84);
+}
+.surprise__sign {
+  margin-top: 10px !important;
+  font-family: var(--hand);
+  font-size: clamp(26px, 3.2vw, 34px);
+  color: var(--blush);
+  text-shadow: 0 0 26px rgba(232, 160, 170, 0.25);
+}
+.surprise__back {
+  margin-top: 18px;
+  opacity: 0;
+  font-size: 11px;
+}
+.surprise__back.rise {
+  animation-name: surprise-back-in;
+}
+@keyframes surprise-back-in {
+  to {
+    opacity: 0.55;
+    transform: none;
+  }
+}
+
+@media (max-width: 520px) {
+  .surprise__choices {
+    flex-direction: column;
+    align-items: stretch;
+    width: min(320px, 100%);
+  }
+  .surprise--final {
+    gap: 9px;
+  }
+}
+
+/* reduced motion: everything is simply there (no writing, no receding) */
+html[data-reduce] .surprise__ink,
+html[data-reduce] .surprise__line--first {
+  animation: none;
+  opacity: 1;
+}
+html[data-reduce] .finale__block--secret.is-leaving {
+  transition: opacity 0.4s ease;
+  transform: none;
+  filter: none;
+}
+
 /* ── Music toggle ───────────────────────────────────────────────────────── */
 .music {
   position: fixed;

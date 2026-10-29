@@ -24,6 +24,9 @@ class SoundSystem {
   private ctx: AudioContext | null = null;
   private out: GainNode | null = null;
   private music: HTMLAudioElement | null = null;
+  /** 0 = the song at its own volume, 1 = silent (a quiet moment of the story lowers it) */
+  private duckLevel = 0;
+  private fadeId = 0;
   private listeners = new Set<Listener>();
   private hovering = new Set<string>();
   private lastHoverAt = new Map<string, number>();
@@ -86,7 +89,7 @@ class SoundSystem {
           this.music.volume = 0;
           this.music.preload = 'auto';
         }
-        this.music.play().then(() => this.fade(this.music!, this.volume, 1200)).catch(() => {});
+        this.music.play().then(() => this.fade(this.music!, this.volume * (1 - this.duckLevel), 1200)).catch(() => {});
       } else if (this.music) {
         const m = this.music;
         this.fade(m, 0, 500, () => m.pause());
@@ -102,10 +105,19 @@ class SoundSystem {
     this.listeners.forEach((fn) => fn(this.on));
   }
 
+  /** Lower the music under a quiet moment (0 = full, 1 = silent), or bring it back. */
+  duck(amount: number, ms = 1800): void {
+    this.duckLevel = Math.min(1, Math.max(0, amount));
+    if (this.music && this.musicOn) this.fade(this.music, this.volume * (1 - this.duckLevel), ms);
+  }
+
   private fade(el: HTMLAudioElement, to: number, ms: number, done?: () => void) {
     const from = el.volume;
     const start = performance.now();
+    // a newer fade takes over (no two fades fighting over the volume)
+    const id = ++this.fadeId;
     const step = (now: number) => {
+      if (id !== this.fadeId) return;
       const t = Math.min(1, (now - start) / ms);
       el.volume = from + (to - from) * t;
       if (t < 1) requestAnimationFrame(step);

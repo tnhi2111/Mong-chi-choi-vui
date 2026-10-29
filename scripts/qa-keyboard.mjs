@@ -52,10 +52,10 @@ try {
   console.log('• welcome focus:', await focused());
   await snap('welcome-focus');
   await page.keyboard.press('Enter');
-  // the room is shown once it has compiled (the veil lifts then) — wait for that, not a guess
-  await page.locator('.veil[data-on="false"]').waitFor({ state: 'attached', timeout: 15000 });
-  await page.waitForFunction(() => document.querySelector('.veil')?.getAttribute('data-on') === 'false', null, { timeout: 15000 });
-  await page.waitForTimeout(800);
+  // the room is shown once it has compiled (the iris opens then) — wait for that, not a guess
+  await page.locator('.gift-nav__btn').first().waitFor({ timeout: 20000 });
+  await page.waitForFunction(() => document.querySelector('.iris')?.getAttribute('data-on') === 'false', null, { timeout: 20000 });
+  await page.waitForTimeout(2800);
 
   const count = await page.locator('.gift-nav__btn').count();
   for (let i = 0; i < count; i++) {
@@ -86,6 +86,22 @@ try {
   await page.keyboard.press('Enter');
   await page.waitForTimeout(3000);
   await snap('secret');
+  // the final surprise: it starts by itself; the answers are reachable from the keyboard
+  await page.waitForFunction(() => document.querySelector('.finale')?.getAttribute('data-phase') === 'question', null, { timeout: 30000 });
+  await page.waitForTimeout(3000);
+  const q = await focused();
+  console.log('• surprise question focus:', q);
+  if (!q.includes('I think so')) problems.push('the first answer is not focused when the question appears');
+  await page.keyboard.press('Tab');
+  const f2 = await focused();
+  if (!f2.includes('more?')) problems.push(`Tab did not reach the second answer (got ${f2})`);
+  await snap('surprise-question');
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(() => document.querySelector('.finale')?.getAttribute('data-phase') === 'reveal', null, { timeout: 5000 });
+  await page.waitForFunction(() => document.querySelector('.finale')?.getAttribute('data-phase') === 'waiting', null, { timeout: 15000 });
+  await page.waitForTimeout(9000);
+  console.log('• waiting focus:', await focused());
+  await snap('surprise-waiting');
 } catch (e) {
   problems.push(`step failed: ${e.message.split('\n')[0]}`);
   await snap('failure');

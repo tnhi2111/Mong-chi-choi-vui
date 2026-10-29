@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import type { FinalePhase } from '../../types';
+import { SURPRISE_PHASES, type FinalePhase } from '../../types';
 import { MemoryCelestial, type MemoryCelestialHandle } from './MemoryCelestial';
 import { ParticleField } from './ParticleField';
 import { CameraRig } from './CameraRig';
 import { usePointerOrbit } from '../../hooks/usePointerOrbit';
 import { Glow } from './Glow';
+import { FinalGift } from './FinalGift';
+import { finaleLights } from './sceneStore';
 
 interface Props {
   phase: FinalePhase;
@@ -143,12 +145,37 @@ export function FinalWorld({ phase, photos, onFormed, reducedMotion, particleFac
   const t = useMemo(() => timing(reducedMotion), [reducedMotion]);
   const [isFormed, setIsFormed] = useState(false);
 
+  // ── the final surprise ──
+  const surprise = SURPRISE_PHASES.includes(phase);
+  const revealed = phase === 'reveal' || phase === 'waiting';
+  // where the last gift waits: below the orb, a step toward her
+  const giftLocal = useMemo(() => new THREE.Vector3(0, portrait ? -2.05 : -1.8, portrait ? 0.8 : 1.0), [portrait]);
+  const giftAppear = useRef({ current: 0 }).current;
+  const beacon = useRef<THREE.Sprite>(null);
+  const giftGroup = useRef<THREE.Group>(null);
+  const quietAt = useRef(-1);
+  const giftWorld = useMemo(() => new THREE.Vector3(), []);
+  useEffect(
+    () => () => {
+      finaleLights.gift = null;
+      finaleLights.hush = 0;
+    },
+    [],
+  );
+
   // the finale can be walked around too: drag turns the camera round the whole scene
   const orbit = usePointerOrbit({ enabled: true, sensitivity: 0.005, pitch: [-0.45, 0.6], zoom: [0.85, 1.2], friction: 2.2 });
 
   useFrame((_, dt) => {
     orbit.step(Math.min(dt, 0.05));
-    if (!orbit.dragging && orbit.idle() > 6 && !reducedMotion) {
+    if (surprise) {
+      // the world grows still: no more slow turning; it eases back to face her
+      if (!orbit.dragging && orbit.idle() > 1.5) {
+        const kk = 1 - Math.exp(-Math.min(dt, 0.05) * 0.6);
+        orbit.tYaw += (Math.round(orbit.tYaw / (Math.PI * 2)) * Math.PI * 2 - orbit.tYaw) * kk;
+        orbit.tPitch += (0 - orbit.tPitch) * kk;
+      }
+    } else if (!orbit.dragging && orbit.idle() > 6 && !reducedMotion) {
       // left alone, the world keeps turning slowly
       orbit.tYaw += Math.min(dt, 0.05) * 0.06;
       orbit.tPitch += (0 - orbit.tPitch) * (1 - Math.exp(-Math.min(dt, 0.05) * 0.4));
@@ -164,13 +191,30 @@ export function FinalWorld({ phase, photos, onFormed, reducedMotion, particleFac
       setBurst((b) => b + 1);
       onFormed();
     }
+    // the surprise: a single light leaves the orb and settles below it; the gift grows there
+    if (surprise && quietAt.current < 0) quietAt.current = T;
+    const q = quietAt.current < 0 ? 0 : THREE.MathUtils.smoothstep(T - quietAt.current, 0.4, reducedMotion ? 1.2 : 3.4);
+    giftAppear.current = revealed ? 1 : phase === 'sure' ? 0.38 : 0;
+    if (beacon.current) {
+      const b = beacon.current;
+      b.position.set(Math.sin(q * Math.PI) * 0.25, giftLocal.y * q + 0.05, giftLocal.z * q);
+      const m = b.material as THREE.SpriteMaterial;
+      const pulse = phase === 'sure' ? 0.15 * (0.5 + 0.5 * Math.sin(T * 2.4)) : 0;
+      const target = !surprise ? 0 : revealed ? 0.1 : 0.42 + pulse;
+      m.opacity += (target - m.opacity) * (1 - Math.exp(-Math.min(dt, 0.05) * 2));
+      b.scale.setScalar(0.55 + (revealed ? 0.6 : 0) + pulse);
+    }
+    finaleLights.hush += ((surprise ? (revealed ? 1 : 0.55) : 0) - finaleLights.hush) * (1 - Math.exp(-Math.min(dt, 0.05) * 1.2));
+    if (revealed && giftGroup.current) finaleLights.gift = giftGroup.current.getWorldPosition(giftWorld);
+    else finaleLights.gift = null;
+
     // the scattered light gathers into the orb while the photos drift in
     gathered.current = THREE.MathUtils.smoothstep(T, t.drift * 0.5, t.formed);
     if (coreGlow.current) {
       // a soft warm atmosphere round it — never a white blob
       const m = coreGlow.current.material as THREE.SpriteMaterial;
       const swell = formed.current ? Math.max(0, 1 - (T - t.formed) * 0.6) : 0;
-      m.opacity = gathered.current * 0.07 + swell * 0.06 + (phase === 'secret' ? 0.03 : 0);
+      m.opacity = (gathered.current * 0.07 + swell * 0.06 + (phase === 'secret' ? 0.03 : 0)) * (1 - finaleLights.hush * 0.6);
       coreGlow.current.scale.setScalar(4.2 + swell * 1.2);
     }
   });
@@ -181,15 +225,32 @@ export function FinalWorld({ phase, photos, onFormed, reducedMotion, particleFac
     : { gather: 8.6, formed: 9.6, secret: 10.6, look: -0.62, lookSecret: -0.95, heartY: 0.42 };
   const camZ = !isFormed ? frame.gather : phase === 'secret' ? frame.secret : frame.formed;
   const lookY = phase === 'secret' ? frame.lookSecret : frame.look;
+  // the surprise's camera: first a slow dolly down toward the light below the orb, then —
+  // when she asks for more — a gentle move to the gift (the orb stays above, as a backdrop)
+  const gy = frame.heartY + giftLocal.y;
+  const gz = giftLocal.z;
+  let camPos: [number, number, number] = [0, lookY, camZ];
+  let camLook: [number, number, number] = [0, lookY, 0];
+  if (phase === 'waiting') {
+    // the last words need the lower half: the gift rises to the upper third, a little farther
+    camPos = portrait ? [0.2, gy + 1.15, gz + 7.4] : [0.35, gy + 0.95, gz + 5.3];
+    camLook = portrait ? [0, gy - 1.75, gz] : [0, gy - 0.98, gz];
+  } else if (revealed) {
+    camPos = portrait ? [0.2, gy + 0.95, gz + 5.8] : [0.35, gy + 0.72, gz + 3.9];
+    camLook = portrait ? [0, gy - 0.95, gz] : [0, gy - 0.38, gz];
+  } else if (surprise) {
+    camPos = portrait ? [0, -1.75, 11.4] : [0, -1.15, 9.3];
+    camLook = portrait ? [0, -1.75, 0] : [0, -1.15, 0];
+  }
 
   return (
     <>
       <CameraRig
         // back to the room: dive into the orb (the room opens out of its own)
-        position={leaving ? [0, frame.heartY + 0.2, 3.1] : [0, lookY, camZ]}
-        lookAt={leaving ? [0, frame.heartY, 0] : [0, lookY, 0]}
-        parallax={reducedMotion || leaving ? 0 : 0.35}
-        speed={leaving ? 1.35 : isFormed ? 0.45 : 0.6}
+        position={leaving ? [0, frame.heartY + 0.2, 3.1] : camPos}
+        lookAt={leaving ? [0, frame.heartY, 0] : camLook}
+        parallax={reducedMotion || leaving ? 0 : surprise ? 0.12 : 0.35}
+        speed={leaving ? 1.35 : surprise ? 0.38 : isFormed ? 0.45 : 0.6}
         fov={leaving ? 52 : 40}
         orbit={orbit}
         orbitCamera
@@ -202,10 +263,16 @@ export function FinalWorld({ phase, photos, onFormed, reducedMotion, particleFac
           count={heartPoints}
           scale={portrait ? 1.05 : 1.35}
           assemble={gathered}
-          charge={phase === 'secret' ? 0.9 : isFormed ? 0.7 : 0.4}
-          interactive={isFormed}
+          charge={surprise ? 0.35 : phase === 'secret' ? 0.9 : isFormed ? 0.7 : 0.4}
+          interactive={isFormed && !surprise}
+          hush={revealed}
           reducedMotion={reducedMotion}
         />
+        {/* the final surprise: the light that leaves the orb, and the gift that grows from it */}
+        <Glow ref={beacon} color="#f2c29a" size={0.55} opacity={0} />
+        <group ref={giftGroup} position={giftLocal} scale={portrait ? 0.9 : 1}>
+          <FinalGift appear={giftAppear} reducedMotion={reducedMotion} />
+        </group>
         <MemoryFragments urls={photos} clock={clock} t={t} ringX={portrait ? 1.3 : 2.9} ringY={portrait ? 2.0 : 1.3} />
       </group>
       <ParticleField
@@ -213,7 +280,7 @@ export function FinalWorld({ phase, photos, onFormed, reducedMotion, particleFac
         radius={14}
         innerRadius={4}
         burstKey={burst + (phase === 'secret' ? 1 : 0)}
-        intensity={isFormed ? 0.9 : 0.5}
+        intensity={surprise ? 0.3 : isFormed ? 0.9 : 0.5}
         reducedMotion={reducedMotion}
       />
     </>

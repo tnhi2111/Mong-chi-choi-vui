@@ -129,6 +129,32 @@ export const birthdayConfig = {
     signature: '— {sender}',
   },
 
+  /**
+   * The final surprise: a few seconds after the finale's last words, one more question —
+   * and a gift that can't be opened through a screen (the real one is in your hands).
+   * Every line is plain text here; edit freely.
+   */
+  surprise: {
+    /** seconds of calm after the secret message's last line before the surprise begins */
+    delay: 5,
+    question: 'Do you think this is the last surprise?',
+    choiceDone: 'I think so.',
+    choiceMore: 'There’s more?',
+    /** after “I think so.” */
+    sure: 'Are you sure?',
+    sureHint: 'Look a little closer…',
+    reveal: ['You’re right.', 'But this one can’t be opened through a screen.'],
+    lookAround: 'Look around you.',
+    /** the last words, shown line by line; the scene then stays, quietly */
+    finalMessage: [
+      'You’ve reached the end of this little world.',
+      'But the best part of your birthday isn’t something I can put inside a screen.',
+      'There’s one last gift waiting for you.',
+      'And this time, you get to hold it.',
+      'Happy birthday, my baby teacher Hù Tá. ❤️',
+    ],
+  },
+
   music: {
     /**
      * Drop an mp3 into /public/audio/ and put its name here.
