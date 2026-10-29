@@ -172,9 +172,9 @@ export function RoomWorld({
     setMoment(null);
   }, [orbit]);
   const onMoment = useCallback(
-    (target: Moment, wish?: boolean) => {
+    (target: Moment, wish?: boolean | 'play') => {
       momentHit.current = true;
-      if (opening || paused) return;
+      if (opening || paused || wish === 'play') return;
       if (wish) {
         // a wish made, the candles out: a breath later, back to the room
         window.setTimeout(leaveMoment, 2300);
@@ -422,6 +422,7 @@ export function RoomWorld({
           interactive={!opening && !paused && !moment}
           onTap={allOpened ? onHeartTap : undefined}
           tapAfter={1100}
+          hush={opening}
           reducedMotion={reducedMotion}
           scale={portrait ? 0.7 : 0.86}
         />

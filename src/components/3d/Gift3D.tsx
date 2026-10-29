@@ -6,7 +6,7 @@ import { useShader } from './useShader';
 import type { Gift } from '../../data/gifts';
 import { Glow } from './Glow';
 import { getHeartGeometry } from './heartShape';
-import { getPaperTexture, getShadowTexture } from './glowTexture';
+import { getGlowTexture, getPaperTexture, getShadowTexture } from './glowTexture';
 import { Spring } from './CameraRig';
 import { sound } from '../../lib/audio';
 import { LetterDog } from './LetterDog';
@@ -385,8 +385,9 @@ function GiftBody({
         break;
     }
     if (light.current) {
-      (light.current.material as THREE.SpriteMaterial).opacity = open * 0.95;
-      light.current.scale.setScalar(0.4 + open * 1.6);
+      // a warm breath of light from inside — it shows the inside, it doesn't blind
+      (light.current.material as THREE.SpriteMaterial).opacity = open * 0.32;
+      light.current.scale.setScalar(0.4 + open * 0.9);
       light.current.position.y = (gift.shape === 'capsule' ? 0.3 : 0.1) + open * 0.4;
     }
     // warm the surface a touch when she hovers, and flare as it opens
@@ -408,7 +409,7 @@ function GiftBody({
           <mesh material={mats.ribbon}>
             <boxGeometry args={[0.605, 0.485, 0.1]} />
           </mesh>
-          <Glow ref={light} color="#fff1ee" size={0.4} opacity={0} />
+          <Glow ref={light} color="#ffc9a8" size={0.4} opacity={0} />
           {/* a brass tag on a thread, hanging from the ribbon at the front, not quite straight */}
           <group ref={tag} position={[0.05, 0.18, 0.31]}>
             <mesh position={[0, -0.05, 0.004]} material={mats.ribbon}>
@@ -686,6 +687,16 @@ export function Gift3D({
   const spin = useRef<THREE.Group>(null);
   const glow = useRef<THREE.Sprite>(null);
   const shadow = useRef<THREE.Mesh>(null);
+  // the "product shot" while it opens: a lit pedestal under it, a wash of its colour behind it
+  const pedestal = useRef<THREE.Group>(null);
+  const wash = useRef<THREE.Sprite>(null);
+  const backlight = useRef<THREE.Sprite>(null);
+  // two layers, as in a studio: the room behind sinks into a deep wine dark (it darkens —
+  // a pale layer would only fog it), and a halo of the gift's own colour lights it from behind
+  const washColor = useMemo(() => new THREE.Color('#14040a').lerp(new THREE.Color(gift.tint), 0.08), [gift.tint]);
+  const backColor = useMemo(() => new THREE.Color(gift.tint).offsetHSL(0, 0.2, -0.05), [gift.tint]);
+  const stage = useMemo(() => new Spring(0), []);
+  const recede = useMemo(() => new Spring(0), []);
   const label = useRef<HTMLDivElement>(null);
   const progress = useRef(0);
   const hover = useRef(0);
@@ -752,7 +763,36 @@ export function Gift3D({
     r.position.copy(tmp);
     // a gentle squash-and-rise "breath" when the opening begins
     const kick = Math.sin(Math.min(1, o * 3) * Math.PI) * 0.035 * (reducedMotion ? 0 : 1);
-    r.scale.setScalar(size * (isDog ? 1 : 1 + kick + e * 0.12));
+    // another gift is in the spotlight: this one steps back a little, out of its way
+    const back = recede.step(disabled && !opening && !isDog ? 1 : 0, 5, dt);
+    r.position.y -= back * 0.06;
+    r.scale.setScalar(size * (isDog ? 1 : 1 + kick + e * 0.12 - back * 0.07));
+
+    // the product shot: the pedestal rises in under it (a sprung scale, a slow turn), and its
+    // own colour washes in behind it — the room falls away without going dark or white
+    const st = stage.step(opening && !isDog ? THREE.MathUtils.smoothstep(o, 0.08, 0.7) : 0, 9, dt);
+    if (pedestal.current) {
+      const ps = Math.max(0.0001, st);
+      pedestal.current.scale.set(ps, ps, ps);
+      pedestal.current.visible = st > 0.002;
+      pedestal.current.rotation.y = t * 0.35;
+    }
+    if (wash.current) {
+      const m = wash.current.material as THREE.SpriteMaterial;
+      m.opacity = THREE.MathUtils.clamp(st, 0, 1) * 0.8;
+      wash.current.visible = m.opacity > 0.003;
+      // behind the gift, as seen from the camera
+      toCam.copy(r.position).sub(state.camera.position).normalize();
+      wash.current.position.copy(r.position).addScaledVector(toCam, 1.7);
+      wash.current.scale.setScalar(7.5);
+    }
+    if (backlight.current) {
+      const m = backlight.current.material as THREE.SpriteMaterial;
+      m.opacity = THREE.MathUtils.clamp(st, 0, 1) * 0.42;
+      backlight.current.visible = m.opacity > 0.003;
+      backlight.current.position.copy(r.position).addScaledVector(toCam, 0.8);
+      backlight.current.scale.setScalar(2.2 + st * 0.5);
+    }
 
     // idle sway; turns toward her hand when hovered; squares up to the camera while opening
     const idleY = reducedMotion ? 0 : Math.sin(t * (0.3 + index * 0.07) + phase) * (isDog ? 0.12 : 0.3);
@@ -765,9 +805,10 @@ export function Gift3D({
       const m = glow.current.material as THREE.SpriteMaterial;
       const base = opened ? 0.08 : 0.14;
       // light gathers round it first (the pause), then flares as it opens
-      const target = base + h * 0.16 + THREE.MathUtils.smoothstep(o, 0.0, 0.2) * 0.3 * (isDog ? 0.3 : 1) + THREE.MathUtils.smoothstep(o, 0.45, 1) * (isDog ? 0.12 : 1.1);
+      // (capped: the opening is lit by its pedestal and the colour behind it, never a white flare)
+      const target = base + h * 0.16 + THREE.MathUtils.smoothstep(o, 0.0, 0.2) * 0.18 * (isDog ? 0.3 : 1) + THREE.MathUtils.smoothstep(o, 0.45, 1) * (isDog ? 0.12 : 0.1);
       m.opacity += (target - m.opacity) * Math.min(1, dt * 5);
-      glow.current.scale.setScalar(1.5 + h * 0.4 + THREE.MathUtils.smoothstep(o, 0.5, 1) * 4);
+      glow.current.scale.setScalar(1.5 + h * 0.4 + THREE.MathUtils.smoothstep(o, 0.5, 1) * 0.8);
     }
 
     // contact shadow: tighter and darker close to the floor, soft and faint as it rises
@@ -836,8 +877,44 @@ export function Gift3D({
         <planeGeometry args={[1.3, 1.3]} />
         <meshBasicMaterial map={getShadowTexture()} color="#000000" transparent opacity={0.6} depthWrite={false} />
       </mesh>
+      {!isDog && (
+        <sprite ref={wash} visible={false} renderOrder={-2}>
+          <spriteMaterial map={getGlowTexture()} color={washColor} transparent opacity={0} depthWrite={false} toneMapped={false} />
+        </sprite>
+      )}
+      {!isDog && (
+        <sprite ref={backlight} visible={false} renderOrder={-1}>
+          <spriteMaterial map={getGlowTexture()} color={backColor} transparent opacity={0} depthWrite={false} blending={THREE.AdditiveBlending} toneMapped={false} />
+        </sprite>
+      )}
       <group ref={root} position={home}>
         <Glow ref={glow} color={gift.tint} size={1.5} opacity={0.14} position={isDog ? [0, 0.55, 0] : undefined} />
+        {!isDog && (
+          <group ref={pedestal} position={[0, -0.5, 0]} visible={false}>
+            {/* a dark lacquered disc, a fine champagne ring round its edge, a pool of light on it */}
+            <mesh>
+              <cylinderGeometry args={[0.46, 0.43, 0.04, 48]} />
+              <meshBasicMaterial color="#3b1720" />
+            </mesh>
+            <mesh position={[0, 0.021, 0]} rotation-x={Math.PI / 2}>
+              <torusGeometry args={[0.452, 0.006, 6, 64]} />
+              <meshBasicMaterial color="#e9c79e" />
+            </mesh>
+            <mesh position={[0, -0.021, 0]} rotation-x={Math.PI / 2}>
+              <torusGeometry args={[0.432, 0.004, 6, 64]} />
+              <meshBasicMaterial color="#a8705a" />
+            </mesh>
+            <mesh position={[0, 0.022, 0]} rotation-x={-Math.PI / 2}>
+              <planeGeometry args={[0.9, 0.9]} />
+              <meshBasicMaterial map={getGlowTexture()} color={gift.tint} transparent opacity={0.85} depthWrite={false} blending={THREE.AdditiveBlending} toneMapped={false} />
+            </mesh>
+            {/* the light falling from below onto the floor of the room */}
+            <mesh position={[0, -0.12, 0]} rotation-x={-Math.PI / 2}>
+              <planeGeometry args={[1.6, 1.6]} />
+              <meshBasicMaterial map={getGlowTexture()} color={gift.tint} transparent opacity={0.18} depthWrite={false} blending={THREE.AdditiveBlending} toneMapped={false} />
+            </mesh>
+          </group>
+        )}
         <group
           ref={spin}
           onClick={click}

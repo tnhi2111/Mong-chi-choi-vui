@@ -474,6 +474,8 @@ interface Props {
   charge?: number;
   /** Words may appear inside it (her memories, the secret phrase). */
   words?: boolean;
+  /** Something else is in the spotlight (a gift opening): the universe draws back. */
+  hush?: boolean;
 }
 
 const fineHover = () => typeof matchMedia !== 'undefined' && matchMedia('(hover: hover) and (pointer: fine)').matches;
@@ -485,7 +487,7 @@ const SEQ = 6.2; // the touch sequence, seconds
 const SECRET = 6.0;
 
 export const MemoryCelestial = forwardRef<MemoryCelestialHandle, Props>(function MemoryCelestial(
-  { count, scale = 1, interactive = false, reducedMotion = false, assemble: assembleIn = 1, onTap, tapAfter = 0, charge = 0.5, words = true },
+  { count, scale = 1, interactive = false, reducedMotion = false, assemble: assembleIn = 1, onTap, tapAfter = 0, charge = 0.5, words = true, hush = false },
   ref,
 ) {
   const geometry = useMemo(() => buildMotes(count), [count]);
@@ -624,6 +626,7 @@ export const MemoryCelestial = forwardRef<MemoryCelestialHandle, Props>(function
     hovering: false,
     nextSecret: false,
     clock: 0,
+    hush: 0,
   });
   const [hovered, setHovered] = useState(false);
 
@@ -702,7 +705,8 @@ export const MemoryCelestial = forwardRef<MemoryCelestialHandle, Props>(function
     // a camera passing close by never fills with its light
     grp.getWorldPosition(worldPos);
     const camGap = state.camera.position.distanceTo(worldPos);
-    const close = sm(camGap, 1.4 * scale + 0.4, 2.8 * scale + 0.6);
+    s.hush += ((hush ? 1 : 0) - s.hush) * (1 - Math.exp(-dt * 3));
+    const close = sm(camGap, 1.4 * scale + 0.4, 2.8 * scale + 0.6) * (1 - s.hush * 0.8);
     u.uOn.value = close;
     v.copy(worldPos).applyMatrix4(state.camera.matrixWorldInverse);
     u.uFocus.value = -v.z;
@@ -729,7 +733,7 @@ export const MemoryCelestial = forwardRef<MemoryCelestialHandle, Props>(function
       const m = halo.current.material as THREE.SpriteMaterial;
       m.opacity = (0.07 + charge * 0.04 + expand * 0.03) * close * assemble;
     }
-    if (light.current) light.current.intensity = (1.0 + charge * 0.9 + contact * 1.2 + collapse * 1.5) * assemble;
+    if (light.current) light.current.intensity = (1.0 + charge * 0.9 + contact * 1.2 + collapse * 1.5) * assemble * (1 - s.hush * 0.6);
 
     // the orbital paths: barely there, clearer while it is open
     pathU.uAlpha.value = (0.035 + expand * 0.26) * close * assemble;

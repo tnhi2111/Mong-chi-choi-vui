@@ -157,6 +157,21 @@ soft blob shadow on the floor that tightens as it lands.
   and key; the lid lifts, a tiny heart rises on its spindle and turns, a few chime notes.
   All new materials go through `surface()` (one shared program, pre-warmed via
   `createGiftMaterials`); motes reuse the hover-sparkle shader. Gift camera speed 2.0.
+- **Gift opening = a "product shot"** (from the owner's reference videos: product on a lit
+  floating platform, a backdrop in its own colour): in Gift3D a lacquered pedestal disc with a
+  champagne ring and a pool of light springs in under the rising gift (`stage` spring); behind
+  it (camera-relative sprites) a deep wine `wash` that DARKENS the room (a pale layer only fogs
+  it) plus an additive `backlight` in the gift's tint. The old flare (sprite → opacity ~1.5,
+  inner light 0.95) was the white blow-out — now capped (glow ≤ ~0.4, inner light 0.32, warm).
+  Other gifts `recede` (sink + shrink a little) while one is in the spotlight; the orb `hush`es.
+- **Hidden: the cake's exploded view** — in the cake moment, touch the "26" topper: tiers,
+  berries, candles lift and turn apart (vertex shader `uExplode`, per-part `aLayer` tag set
+  in `buildCake` via `P.layer`; `EXPLODE` consts shared with JS), flames/smoke ride in
+  `wickGroup`, the topper rises and turns once; an under-damped spring holds ~2.6 s, then it
+  lands with a bounce. The cake's big hit sphere wraps the topper, so `touch` reroutes when the
+  ray passes the topper (`userData.cakeTopper`); it calls `onTap('play')` so RoomWorld keeps
+  the moment (otherwise any unhandled click leaves it). QA: `qa-output/explode.mjs`,
+  `qa-output/giftshot.mjs` (args: W H [mobile] giftNo).
 - **The centerpiece is NOT a heart any more — the "memory celestial"** (`MemoryCelestial.tsx`,
   used by RoomWorld and by FinalWorld; owner: "do not make another heart"). A hand-shaped glass
   orb (`getOrbGeometry`, welded icosphere — unwelded it lit facet by facet) holding a small

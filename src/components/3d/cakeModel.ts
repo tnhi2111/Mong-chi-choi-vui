@@ -28,6 +28,8 @@ const TOP = CAKE.low.h + CAKE.up.h;
 
 class Parts {
   list: THREE.BufferGeometry[] = [];
+  /** which part of the exploded view what's added next belongs to (0 lower tier … 3 candles) */
+  layer = 0;
   add(g: THREE.BufferGeometry, color: THREE.ColorRepresentation, kind: CakeKind, ao = 1) {
     const f = g.index ? g.toNonIndexed() : g;
     if (g.index) g.dispose();
@@ -37,15 +39,16 @@ class Parts {
     const col = new Float32Array(n * 3);
     const k = new Float32Array(n).fill(kind);
     const occ = new Float32Array(n).fill(ao);
+    f.setAttribute('aLayer', new THREE.BufferAttribute(new Float32Array(n).fill(this.layer), 1));
     for (let i = 0; i < n; i++) col.set([c.r, c.g, c.b], i * 3);
     f.setAttribute('aColor', new THREE.BufferAttribute(col, 3));
     f.setAttribute('aKind', new THREE.BufferAttribute(k, 1));
     f.setAttribute('aAO', new THREE.BufferAttribute(occ, 1));
-    for (const name of Object.keys(f.attributes)) if (!['position', 'normal', 'aColor', 'aKind', 'aAO'].includes(name)) f.deleteAttribute(name);
+    for (const name of Object.keys(f.attributes)) if (!['position', 'normal', 'aColor', 'aKind', 'aAO', 'aLayer'].includes(name)) f.deleteAttribute(name);
     this.list.push(f);
   }
   merge(): THREE.BufferGeometry {
-    const names = ['position', 'normal', 'aColor', 'aKind', 'aAO'];
+    const names = ['position', 'normal', 'aColor', 'aKind', 'aAO', 'aLayer'];
     const total = this.list.reduce((a, g) => a + g.attributes.position.count, 0);
     const out = new THREE.BufferGeometry();
     for (const name of names) {
@@ -160,6 +163,7 @@ export function buildCake(): CakeData {
   const cream = '#fbe8e6';
   // the tiers
   P.add(tier(CAKE.low.r, CAKE.low.h, 0), blushLow, 0);
+  P.layer = 1;
   P.add(tier(CAKE.up.r, CAKE.up.h, UP_BASE), blush, 0);
   // a raspberry glaze dripping from the upper tier's edge
   {
@@ -185,8 +189,9 @@ export function buildCake(): CakeData {
     P.add(cap, '#9c1f42', 5);
   }
   // piped shell borders at the foot of each tier
-  shells(P, CAKE.low.r + 0.004, 0.018, 40, cream);
   shells(P, CAKE.up.r + 0.004, UP_BASE + 0.016, 28, cream);
+  P.layer = 0;
+  shells(P, CAKE.low.r + 0.004, 0.018, 40, cream);
   // a string of sugar pearls round the lower tier's top edge
   for (let i = 0; i < 46; i++) {
     const a = (i / 46) * Math.PI * 2;
@@ -208,10 +213,12 @@ export function buildCake(): CakeData {
       [5.15, 0.29, 0.9, 0.25],
     ] as const
   ).forEach(([a, r, s, t]) => strawberry(P, Math.cos(a) * r, UP_BASE + 0.006, Math.sin(a) * r, s, a * 2, t));
+  P.layer = 2;
   strawberry(P, 0.1, TOP + 0.01, -0.09, 1.15, 0.4, 0.35);
   strawberry(P, 0.15, TOP + 0.01, -0.04, 0.9, 1.6, -0.3);
   strawberry(P, -0.13, TOP + 0.01, -0.1, 1.0, 2.6, 0.2);
   // two sugar flowers on the upper tier's side, and two tiny hearts beside them
+  P.layer = 1;
   const flower = (a: number, y: number, s: number, col: string) => {
     const r = CAKE.up.r + 0.008;
     const cx = Math.cos(a) * r;
@@ -242,6 +249,7 @@ export function buildCake(): CakeData {
     P.add(h, '#b3223c', 1);
   }
   // candles: slender wax, different heights, a drip each, a wick
+  P.layer = 3;
   const flames: [number, number, number][] = [];
   (
     [
@@ -268,7 +276,17 @@ export function buildCake(): CakeData {
   return { geometry: P.merge(), flames };
 }
 
+/**
+ * The exploded view (a hidden flourish): how far each part of the cake lifts and turns.
+ * The lower tier stays; the upper tier (and what sits on it) lifts and turns one way; the
+ * berries on top lift a little more; the candles most, turning the other way.
+ * Shared by the vertex shader and the JS that moves the flames and the topper with them.
+ */
+export const EXPLODE = { upper: 0.17, top: 0.25, candles: 0.33, turnUpper: 0.55, turnCandles: -0.45 };
+
 export const cakeVertex = /* glsl */ `
+  uniform float uExplode;
+  attribute float aLayer;
   attribute vec3 aColor;
   attribute float aKind;
   attribute float aAO;
@@ -278,14 +296,24 @@ export const cakeVertex = /* glsl */ `
   varying float vKind;
   varying float vAO;
   varying float vY;
+  vec2 turn(vec2 v, float a) { float c = cos(a), s = sin(a); return vec2(c * v.x - s * v.y, s * v.x + c * v.y); }
   void main() {
-    vec4 w = modelMatrix * vec4(position, 1.0);
+    vec3 p = position;
+    vec3 nn = normal;
+    float candle = step(2.5, aLayer);
+    float upper = step(0.5, aLayer) * (1.0 - candle);
+    float lift = candle > 0.5 ? ${EXPLODE.candles.toFixed(3)} : aLayer > 1.5 ? ${EXPLODE.top.toFixed(3)} : upper * ${EXPLODE.upper.toFixed(3)};
+    float ang = uExplode * (candle > 0.5 ? ${EXPLODE.turnCandles.toFixed(3)} : upper * ${EXPLODE.turnUpper.toFixed(3)});
+    p.xz = turn(p.xz, ang);
+    nn.xz = turn(nn.xz, ang);
+    p.y += lift * uExplode;
+    vec4 w = modelMatrix * vec4(p, 1.0);
     vWorld = w.xyz;
-    vN = normalize(mat3(modelMatrix) * normal);
+    vN = normalize(mat3(modelMatrix) * nn);
     vColor = aColor;
     vKind = aKind;
     vAO = aAO;
-    vY = position.y;
+    vY = position.y;  // (rest height: the baked shading keeps to the part, wherever it is)
     gl_Position = projectionMatrix * viewMatrix * w;
   }
 `;

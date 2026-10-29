@@ -10,7 +10,7 @@ import { getHeartGeometry } from './heartShape';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { RoomProps, roomLamps, roomRugs, furnitureBlobs, cakePosition, LAYOUT } from './RoomProps';
 import { surface } from './Gift3D';
-import { buildCake, cakeVertex, cakeFragment, sparkleGeometry, sparkleVertex, sparkleFragment, ringGeometry, ringVertex, ringFragment } from './cakeModel';
+import { buildCake, cakeVertex, cakeFragment, sparkleGeometry, sparkleVertex, sparkleFragment, ringGeometry, ringVertex, ringFragment, EXPLODE } from './cakeModel';
 import { Glow } from './Glow';
 import { BirthdaySign, metalVertex, metalFragment, satinVertex, satinFragment, mergeAll } from './BirthdaySign';
 
@@ -864,7 +864,16 @@ function numeralPaths(): THREE.Vector3[][] {
   return [two, six];
 }
 
-function CakeTopper({ y, outward }: { y: number; outward: THREE.Vector2 }) {
+function CakeTopper({ y, outward, explode, onTap }: { y: number; outward: THREE.Vector2; explode: { current: number }; onTap: (e: ThreeEvent<MouseEvent>) => void }) {
+  const lift = useRef<THREE.Group>(null);
+  // the exploded view: the topper rises above the candles and turns once on its picks
+  useFrame(() => {
+    const g = lift.current;
+    if (!g) return;
+    const e = explode.current;
+    g.position.y = e * (EXPLODE.candles + 0.08);
+    g.rotation.y = Math.max(0, e) * Math.PI * 2;
+  });
   const parts = useMemo(() => {
     const [two, six] = numeralPaths();
     const tube = (pts: THREE.Vector3[], dx: number) => {
@@ -883,6 +892,14 @@ function CakeTopper({ y, outward }: { y: number; outward: THREE.Vector2 }) {
   const H = 0.19;
   return (
     <group position={[outward.x * 0.1, y, outward.y * 0.1]} rotation-y={face}>
+      <group
+        ref={lift}
+        name="cake-topper"
+        userData={{ moment: true }}
+        onClick={onTap}
+        onPointerOver={() => (document.body.style.cursor = 'pointer')}
+        onPointerOut={() => (document.body.style.cursor = '')}
+      >
       <group position={[0, 0.12, 0]} scale={H} rotation={[0.12, 0, -0.03]}>
         <mesh geometry={parts.two} material={gold} />
         <mesh geometry={parts.six} material={gold} />
@@ -892,6 +909,12 @@ function CakeTopper({ y, outward }: { y: number; outward: THREE.Vector2 }) {
           <cylinderGeometry args={[0.004, 0.003, 0.17, 6]} />
         </mesh>
       ))}
+      {/* (a generous invisible target round the numerals) */}
+      <mesh position={[0, 0.2, 0]} userData={{ cakeTopper: true }}>
+        <boxGeometry args={[0.24, 0.24, 0.1]} />
+        <meshBasicMaterial transparent opacity={0} depthWrite={false} colorWrite={false} />
+      </mesh>
+      </group>
     </group>
   );
 }
@@ -914,7 +937,7 @@ function Cake({
   /** the camera has leant in close (RoomWorld's focus) */
   focused?: boolean;
   /** a touch on the cake: first the camera leans in; touched again, she makes a wish */
-  onTap?: (wish: boolean) => void;
+  onTap?: (wish: boolean | 'play') => void;
 }) {
   const TABLE_H = 0.72;
   const wood = useMemo(() => new THREE.MeshBasicMaterial({ color: '#2c170d' }), []);
@@ -953,6 +976,7 @@ function Cake({
       uTime: { value: 0 },
       uWarm: { value: 0 },
       uRoomDir: { value: new THREE.Vector3(-outward[0], 0, -outward[2]).normalize() },
+      uExplode: { value: 0 },
     }),
     [cake], // eslint-disable-line react-hooks/exhaustive-deps
   );
@@ -1011,6 +1035,14 @@ function Cake({
   const focusAmt = useRef(0);
   const flare = useRef(0);
   const glow = useRef<THREE.Sprite>(null);
+  // the hidden flourish: touch the "26" once she has leant in — the cake comes apart in
+  // the air like an exploded drawing (tiers, berries, candles, each lifting and turning on
+  // its own), holds for a breath, then settles back together with a little bounce
+  const explode = useRef(0);
+  const explodeV = useRef(0);
+  const explodeUntil = useRef(-1);
+  const wickGroup = useRef<THREE.Group>(null);
+  const flameAt = useMemo(() => new THREE.Vector3(), []);
   useFrame((state, rawDt) => {
     const t = state.clock.elapsedTime;
     const dt = Math.min(rawDt, 0.05);
@@ -1035,10 +1067,29 @@ function Cake({
     cakeU.uWarm.value = Math.max(hover.current, focusAmt.current);
     sparkleU.uTime.value = t;
     sparkleU.uOn.value = Math.max(hover.current * 0.7, focusAmt.current) * (0.4 + 0.6 * lit);
+    // an under-damped spring: it opens with a soft overshoot and lands with a small bounce
+    const goal = t < explodeUntil.current ? 1 : 0;
+    const kS = goal ? 34 : 46;
+    const damp = goal ? 6.5 : 5.2;
+    explodeV.current += ((goal - explode.current) * kS - explodeV.current * damp) * dt;
+    explode.current += explodeV.current * dt;
+    if (!goal && Math.abs(explode.current) < 1e-4 && Math.abs(explodeV.current) < 1e-3) explode.current = explodeV.current = 0;
+    const ex = explode.current * (motion > 0.5 ? 1 : 0.35);
+    cakeU.uExplode.value = ex;
+    const candleTurn = ex * EXPLODE.turnCandles;
+    if (wickGroup.current) {
+      wickGroup.current.position.y = ex * EXPLODE.candles;
+      wickGroup.current.rotation.y = candleTurn;
+    }
     const m = cakeMesh.current;
     if (m) {
       m.updateWorldMatrix(true, false);
-      cake.flames.forEach((f, i) => cakeU.uFlames.value[i].copy(flameLocal.set(f[0], f[1], f[2]).applyMatrix4(m.matrixWorld)));
+      cake.flames.forEach((f, i) => {
+        // (the flames ride with their candles)
+        flameAt.set(f[0], f[1], f[2]).applyAxisAngle(THREE.Object3D.DEFAULT_UP, candleTurn);
+        flameAt.y += ex * EXPLODE.candles;
+        cakeU.uFlames.value[i].copy(flameLocal.copy(flameAt).applyMatrix4(m.matrixWorld));
+      });
     }
     // her hand near it: the cake rises a breath and grows a hair — nothing more
     if (body.current) {
@@ -1062,9 +1113,24 @@ function Cake({
     sound.blow();
     setTimeout(() => sound.flourish(), 450);
   };
-  const touch = (e: ThreeEvent<MouseEvent>) => {
+  const takeApart = (e: ThreeEvent<MouseEvent>): void => {
     e.stopPropagation();
     if (e.delta > 8) return;
+    // only close up — from across the room the "26" is part of the cake like everything else
+    if (!focused || !onTap) return touch(e);
+    if (explode.current > 0.05 || now.current < explodeUntil.current) return;
+    onTap('play'); // (stay close: this touch belongs to the moment)
+    explodeUntil.current = now.current + 2.6;
+    explodeV.current = 0;
+    [0, 3, 5, 7].forEach((p, i) => setTimeout(() => sound.chime(p, 0.035), i * 90));
+    setTimeout(() => sound.chime(2, 0.03), 2600 + 380);
+  };
+  const touch = (e: ThreeEvent<MouseEvent>): void => {
+    e.stopPropagation();
+    if (e.delta > 8) return;
+    // (the cake's generous target wraps the topper too: a touch that passes through the
+    // "26" belongs to it)
+    if (focused && e.intersections.some((i) => i.object.userData.cakeTopper)) return takeApart(e);
     if (!onTap) return blowOut();
     if (focused) {
       // close enough to make a wish: she blows the candles out
@@ -1123,9 +1189,11 @@ function Cake({
           <meshBasicMaterial transparent opacity={0} depthWrite={false} colorWrite={false} />
         </mesh>
       </group>
-      <CakeTopper y={top + 0.46} outward={out} />
-      <points geometry={flames} material={flameMat} frustumCulled={false} />
-      <points geometry={smoke} material={smokeMat} frustumCulled={false} />
+      <CakeTopper y={top + 0.46} outward={out} explode={explode} onTap={takeApart} />
+      <group ref={wickGroup}>
+        <points geometry={flames} material={flameMat} frustumCulled={false} />
+        <points geometry={smoke} material={smokeMat} frustumCulled={false} />
+      </group>
 
       {/* the secret: a little glowing letter leaning against the table leg, on the far side */}
       <group position={[along.x * 0.45 + out.x * 0.3, 0.09, along.y * 0.45 + out.y * 0.3]} rotation={[-0.25, Math.atan2(along.x, along.y), 0.08]}>
@@ -1407,7 +1475,8 @@ interface Props {
   /** a hidden moment in progress: the camera has leant in to the cake or the sign */
   focus?: 'cake' | 'sign' | null;
   /** the cake or the sign was touched (`wish`: touched again, close up — candles blown) */
-  onMoment?: (target: 'cake' | 'sign', wish?: boolean) => void;
+  /** `wish`: touched again close up (candles blown); `'play'`: a touch that stays in the moment */
+  onMoment?: (target: 'cake' | 'sign', wish?: boolean | 'play') => void;
 }
 
 export function RoomSet({ floorY: stageY, rx, rz, heart, reducedMotion, hoverFx, portrait, dogSpot, giftSpot, focus = null, onMoment }: Props) {
