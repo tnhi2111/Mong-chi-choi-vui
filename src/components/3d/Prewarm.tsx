@@ -4,10 +4,14 @@ import * as THREE from 'three';
 import type { Gift } from '../../data/gifts';
 import { createGiftMaterials } from './Gift3D';
 import { celestialVertex, celestialFragment, orbGlassVertex, orbGlassFragment, lineVertex, lineFragment, getOrbGeometry } from './MemoryCelestial';
-import { createFloorMaterial } from './RoomWorld';
+import { createFloorMaterial, FLOOR_Y } from './RoomWorld';
 import { createHeartMaterial } from './heartMaterial';
 import { createLetterDogMaterials } from './LetterDog';
 import { loadLetterDog } from './letterDogGeometry';
+import { getPropsGeometry } from './RoomProps';
+import { getSignGlyphs, getSignLetters, SIGN_CHARS } from './BirthdaySign';
+import { getCake } from './cakeModel';
+import { WALL_R, WINDOW_ANGLE, SIGN_PLACEMENT } from './RoomSet';
 
 /*
  * Compiling a physically based shader takes a few hundred milliseconds on some
@@ -29,7 +33,20 @@ let done = false;
 
 const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-export function Prewarm({ gifts, glass, solidHeart, delay = 500 }: { gifts: Gift[]; glass: boolean; solidHeart: boolean; delay?: number }) {
+export function Prewarm({
+  gifts,
+  glass,
+  solidHeart,
+  portrait = false,
+  delay = 500,
+}: {
+  gifts: Gift[];
+  glass: boolean;
+  solidHeart: boolean;
+  /** The sign is laid out differently on a phone — build the one she will see. */
+  portrait?: boolean;
+  delay?: number;
+}) {
   const gl = useThree((s) => s.gl);
   const scene = useThree((s) => s.scene);
   const camera = useThree((s) => s.camera);
@@ -57,6 +74,13 @@ export function Prewarm({ gifts, glass, solidHeart, delay = 500 }: { gifts: Gift
     add(createFloorMaterial());
     // the letter-carrying puppy: sculpt it in a worker now, and compile its fur and face
     void loadLetterDog();
+    // and build the furnished room itself now (one merged mesh, tens of milliseconds):
+    // entering the room then only has to draw it
+    getPropsGeometry(FLOOR_Y, WALL_R, WINDOW_ANGLE);
+    // the sign's letters (a canvas atlas and the geometry along the wall) and the cake:
+    // the three heaviest things the room makes for itself
+    getSignLetters(getSignGlyphs(SIGN_CHARS, true), SIGN_PLACEMENT[portrait ? 'portrait' : 'landscape'].radius);
+    getCake();
     Object.values(createLetterDogMaterials()).forEach(add);
     if (solidHeart) add(createHeartMaterial(glass).material);
     // the memory celestial (room + finale): shape its glass now, compile its glass passes,
@@ -110,7 +134,7 @@ export function Prewarm({ gifts, glass, solidHeart, delay = 500 }: { gifts: Gift
     return () => {
       cancelled = true;
     };
-  }, [gl, scene, camera, gifts, glass, solidHeart, delay]);
+  }, [gl, scene, camera, gifts, glass, solidHeart, portrait, delay]);
 
   return null;
 }

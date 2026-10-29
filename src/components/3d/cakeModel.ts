@@ -155,6 +155,12 @@ export interface CakeData {
   flames: [number, number, number][];
 }
 
+let cakeCache: CakeData | null = null;
+/** The cake is always the same cake: build it once (Prewarm does it during the welcome). */
+export function getCake(): CakeData {
+  return (cakeCache ??= buildCake());
+}
+
 export function buildCake(): CakeData {
   seed = 11;
   const P = new Parts();

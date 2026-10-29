@@ -45,7 +45,8 @@ interface Props {
   drawIn?: boolean;
 }
 
-const FLOOR_Y = -0.95;
+/** The room's floor (the stage stands a step above it). Prewarm needs it too. */
+export const FLOOR_Y = -0.95;
 /** The centerpiece orb — every arrival pulls back out of it, every departure dives into it. */
 const ORB_Y = 0.3;
 /** Where the camera stands, in front of the orb, at the cut (un-rotated; the orbit swings it). */

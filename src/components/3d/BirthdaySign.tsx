@@ -129,6 +129,32 @@ function drawGlyphs(chars: string[]): Glyphs {
 }
 
 /** One quad per letter per layer (and one halo quad behind each), laid along the arc. */
+/**
+ * The letters cost the most of anything in the room to prepare: a canvas atlas (measuring
+ * and drawing every glyph) and the geometry laid out along the wall — together about a
+ * sixth of a second. Both are kept here so `Prewarm` can make them during the welcome and
+ * the room only has to draw them. Keyed, so a late font load or another layout rebuilds.
+ */
+let glyphCache: { key: string; glyphs: Glyphs } | null = null;
+let lettersCache: { key: string; value: ReturnType<typeof letterGeometry> } | null = null;
+
+/** Every character the sign needs — its own list, so Prewarm does not need the component. */
+export const SIGN_CHARS = [...new Set(SIGN_LINES.flatMap((l) => [...l.text.replace(/ /g, '')].map((c) => l.style + c)))];
+
+export function getSignGlyphs(chars: string[] = SIGN_CHARS, ready = true): Glyphs {
+  const key = `${chars.join('')}|${ready}`;
+  if (glyphCache?.key === key) return glyphCache.glyphs;
+  glyphCache = { key, glyphs: drawGlyphs(chars) };
+  return glyphCache.glyphs;
+}
+
+export function getSignLetters(glyphs: Glyphs, R: number) {
+  const key = `${R}|${glyphCache?.key ?? ''}`;
+  if (lettersCache?.key === key) return lettersCache.value;
+  lettersCache = { key, value: letterGeometry(glyphs, SIGN_LINES, R) };
+  return lettersCache.value;
+}
+
 function letterGeometry(glyphs: Glyphs, lines: typeof SIGN_LINES, R: number) {
   const pos: number[] = [];
   const uv: number[] = [];
@@ -417,20 +443,9 @@ export function BirthdaySign({ floorY, radius, scale, drop = 0.32, heart, motion
   // built in "sign space": feet of the room at y = 0, centred on the back of the room;
   // the group scales about the sign's own centre
   const R = radius;
-  const glyphs = useMemo(() => drawGlyphs(chars), [chars, fontReady]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => () => [glyphs.mask, glyphs.soft, glyphs.halo].forEach((t) => t.dispose()), [glyphs]);
-  const { letters, halos, halfWidths } = useMemo(
-    () =>
-      letterGeometry(glyphs, SIGN_LINES, R),
-    [glyphs, R],
-  );
-  useEffect(
-    () => () => {
-      letters.dispose();
-      halos.dispose();
-    },
-    [letters, halos],
-  );
+  // (both are cached between visits — see getSignGlyphs; nothing is disposed on unmount)
+  const glyphs = useMemo(() => getSignGlyphs(chars, fontReady), [chars, fontReady]);
+  const { letters, halos, halfWidths } = useMemo(() => getSignLetters(glyphs, R), [glyphs, R]);
 
   // the arch, its cables and bulbs, the hanging heart, posies and ribbons
   const parts = useMemo(() => {

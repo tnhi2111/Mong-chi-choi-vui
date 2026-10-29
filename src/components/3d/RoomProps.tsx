@@ -955,22 +955,34 @@ interface Props {
   motion: number;
 }
 
+/**
+ * The furnished room is one merged mesh, and building it costs tens of milliseconds. It is
+ * always built with the same three numbers, so keep it: `Prewarm` asks for it during the
+ * welcome (when nothing is moving but CSS), and entering the room then only has to draw it.
+ */
+let cached: { key: string; geo: THREE.BufferGeometry } | null = null;
+
+export function getPropsGeometry(floorY: number, wallR: number, windowAngle: number): THREE.BufferGeometry {
+  const key = `${floorY}|${wallR}|${windowAngle}`;
+  if (cached?.key === key) return cached.geo;
+  const merged = buildProps(floorY, wallR);
+  // the curtain rod, following the curve of the wall above the window
+  const b = new Builder();
+  b.setAnchor(ANCHOR.window);
+  const pts: THREE.Vector3[] = [];
+  for (let i = 0; i <= 24; i++) {
+    const a = windowAngle + ((i / 24 - 0.5) * 3.1) / (wallR - 0.3);
+    pts.push(new THREE.Vector3(Math.sin(a) * (wallR - 0.3), floorY + 3.0, -Math.cos(a) * (wallR - 0.3)));
+  }
+  b.add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 40, 0.018, 6, false), new THREE.Matrix4(), BRASS, 4);
+  b.parts.unshift(merged);
+  cached = { key, geo: b.merge() };
+  return cached.geo;
+}
+
 export function RoomProps({ floorY, windowAngle, wallR, candleVec, candleCount, heart, motion }: Props) {
-  const geo = useMemo(() => {
-    const merged = buildProps(floorY, wallR);
-    // the curtain rod, following the curve of the wall above the window
-    const b = new Builder();
-    b.setAnchor(ANCHOR.window);
-    const pts: THREE.Vector3[] = [];
-    for (let i = 0; i <= 24; i++) {
-      const a = windowAngle + ((i / 24 - 0.5) * 3.1) / (wallR - 0.3);
-      pts.push(new THREE.Vector3(Math.sin(a) * (wallR - 0.3), floorY + 3.0, -Math.cos(a) * (wallR - 0.3)));
-    }
-    b.add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 40, 0.018, 6, false), new THREE.Matrix4(), BRASS, 4);
-    b.parts.unshift(merged);
-    return b.merge();
-  }, [floorY, wallR, windowAngle]);
-  useEffect(() => () => geo.dispose(), [geo]);
+  const geo = useMemo(() => getPropsGeometry(floorY, wallR, windowAngle), [floorY, wallR, windowAngle]);
+  // (not disposed on unmount: it is cached and reused the next time she comes in)
 
   const light = useMemo(
     () => ({

@@ -10,7 +10,7 @@ import { getHeartGeometry } from './heartShape';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { RoomProps, roomLamps, roomRugs, furnitureBlobs, cakePosition, LAYOUT } from './RoomProps';
 import { surface } from './Gift3D';
-import { buildCake, cakeVertex, cakeFragment, sparkleGeometry, sparkleVertex, sparkleFragment, ringGeometry, ringVertex, ringFragment, EXPLODE } from './cakeModel';
+import { getCake, cakeVertex, cakeFragment, sparkleGeometry, sparkleVertex, sparkleFragment, ringGeometry, ringVertex, ringFragment, EXPLODE } from './cakeModel';
 import { Glow } from './Glow';
 import { BirthdaySign, metalVertex, metalFragment, satinVertex, satinFragment, mergeAll } from './BirthdaySign';
 
@@ -75,7 +75,7 @@ export const SIGN_PLACEMENT = {
 }; // a small private room (the camera stands outside it: see CUT)
 const WALL_H = 6.2;
 /** Direction of the window: back-left, so the HAPPY BIRTHDAY installation owns the centre. */
-const WINDOW_ANGLE = -0.78; // measured as atan(x, -z)
+export const WINDOW_ANGLE = -0.78; // measured as atan(x, -z)
 /** Where the moonlight from the window falls on the floor. */
 const MOON: [number, number] = [Math.sin(WINDOW_ANGLE) * 4.9, -Math.cos(WINDOW_ANGLE) * 4.9];
 /** The stage stands this much above the wooden floor (two steps). */
@@ -966,7 +966,7 @@ function Cake({
 
   const top = TABLE_H + 0.02;
   // the cake model (built once); its flames are where its candles' wicks are
-  const cake = useMemo(buildCake, []);
+  const cake = useMemo(getCake, []);
   useEffect(() => () => cake.geometry.dispose(), [cake]);
   const candleTops = useMemo(() => cake.flames.map(([x, y, z]) => [x, top + y - 0.03, z] as [number, number, number]), [cake, top]);
   const cakeU = useMemo(

@@ -530,6 +530,16 @@ QA: `?debug` → `window.__giftHold` = `{ id, hold, held }`; `qa-output/tmp/hold
 [--short]` films a press, a hold and an early release (the camera leans in, the lid lifts,
 it opens — or falls shut).
 
+**Entering the room, 347 ms → 236 ms** (a CPU profile, not a guess: `qa-output/profile2.mjs`
+showed the cost was `useMemo` geometry builds and `measureText`). The three heaviest things
+the room used to make for itself are now built during the welcome by `Prewarm`, kept in
+module caches and never disposed:
+`getPropsGeometry` (RoomProps — the whole furnished room as one merged mesh),
+`getSignGlyphs` + `getSignLetters` (BirthdaySign — the canvas atlas of every letter and the
+geometry laid along the wall; the layout she will see, `portrait` is passed to Prewarm) and
+`getCake` (cakeModel). The worst frame of welcome → room fell from 335 ms to 188 ms
+(`qa-transition-metrics --only=b`), and it falls inside the held star dust.
+
 **Not done in this pass** (next): procedural close-up materials (wood, paper, cloth, metal
 from `.claude/skills`), zoom that follows the cursor with inertia, and blowing the candles
 out with a gesture. The brief for them is in `reference/STORYBOARD.md` C.

@@ -82,7 +82,7 @@ export default function Scene3D(props: SceneProps) {
       </Suspense>
       <TransitionDust phase={props.dust} mode={props.dustMode} color={props.dustColor} factor={q.particles} reducedMotion={reducedMotion} />
       <Atmosphere mood={mood} bokeh={tier === 'low' ? 6 : 14} stars={tier === 'low' ? 300 : 700} awake={stage !== 'intro' || props.taps >= 1} reducedMotion={reducedMotion} />
-      {stage === 'welcome' && <Prewarm gifts={props.gifts} glass={q.transmission} solidHeart={heartPoints === 0} />}
+      {stage === 'welcome' && <Prewarm gifts={props.gifts} glass={q.transmission} solidHeart={heartPoints === 0} portrait={portrait} />}
       {inIntro && (
         <IntroWorld
           stage={stage}
