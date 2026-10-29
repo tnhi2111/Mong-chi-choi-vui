@@ -413,11 +413,12 @@ something, never a white/black cover.
 
 ## Project skills (`.claude/skills/`)
 
-178 skills copied from https://github.com/mengto/skills (MIT, commit `a45892d`), one folder
-per skill so Claude Code finds them on its own (index by category: `.claude/skills/README.md`).
-Relevant here e.g. `video-to-superprompt`, `optimize-web-animations`, `add-mouse-driven-orbit`,
-`no-ai-design-slop`, `iterate-until-verified`, the `3d-*` material skills. They are generic:
-when one disagrees with this file (theme, palette, push-to-main), this file wins.
+35 skills from https://github.com/mengto/skills (MIT, commit `a45892d`) — only the ones that
+fit this site (the other 143 were removed), one folder per skill so Claude Code finds them on
+its own (index: `.claude/skills/README.md`). E.g. `video-to-superprompt`, `iterate-until-verified`,
+`optimize-web-animations`, `optimize-threejs-games`, `3d-wood-material`, `3d-paper-material`,
+`no-ai-design-slop`. They are generic: when one disagrees with this file (theme, palette,
+push-to-main), this file wins.
 
 ## Running & testing
 
