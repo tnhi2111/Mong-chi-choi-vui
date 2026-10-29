@@ -411,6 +411,14 @@ something, never a white/black cover.
   it as reading material; it is not part of the build. Don't copy a brand's identity —
   take principles only, and keep this site's own voice (Cormorant, wine/champagne).
 
+## Project skills (`.claude/skills/`)
+
+178 skills copied from https://github.com/mengto/skills (MIT, commit `a45892d`), one folder
+per skill so Claude Code finds them on its own (index by category: `.claude/skills/README.md`).
+Relevant here e.g. `video-to-superprompt`, `optimize-web-animations`, `add-mouse-driven-orbit`,
+`no-ai-design-slop`, `iterate-until-verified`, the `3d-*` material skills. They are generic:
+when one disagrees with this file (theme, palette, push-to-main), this file wins.
+
 ## Running & testing
 
 ```bash
