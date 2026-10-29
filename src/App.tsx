@@ -440,6 +440,9 @@ export default function App() {
       </Suspense>
 
       <MusicToggle />
+      {/* the light at the middle of a change of world, kept alive by the compositor while
+          the next world draws its first frame (see .dust-core) */}
+      <div className="dust-core" data-on={webgl && dust.phase !== 'none' ? dust.phase : 'off'} aria-hidden="true" />
       <div className="iris" data-on={veil === 'iris' && (!webgl || domCover)} aria-hidden="true">
         <span className="iris__core" />
       </div>

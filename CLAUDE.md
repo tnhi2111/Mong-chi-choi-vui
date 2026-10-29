@@ -434,6 +434,11 @@ almost empty screen.
   steps back 4 % and the lens narrows to 36-37°, the breath in), then `dive` (into the hero
   light, fov 52). IntroWorld / RoomWorld / FinalWorld all use it.
 - **Copy lags the move**: `.welcome[data-leaving]` waits 0.12 s before lifting away.
+- **`.dust-core`** (global.css, shown by App while the dust is up): a soft breathing light
+  at the centre of the change, drawn by the compositor. When the next world draws its first
+  frame the main thread is busy for ~0.3 s and every mote holds still; this light does not
+  wait for the main thread, so the middle of the screen stays alive from the old hero light
+  to the new one.
 - Measured, welcome → room: no frame over 0.4 % near-white, worst near-black 51 %
   (the room itself sits at 45–50 %), mean luminance 19–30 through the whole change — no
   cover frame, and every frame differs (no still picture). Same for room → finale.
