@@ -7,6 +7,7 @@ import { ParticleField } from './ParticleField';
 import { CameraRig } from './CameraRig';
 import { usePointerOrbit } from '../../hooks/usePointerOrbit';
 import { useDive } from '../../hooks/useDive';
+import { motion as MOTION } from '../../config/motion';
 import { HeartVortex } from './HeartVortex';
 import { LightDog } from './LightDog';
 import { heartTipY } from './heartShape';
@@ -56,17 +57,45 @@ export function IntroWorld({
     Object.assign(window, { __heart: holder.current, __orbit: orbit });
   });
 
+  /**
+   * The third touch, in three beats (see `reference/STORYBOARD.md` A and `motion.unlock`):
+   * `hold` — the heart draws breath; `open` — its light spirals out and the camera leans
+   * into the core; `settle` — the heart shrinks and drifts to the place it keeps on the
+   * password screen, so the card condenses under a heart that is already there.
+   */
+  const [unlockPhase, setUnlockPhase] = useState<'none' | 'hold' | 'open' | 'settle'>('none');
+  useEffect(() => {
+    if (!unlocked) {
+      setUnlockPhase('none');
+      return;
+    }
+    const U = MOTION.unlock;
+    const rel = reducedMotion ? U.quick.release : U.release;
+    const settleAt = (U.anticipate + rel) * 1000;
+    setUnlockPhase('hold');
+    const a = setTimeout(() => setUnlockPhase('open'), U.anticipate * 1000);
+    const b = setTimeout(() => setUnlockPhase('settle'), settleAt);
+    return () => {
+      clearTimeout(a);
+      clearTimeout(b);
+    };
+  }, [unlocked, reducedMotion]);
+  const settling = unlockPhase === 'settle';
+
   const short = useThree((st) => st.size.height < 680 && !portrait);
+  const gatePos: [number, number, number] = [0, portrait ? 1.55 : 1.2, -1.2];
   const heartPos: [number, number, number] =
     stage === 'intro'
-      ? heartPoints > 0
-        ? [0, portrait ? 0.75 : 0.62, 0] // lifted: the ring of words sits beneath it
-        : [0, portrait ? 0.15 : 0.1, 0]
+      ? settling
+        ? gatePos // it goes to meet the card a beat before the card arrives
+        : heartPoints > 0
+          ? [0, portrait ? 0.75 : 0.62, 0] // lifted: the ring of words sits beneath it
+          : [0, portrait ? 0.15 : 0.1, 0]
       : stage === 'gate'
-        ? [0, portrait ? 1.55 : 1.2, -1.2]
+        ? gatePos
         : // (a short landscape window: the welcome's lines reach higher — lift the heart clear)
           [0, portrait ? 1.7 : short ? 1.85 : 1.35, -1.6];
-  const heartScale = stage === 'intro' ? 0.98 + charge * 0.14 + (unlocked ? 0.06 : 0) : 0.55;
+  const heartScale = stage !== 'intro' || settling ? 0.55 : 0.98 + charge * 0.14 + (unlocked ? 0.06 : 0);
 
   // The heart of light begins scattered: the first touch gathers it.
   const lightHeart = heartPoints > 0;
@@ -80,8 +109,14 @@ export function IntroWorld({
   const ring = useMemo(() => ({ y: (tip - drop) / heartScale, radius: (ringR * 0.9) / heartScale, tilt: 0 }), [tip, drop, ringR, heartScale]);
 
   const dist = portrait ? 1.3 : 1;
-  // each beat draws the camera a little closer, the last one most of all
-  const camZ = stage === 'intro' ? (6.4 - charge * 0.9 - (unlocked ? 0.5 : 0)) * dist : 6.6 * dist;
+  // each beat draws the camera a little closer, the last one most of all; while the heart
+  // is open the camera leans into the core, so the light passes around her view
+  const camZ =
+    stage === 'intro'
+      ? settling
+        ? 6.6 * dist
+        : (6.4 - charge * 0.9 - (unlocked ? 0.5 : 0)) * dist * (unlockPhase === 'open' ? 1 - MOTION.unlock.push : 1)
+      : 6.6 * dist;
   if (stage !== 'intro') orbit.tZoom = 1;
 
   // when the light gathers, the camera glides round to meet the heart face to face
@@ -119,7 +154,7 @@ export function IntroWorld({
   const divePhase = useDive(leaving && stage !== 'intro');
   const dive = divePhase === 'dive';
   const pull = divePhase === 'pull';
-  const restY = heartPoints > 0 && stage === 'intro' ? 1.25 : 0.15;
+  const restY = heartPoints > 0 && stage === 'intro' && !settling ? 1.25 : 0.15;
   const camPos: [number, number, number] = dive
     ? [0, heartPos[1] + 0.06, heartPos[2] + 1.15]
     : pull
@@ -127,16 +162,16 @@ export function IntroWorld({
       : [0, restY, camZ];
   const camLook: [number, number, number] = dive
     ? [heartPos[0], heartPos[1], heartPos[2]]
-    : [0, stage === 'intro' ? (heartPoints > 0 ? -0.05 : 0) : 0.35, 0];
+    : [0, stage === 'intro' && !settling ? (heartPoints > 0 ? -0.05 : 0) : 0.35, 0];
 
   return (
     <>
       <CameraRig
         position={camPos}
         lookAt={camLook}
-        parallax={reducedMotion || dive ? 0 : 0.22}
-        speed={dive ? 1.35 : pull ? 2.2 : stage === 'intro' ? 1.1 : 1.5}
-        fov={dive ? 52 : pull ? 36 : 40}
+        parallax={reducedMotion || dive || unlockPhase !== 'none' ? 0 : 0.22}
+        speed={dive ? 1.35 : pull ? 2.2 : unlockPhase === 'open' ? 1.5 : settling ? 1.0 : stage === 'intro' ? 1.1 : 1.5}
+        fov={dive ? 52 : pull ? 36 : unlockPhase === 'open' ? 40 - MOTION.unlock.lensIn : 40}
         orbit={orbit}
         orbitCamera
       />
@@ -149,6 +184,9 @@ export function IntroWorld({
           onTap={onHeartTap}
           reducedMotion={reducedMotion}
           glass={glass}
+          opening={unlocked && stage === 'intro'}
+          // the shrink to its place on the password screen is a move, not a snap
+          scaleSpeed={settling ? 2.4 : 10}
           scale={heartScale}
           halo={stage === 'intro' ? 1 : 0.8}
           particles={heartPoints}
@@ -164,7 +202,7 @@ export function IntroWorld({
             drip={formed}
             reveal={awake}
             words={birthdayConfig.heart.words}
-            visible={stage === 'intro'}
+            visible={stage === 'intro' && !settling}
             density={Math.max(0.35, heartPoints / 9000)}
             reducedMotion={reducedMotion}
           />

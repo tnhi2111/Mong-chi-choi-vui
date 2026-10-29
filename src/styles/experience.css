@@ -128,7 +128,67 @@
   display: grid;
   justify-items: center;
   gap: 14px;
-  animation-delay: 0.6s;
+  position: relative;
+}
+
+/* The card does not appear — it CONDENSES out of the light the heart has just let go of:
+   each line comes out of a blur, one after the next (--i), while a pool of that light
+   contracts behind the field. Durations: src/config/motion.ts (motion.unlock). */
+.gate__card.condense > * {
+  animation: gate-condense var(--card-ms, 760ms) var(--ease-out) both;
+  animation-delay: calc(var(--i, 0) * var(--stagger, 120ms));
+}
+
+.gate__card.condense::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 56%;
+  width: 150%;
+  aspect-ratio: 2.4;
+  translate: -50% -50%;
+  border-radius: 50%;
+  background: radial-gradient(ellipse, rgba(255, 214, 206, 0.3) 0%, rgba(212, 154, 165, 0.14) 38%, transparent 70%);
+  pointer-events: none;
+  animation: gate-pool calc(var(--card-ms, 760ms) * 1.6) var(--ease-out) both;
+}
+
+@keyframes gate-condense {
+  from {
+    opacity: 0;
+    filter: blur(14px);
+    transform: translateY(10px) scale(0.97);
+  }
+  55% {
+    opacity: 1;
+    filter: blur(2.5px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: none;
+  }
+}
+
+@keyframes gate-pool {
+  from {
+    opacity: 0.9;
+    scale: 1.45;
+  }
+  to {
+    opacity: 0;
+    scale: 0.9;
+  }
+}
+
+[data-reduce] .gate__card.condense > * {
+  animation-duration: 260ms;
+  animation-delay: 0ms;
+}
+
+[data-reduce] .gate__card.condense::before {
+  animation: none;
+  opacity: 0;
 }
 
 .gate__title {

@@ -7,6 +7,7 @@ import { Glow } from './Glow';
 import { ParticleHeart, type DormantRing, type ParticleHeartHandle } from './ParticleHeart';
 import type { OrbitInput } from '../../hooks/usePointerOrbit';
 import { sound } from '../../lib/audio';
+import { motion as MOTION } from '../../config/motion';
 
 interface Props {
   /** Increment to make the heart beat once, strongly. */
@@ -36,6 +37,13 @@ interface Props {
   onAssembled?: () => void;
   /** Where the scattered light waits (heart-local space). */
   ring?: DormantRing;
+  /**
+   * The third touch: the heart draws breath, then opens — its light spirals out and comes
+   * home (the password card is made of it). See `motion.unlock` and `reference/STORYBOARD.md`.
+   */
+  opening?: boolean;
+  /** How fast the heart's size follows `scale` (lower = a slower, heavier change). */
+  scaleSpeed?: number;
 }
 
 const g = (t: number, c: number, w: number) => Math.exp(-(((t - c) / w) ** 2));
@@ -79,6 +87,8 @@ export function Heart3D({
   assembled = true,
   onAssembled,
   ring = DEFAULT_RING,
+  opening = false,
+  scaleSpeed = 10,
 }: Props) {
   const group = useRef<THREE.Group>(null);
   const tilt = useRef<THREE.Group>(null);
@@ -93,6 +103,8 @@ export function Heart3D({
   const inner = useRef<THREE.PointLight>(null);
   const [hovered, setHovered] = useState(false);
   const beatStart = useRef(-10);
+  /** When the heart began to open (clock seconds), or -1. */
+  const openAt = useRef(-1);
   const hover = useRef(0);
   const s = useRef(scale * 0.6);
   const geometry = useMemo(() => getHeartGeometry(lowDetail ? 'low' : 'high'), [lowDetail]);
@@ -108,6 +120,10 @@ export function Heart3D({
   useEffect(() => {
     if (pulseKey > 0) beatStart.current = clock.current;
   }, [pulseKey]);
+
+  useEffect(() => {
+    openAt.current = opening ? clock.current : -1;
+  }, [opening]);
 
   useEffect(() => {
     if (!interactive) return;
@@ -130,11 +146,20 @@ export function Heart3D({
     hover.current += ((hovered && interactive ? 1 : 0) - hover.current) * (1 - Math.exp(-dt * 5));
     const h = hover.current;
 
+    // the third touch: the breath in (a short contraction, held), then the light leaves
+    const U = MOTION.unlock;
+    const quick = reducedMotion;
+    const ut = openAt.current >= 0 ? t - openAt.current : -1;
+    const squeeze =
+      ut < 0 ? 0 : ut < U.anticipate ? THREE.MathUtils.smoothstep(ut, 0, U.anticipate) : Math.max(0, 1 - (ut - U.anticipate) / 0.3);
+    const release =
+      ut < U.anticipate ? 0 : THREE.MathUtils.clamp((ut - U.anticipate) / (quick ? U.quick.release : U.release), 0, 1);
+
     // breathing + a resting pulse + the touch heartbeat
     const breath = Math.sin(t * 1.25) * 0.011 * motion;
     const idle = idlePulse(t) * (0.008 + charge * 0.012) * motion;
-    const target = scale * (1 + breath + idle + b.s * beatAmt);
-    s.current += (target - s.current) * (1 - Math.exp(-dt * 10));
+    const target = scale * (1 + breath + idle + b.s * beatAmt) * (1 - U.contract * squeeze);
+    s.current += (target - s.current) * (1 - Math.exp(-dt * scaleSpeed));
     grp.scale.setScalar(s.current);
     // squeeze a touch more vertically than sideways — reads as muscle, not a balloon
     const sq = b.squash * beatAmt;
@@ -180,7 +205,14 @@ export function Heart3D({
       const expand = Math.max(0, b.s) / 0.075;
       pBeat.current += (expand * beatAmt - pBeat.current) * (1 - Math.exp(-dt * 14));
       const glowAmt = THREE.MathUtils.clamp(0.35 + charge * 0.35 + b.light * 0.45 + h * 0.15, 0, 1.4);
-      cloud.current.set({ beat: pBeat.current, glow: glowAmt * close, hoverPos: hoverLocal.current, hover: Math.max(h, touch.current) * A, assemble: A });
+      cloud.current.set({
+        beat: pBeat.current,
+        glow: (glowAmt + release * 0.45) * close,
+        hoverPos: hoverLocal.current,
+        hover: Math.max(h, touch.current) * A,
+        assemble: A,
+        release: release < 1 ? release : 0,
+      });
     }
 
     const light = 0.1 + charge * 0.28 + b.light * 0.9 + h * 0.1;

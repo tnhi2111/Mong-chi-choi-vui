@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
 import { birthdayConfig } from './config/birthday';
+import { motion as MOTION } from './config/motion';
 import { gifts } from './data/gifts';
 import type { FinalePhase, Stage, Veil } from './types';
 import type { DustPhase } from './components/3d/TransitionDust';
@@ -208,7 +209,8 @@ export default function App() {
       }
       if (next === TAPS_NEEDED) {
         sound.flourish();
-        setTimeout(() => setStage('gate'), reducedMotion ? 1200 : 2600);
+        // the heart opens, its light comes home, and the card condenses under it
+        setTimeout(() => setStage('gate'), (reducedMotion ? MOTION.unlock.quick.gateAt : MOTION.unlock.gateAt) * 1000);
       }
       return next;
     });

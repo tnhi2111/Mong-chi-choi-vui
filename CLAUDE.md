@@ -455,6 +455,32 @@ almost empty screen.
   (projecting that point, walking down to the light, retrying) — it had been clicking empty
   space at 1440×900 and silently testing nothing but the dormant ring.
 
+## The third touch: the heart opens, the card condenses (storyboard A)
+
+`reference/STORYBOARD.md` holds the shot-by-shot for both changes of scene; every duration
+and easing lives in **`src/config/motion.ts`** (`motion.unlock`, `motion.enterRoom`,
+`motion.hand`) so they can be tuned without reading the scene code.
+
+The third touch used to be a flash and a cut to the password screen. Now (2.0 s):
+- **0–0.15 s** the heart contracts 5.5 % and holds — the breath in (`opening` on `Heart3D`,
+  which runs its own clock; `motion.unlock.anticipate` / `contract`).
+- **0.15–1.2 s** it opens: every point of light spirals out on its own delay and comes home
+  on one sine (no speed of its own at either end) — `uRelease` / `uReach` in `ParticleHeart`,
+  the points grow and run hot as they go. The camera leans into the core (12 % closer, lens
+  40° → 33°) so the light passes around her view.
+- **1.2–2.0 s** the heart shrinks to 0.55 and drifts to the place it keeps on the password
+  screen *before the card exists* (`unlockPhase === 'settle'` in IntroWorld takes the gate's
+  framing early; `scaleSpeed` 2.4 makes the shrink a move, not a snap). The ring of words
+  fades out with it.
+- **2.0–2.8 s** the card **condenses** out of that light: a pool of light contracts where it
+  will be, each line comes out of a 14 px blur 120 ms after the one before
+  (`.gate__card.condense` in experience.css, driven by `--card-ms` / `--stagger` that
+  PasswordGate reads from `motion.unlock`).
+QA: `qa-output/tmp/unlock.mjs [--size=390x844] [--reduced]` films it with real timestamps
+in the file names (a full-page screenshot costs ~350 ms on this machine, so frame index is
+not time). Measured: no frame over 0.7 % near-white, luminance 28 → 47 → 28 through the
+release.
+
 ## Design references (`reference/`)
 
 - `reference/VIDEO_ANALYSIS.md` — the owner's reference videos, analysed (3 in the first

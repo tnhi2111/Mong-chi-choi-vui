@@ -21,7 +21,7 @@ import { useShader } from './useShader';
  * Driven from outside (Heart3D) through `ParticleHeartHandle.set`.
  */
 export interface ParticleHeartHandle {
-  set(state: { beat: number; glow: number; hoverPos: THREE.Vector3 | null; hover: number; assemble: number }): void;
+  set(state: { beat: number; glow: number; hoverPos: THREE.Vector3 | null; hover: number; assemble: number; release?: number }): void;
 }
 
 /** Where the dormant ring lies, in the heart's own (local) space. */
@@ -42,6 +42,8 @@ const vertex = /* glsl */ `
   uniform vec3 uHoverPos;
   uniform float uHover;
   uniform float uAssemble;
+  uniform float uRelease;
+  uniform float uReach;
   uniform sampler2D uRadius;
   uniform float uNormScale;
   uniform float uNormCy;
@@ -109,6 +111,19 @@ const vertex = /* glsl */ `
 
     // heartbeat: spring outward, with per-point variation
     p *= 1.0 + uBeat * e * (0.05 + 0.09 * aSeed);
+
+    // The heart opens (the third touch): every point spirals outward on its own delay and
+    // comes home again — the light that the password card is then made of. Out and back on
+    // one sine, so it leaves and arrives with no speed of its own at either end.
+    float rel = 0.0;
+    if (uRelease > 0.0) {
+      float ph = clamp((uRelease - aDelay * 0.30) / 0.70, 0.0, 1.0);
+      rel = sin(ph * PI);
+      p += normalize(p + 1e-4) * rel * uReach * (0.45 + 1.15 * aSeed);
+      float tw = rel * (1.5 + aSeed * 1.3);
+      float ct = cos(tw), st = sin(tw);
+      p = vec3(p.x * ct - p.z * st, p.y, p.x * st + p.z * ct);
+    }
     // her finger / cursor parts the light
     vec3 d = p - uHoverPos;
     float near = uHover * exp(-dot(d, d) * 16.0);
@@ -117,7 +132,7 @@ const vertex = /* glsl */ `
     vec4 mv = modelViewMatrix * vec4(p, 1.0);
     gl_Position = projectionMatrix * mv;
     float dormantSize = wander > 0.5 ? 0.8 : 0.9;
-    gl_PointSize = aSize * uPixelRatio * (10.5 / -mv.z) * mix(dormantSize, 1.0, e) * (1.0 + uBeat * 0.5 + near * 1.2);
+    gl_PointSize = aSize * uPixelRatio * (10.5 / -mv.z) * mix(dormantSize, 1.0, e) * (1.0 + uBeat * 0.5 + near * 1.2 + rel * 0.55);
     // never a flash in her face: a point right in front of the camera fades and stops growing
     float camNear = smoothstep(0.35, 1.8, -mv.z);
     gl_PointSize = min(gl_PointSize, 36.0 * uPixelRatio);
@@ -125,7 +140,7 @@ const vertex = /* glsl */ `
     float twinkle = 0.65 + 0.35 * sin(t * (1.2 + aSeed * 2.5) + aSeed * 60.0);
     float dormantAlpha = wander > 0.5 ? 0.55 : 0.8;
     vAlpha = twinkle * (0.8 + 0.5 * uGlow) * mix(dormantAlpha, fade, e) * camNear;
-    vHot = clamp(near * 1.4 + uBeat * 0.6 + sin(e * PI) * 0.5, 0.0, 1.0);
+    vHot = clamp(near * 1.4 + uBeat * 0.6 + sin(e * PI) * 0.5 + rel * 0.65, 0.0, 1.0);
     vColor = aColor;
   }
 `;
@@ -202,6 +217,8 @@ export const ParticleHeart = forwardRef<ParticleHeartHandle, { count: number; re
         uHoverPos: { value: new THREE.Vector3(0, 0, 9) },
         uHover: { value: 0 },
         uAssemble: { value: 1 },
+        uRelease: { value: 0 },
+        uReach: { value: 0.62 },
         uRadius: { value: r.texture },
         uNormScale: { value: r.scale },
         uNormCy: { value: r.cy },
@@ -220,12 +237,13 @@ export const ParticleHeart = forwardRef<ParticleHeartHandle, { count: number; re
     useImperativeHandle(
       ref,
       () => ({
-        set({ beat, glow, hoverPos, hover, assemble }) {
+        set({ beat, glow, hoverPos, hover, assemble, release = 0 }) {
           uniforms.uBeat.value = beat;
           uniforms.uGlow.value = glow;
           if (hoverPos) uniforms.uHoverPos.value.copy(hoverPos);
           uniforms.uHover.value = hover;
           uniforms.uAssemble.value = assemble;
+          uniforms.uRelease.value = release;
         },
       }),
       [uniforms],

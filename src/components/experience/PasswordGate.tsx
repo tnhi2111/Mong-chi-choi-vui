@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type FormEvent } from 'react';
 import { birthdayConfig } from '../../config/birthday';
 import { checkBirthdayPassword } from '../../lib/password';
+import { motion } from '../../config/motion';
 
 interface Props {
   onSuccess: () => void;
@@ -48,15 +49,26 @@ export function PasswordGate({ onSuccess, onFail }: Props) {
 
   const message = tries > 0 ? cfg.wrong[Math.min(tries - 1, cfg.wrong.length - 1)] : '';
 
+  // The card is made of the heart's light: it condenses out of a blur, line after line
+  // (durations in src/config/motion.ts).
+  const condense = {
+    '--card-ms': `${motion.unlock.cardMs}ms`,
+    '--stagger': `${motion.unlock.cardStaggerMs}ms`,
+  } as CSSProperties;
+
   return (
     <div className="layer gate">
-      <form className={`gate__card rise${ok ? ' is-ok' : ''}`} onSubmit={submit} noValidate>
-        <p className="eyebrow">{cfg.subtitle}</p>
-        <h1 className="title gate__title">{cfg.title}</h1>
+      <form className={`gate__card condense${ok ? ' is-ok' : ''}`} style={condense} onSubmit={submit} noValidate>
+        <p className="eyebrow" style={{ '--i': 0 } as CSSProperties}>
+          {cfg.subtitle}
+        </p>
+        <h1 className="title gate__title" style={{ '--i': 1 } as CSSProperties}>
+          {cfg.title}
+        </h1>
         <label htmlFor="bday" className="sr-only">
           {cfg.inputLabel}
         </label>
-        <div key={shake} className={`gate__field${shake ? ' shake' : ''}`}>
+        <div key={shake} className={`gate__field${shake ? ' shake' : ''}`} style={{ '--i': 2 } as CSSProperties}>
           <input
             ref={input}
             id="bday"
@@ -79,7 +91,7 @@ export function PasswordGate({ onSuccess, onFail }: Props) {
             </svg>
           </button>
         </div>
-        <p id="gate-msg" className="gate__msg" role="status" aria-live="polite">
+        <p id="gate-msg" className="gate__msg" role="status" aria-live="polite" style={{ '--i': 3 } as CSSProperties}>
           {ok ? '❤' : message}
         </p>
       </form>
