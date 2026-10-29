@@ -11,6 +11,7 @@ import { Atmosphere } from './Atmosphere';
 import { Prewarm } from './Prewarm';
 import { birthdayConfig } from '../../config/birthday';
 import { IntroWorld } from './IntroWorld';
+import { TransitionDust, type DustPhase } from './TransitionDust';
 import { RoomWorld } from './RoomWorld';
 import { FinalWorld } from './FinalWorld';
 
@@ -38,6 +39,10 @@ export interface SceneProps {
   portrait: boolean;
   /** The page is changing worlds: the world on screen dives into its hero light. */
   leaving: boolean;
+  /** The star dust that change of world travels through (see `TransitionDust`). */
+  dust: DustPhase;
+  /** The light of the world she is going to, carried inside the dust. */
+  dustColor: string;
 }
 
 /** One persistent WebGL canvas; the "world" inside changes with the stage. */
@@ -73,6 +78,7 @@ export default function Scene3D(props: SceneProps) {
       <Suspense fallback={null}>
         <Lights mood={mood} cursorLight={finePointer && tier !== 'low' && !reducedMotion} />
       </Suspense>
+      <TransitionDust phase={props.dust} color={props.dustColor} factor={q.particles} reducedMotion={reducedMotion} />
       <Atmosphere mood={mood} bokeh={tier === 'low' ? 6 : 14} stars={tier === 'low' ? 300 : 700} awake={stage !== 'intro' || props.taps >= 1} reducedMotion={reducedMotion} />
       {stage === 'welcome' && <Prewarm gifts={props.gifts} glass={q.transmission} solidHeart={heartPoints === 0} />}
       {inIntro && (

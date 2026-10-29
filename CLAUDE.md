@@ -402,9 +402,60 @@ something, never a white/black cover.
   waits) — click a `.gift-nav__btn` and screenshot.
   Without a GPU, 3D runs ~1–5 fps while CSS runs in real time — judge timing with `--gpu`.
 
+## The star dust pass (videos 5 and 6 — `reference/VIDEO_ANALYSIS.md` F–H)
+
+Two more reference videos (a burger site, a classical-painting site) said the same thing
+twice: **a chapter never fades into the next — a material of that world eats the old scene
+and the new one is already glowing inside it**, and **no frame of a change is ever a white
+or black cover** (measured on both clips: mean luminance stays inside ±15 %, near-white
+peaks at 6 %). Our iris did the right move with the wrong material: a CSS layer over the
+canvas, which also covered everything the canvas was doing, so the cut was ~1.2 s of an
+almost empty screen.
+
+- **`TransitionDust.tsx` — the dust a change of world travels through.** One component in
+  `Scene3D` (outside the per-stage worlds, so it survives the swap), riding the camera:
+  a wine-dark **vignette** (`renderOrder` 58, normal blending) and ~2600 **motes** over it
+  (`renderOrder` 60, additive, `depthTest: false`). `phase: 'close' | 'open' | 'none'` and
+  the destination's tint come from App (`DUST` = room champagne / finale warm gold).
+  - *close* (1.2 s): a front runs out from the hero light at the centre, lighting motes as
+    it passes them; the dark closes in behind it. When the front is gone the field **holds**
+    (`uHold`: fuller, brighter, breathing in and out) — that is what hides the stage swap.
+  - *open* (1.7 s): the motes keep going outward and clear **from the centre first**, so the
+    new hero is the first thing she sees again.
+  - Every mote hangs at its own distance (`aDepth` 0.75–2.3, size ÷ depth, far ones dimmer):
+    while the camera dives, the near motes slide past the far ones — depth, not a sticker.
+  - Reduced motion: the same shape in a third of the time, without the drift.
+  - The two programs are linked in the first frames at zero alpha (under the boot veil), so
+    no change of world ever waits for a compile.
+- **The CSS `.iris` is now only a fallback**: `?nogl`, and the first moment of a reload that
+  resumes in the room (`domCover` in App), where the canvas has not drawn yet. With WebGL
+  the dark lives in the world, under the dust.
+- **Two beats on every departure** (`src/hooks/useDive.ts`): `pull` (190 ms — the camera
+  steps back 4 % and the lens narrows to 36-37°, the breath in), then `dive` (into the hero
+  light, fov 52). IntroWorld / RoomWorld / FinalWorld all use it.
+- **Copy lags the move**: `.welcome[data-leaving]` waits 0.12 s before lifting away.
+- Measured, welcome → room: no frame over 0.4 % near-white, worst near-black 51 %
+  (the room itself sits at 45–50 %), mean luminance 19–30 through the whole change — no
+  cover frame, and every frame differs (no still picture). Same for room → finale.
+- QA: `node scripts/qa-transitions.mjs --gpu` films them; `scripts/qa-transition-metrics.mjs`
+  (frame times + strips) and `scripts/frame-stats.py` (brightness, % near-black / near-white)
+  judge them with numbers. The only frames over 50 ms in a change are the room's first draw
+  (~330 ms, pre-existing: the same number at the commit before this pass), and they fall
+  inside the held dust field.
+- **`scripts/video-frames.mjs`**: tears a reference video into frames (`--fps`, `--sheet`
+  contact sheets) with ffmpeg; finds ffmpeg on PATH, at `FFMPEG_PATH`, or the one that ships
+  with CapCut. Videos live in `reference/videos/` (git-ignored).
+- QA hooks added: `?debug` → `window.__heart` (the group the heart of light hangs in) and
+  `window.__orbit`. `scripts/qa-visual.mjs` now touches the heart where it really is
+  (projecting that point, walking down to the light, retrying) — it had been clicking empty
+  space at 1440×900 and silently testing nothing but the dormant ring.
+
 ## Design references (`reference/`)
 
-- `reference/VIDEO_ANALYSIS.md` — the owner's 3 reference videos, analysed.
+- `reference/VIDEO_ANALYSIS.md` — the owner's reference videos, analysed (3 in the first
+  batch, then videos 5 and 6 in sections F-H). The files live in `reference/videos/`,
+  git-ignored; `node scripts/video-frames.mjs reference/videos --fps=2 --sheet` tears them
+  into frames to look at.
 - `reference/awesome-design-md/` — a copy (no git history) of
   https://github.com/VoltAgent/awesome-design-md (commit `fcc7028`, MIT): ~80 `DESIGN.md`
   files describing well-known sites' design systems (`design-md/<brand>/`). The owner added

@@ -9,6 +9,7 @@ import { ParticleField } from './ParticleField';
 import { CameraRig } from './CameraRig';
 import { getFloorTexture, getShadowTexture } from './glowTexture';
 import { usePointerOrbit } from '../../hooks/usePointerOrbit';
+import { useDive } from '../../hooks/useDive';
 import { hoverLight, roomLights } from './sceneStore';
 import { RoomSet, SIGN_PLACEMENT, STAGE_STEP, WALL_R } from './RoomSet';
 import { safeDrop } from './BirthdaySign';
@@ -140,6 +141,8 @@ export function RoomWorld({
   const rz = portrait ? 2.5 : 3.1;
   const ring = useMemo(() => layout(gifts.length, rx, rz), [gifts.length, rx, rz]);
   const opening = openingId !== null;
+  // leaving for the finale is told in two beats (step back, then dive) — see useDive
+  const divePhase = useDive(leaving);
   const openIndex = gifts.findIndex((g) => g.id === openingId);
 
   // a hidden moment in progress (the cake or the sign) — see below
@@ -391,10 +394,16 @@ export function RoomWorld({
       ? [0, camLook[1] + MOMENT.sign.lift[pi], camLook[2] + MOMENT.sign.back[pi]]
       : [0, camLook[1] + Math.max(MOMENT.far.lift[pi], MOMENT.sign.lift[pi]), camLook[2] + Math.max(MOMENT.far.back[pi], MOMENT.sign.back[pi])];
   } else if (leaving) {
-    // on to the finale: dive into the orb from wherever she stands
-    camPos = ORB_CLOSE.pos;
-    camLook = [0, ORB_Y, 0];
-    camFov = ORB_CLOSE.fov;
+    if (divePhase === 'pull') {
+      // the breath in: the room steps back a little and the lens narrows, before the dive
+      camPos = [base.pos[0], base.pos[1] * 1.02, base.pos[2] * 1.045];
+      camFov = base.fov - 3;
+    } else {
+      // on to the finale: dive into the orb from wherever she stands
+      camPos = ORB_CLOSE.pos;
+      camLook = [0, ORB_Y, 0];
+      camFov = ORB_CLOSE.fov;
+    }
   } else if (opening && openIndex >= 0 && gifts[openIndex]?.shape === 'envelope') {
     // the puppy is a memory too: the camera walks up to it (same rig, same swing round to
     // face it) and settles a little low, the puppy's face and the letter it gives framed
@@ -426,7 +435,7 @@ export function RoomWorld({
           position={camPos}
           lookAt={camLook}
           parallax={reducedMotion || opening || moment || leaving ? 0 : 0.25}
-          speed={leaving ? 1.35 : moment ? MOMENT.speed : opening ? (gifts[openIndex]?.shape === 'envelope' ? 1.25 : 2.0) : arriving ? 0.75 : 1.1}
+          speed={leaving ? (divePhase === 'pull' ? 2.2 : 1.35) : moment ? MOMENT.speed : opening ? (gifts[openIndex]?.shape === 'envelope' ? 1.25 : 2.0) : arriving ? 0.75 : 1.1}
           fov={camFov}
           orbit={orbit}
           orbitCamera

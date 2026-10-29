@@ -237,9 +237,14 @@
   padding-bottom: max(12vh, calc(env(safe-area-inset-bottom) + 48px));
 }
 
-/* stepping inside: the words lift away into the light the camera is diving into */
+/* stepping inside: the words lift away into the light the camera is diving into — a breath
+   after the camera has made its little step back, so the two never land together
+   (reference: the copy always follows the move by 0.25-0.3 s) */
 .welcome[data-leaving='true'] {
-  transition: opacity 0.6s var(--ease-in-out), transform 0.9s var(--ease-in-out), filter 0.9s var(--ease-in-out);
+  transition:
+    opacity 0.6s var(--ease-in-out) 0.12s,
+    transform 0.9s var(--ease-in-out) 0.12s,
+    filter 0.9s var(--ease-in-out) 0.12s;
   opacity: 0;
   transform: translateY(-18px) scale(0.985);
   filter: blur(6px);

@@ -6,6 +6,7 @@ import { Heart3D } from './Heart3D';
 import { ParticleField } from './ParticleField';
 import { CameraRig } from './CameraRig';
 import { usePointerOrbit } from '../../hooks/usePointerOrbit';
+import { useDive } from '../../hooks/useDive';
 import { HeartVortex } from './HeartVortex';
 import { LightDog } from './LightDog';
 import { heartTipY } from './heartShape';
@@ -48,6 +49,12 @@ export function IntroWorld({
   // Dragging turns the camera around the whole scene — heart, ring, sky and the
   // little companion all move together (only while the heart is the whole scene).
   const orbit = usePointerOrbit({ enabled: stage === 'intro', sensitivity: 0.005, pitch: [-0.55, 0.75], zoom: [0.82, 1.2], friction: 2.2 });
+  // QA hook (?debug): where the heart of light is, so a script can touch it where it
+  // really is — at some window sizes the centre of the screen is not on it
+  useEffect(() => {
+    if (!new URLSearchParams(location.search).has('debug')) return;
+    Object.assign(window, { __heart: holder.current, __orbit: orbit });
+  });
 
   const short = useThree((st) => st.size.height < 680 && !portrait);
   const heartPos: [number, number, number] =
@@ -108,10 +115,16 @@ export function IntroWorld({
   // Stepping inside: the camera turns its eyes up to the heart and dives into it, the lens
   // widening a little as it goes — the room will open out of the light it dives into.
   // (The heart's points and shell fade right in front of the camera: no flash.)
-  const dive = leaving && stage !== 'intro';
+  // two beats: a small step back with the lens narrowing (the breath in), then the dive
+  const divePhase = useDive(leaving && stage !== 'intro');
+  const dive = divePhase === 'dive';
+  const pull = divePhase === 'pull';
+  const restY = heartPoints > 0 && stage === 'intro' ? 1.25 : 0.15;
   const camPos: [number, number, number] = dive
     ? [0, heartPos[1] + 0.06, heartPos[2] + 1.15]
-    : [0, heartPoints > 0 && stage === 'intro' ? 1.25 : 0.15, camZ];
+    : pull
+      ? [0, restY + 0.04, camZ * 1.045]
+      : [0, restY, camZ];
   const camLook: [number, number, number] = dive
     ? [heartPos[0], heartPos[1], heartPos[2]]
     : [0, stage === 'intro' ? (heartPoints > 0 ? -0.05 : 0) : 0.35, 0];
@@ -122,8 +135,8 @@ export function IntroWorld({
         position={camPos}
         lookAt={camLook}
         parallax={reducedMotion || dive ? 0 : 0.22}
-        speed={dive ? 1.35 : stage === 'intro' ? 1.1 : 1.5}
-        fov={dive ? 52 : 40}
+        speed={dive ? 1.35 : pull ? 2.2 : stage === 'intro' ? 1.1 : 1.5}
+        fov={dive ? 52 : pull ? 36 : 40}
         orbit={orbit}
         orbitCamera
       />

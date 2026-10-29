@@ -316,11 +316,14 @@ button {
 }
 
 .iris[data-on='true'] {
-  --iris: -28vmax;
+  /* not quite shut: a small soft window stays open in the middle, where the star dust and
+     the hero light are — the dust is what hides the change of world, the iris only takes
+     the edges. A fully opaque screen was a second of nothing to look at. */
+  --iris: -20vmax;
   opacity: 1;
   /* closing: gathers pace, then settles on the light */
   transition:
-    --iris 1.35s var(--ease-in-out),
+    --iris 1.05s var(--ease-in-out),
     opacity 0.5s ease;
 }
 

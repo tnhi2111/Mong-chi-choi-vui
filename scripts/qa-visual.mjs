@@ -52,6 +52,38 @@ const snap = async (name) => {
   console.log('• shot', file);
 };
 const tap = (x, y) => (mobile ? page.touchscreen.tap(x, y) : page.mouse.click(x, y));
+/**
+ * Touch the heart of light where it really is: the hit area is a 3D object, and after the
+ * world has been turned (or on a short window) it is not at the centre of the screen.
+ * `?debug` exposes the group it hangs in; falls back to the centre if it is not there.
+ */
+const heartAt = () =>
+  page.evaluate(() => {
+    const h = window.__heart;
+    const cam = window.__camera;
+    if (!h || !cam) return null;
+    h.updateWorldMatrix(true, false);
+    const p = h.getWorldPosition(h.position.clone());
+    p.project(cam);
+    return { x: (p.x * 0.5 + 0.5) * innerWidth, y: (-p.y * 0.5 + 0.5) * innerHeight };
+  });
+const heartLabel = () => page.getAttribute('.heart-hit', 'aria-label');
+const tapHeart = async () => {
+  const before = await heartLabel();
+  // Aim at the light itself, walking down from where the heart hangs: before it has
+  // gathered, the light is the ring BENEATH that point, and the world may still be
+  // drifting home after a turn — so re-aim on every try.
+  for (const dy of [0, 80, 160, 240, 0]) {
+    const at = await heartAt();
+    const x = at ? at.x : w / 2;
+    const y = (at ? at.y : h / 2) + dy;
+    if (process.env.QA_DEBUG) console.log('  tapHeart try', { x: Math.round(x), y: Math.round(y) });
+    await tap(x, y);
+    await page.waitForTimeout(400);
+    if ((await heartLabel()) !== before) return;
+  }
+  problems.push(`the heart did not take a touch (${before})`);
+};
 /** A slow drag that stops before release (no fling), so the pose stays put for the shot. */
 const drag = async (x, y, dx, dy, steps = 24) => {
   if (mobile) {
@@ -77,7 +109,7 @@ const drag = async (x, y, dx, dy, steps = 24) => {
 };
 
 try {
-  await page.goto(`${url}?reset`, { waitUntil: 'networkidle' });
+  await page.goto(`${url}?reset&debug`, { waitUntil: 'networkidle' });
   const renderer = await page.evaluate(() => {
     const gl = document.createElement('canvas').getContext('webgl2');
     const ext = gl?.getExtension('WEBGL_debug_renderer_info');
@@ -96,7 +128,7 @@ try {
   await snap('dormant-orbit-2');
   await page.waitForTimeout(2000);
   // first touch: the light gathers into a heart (~3.2 s), the sky wakes, the cat forms
-  await tap(w / 2, h / 2);
+  await tapHeart();
   await page.waitForTimeout(1300);
   await snap('gathering');
   await page.waitForTimeout(2800);
@@ -124,14 +156,14 @@ try {
     await page.waitForTimeout(1200);
     await snap('heart-hover-right');
   }
-  await tap(w / 2, h / 2);
+  await tapHeart();
   await page.waitForTimeout(300);
   await snap('heart-beat-peak');
   await page.waitForTimeout(900);
   await snap('heart-after-beat');
   if (only === 'heart') throw 'done';
 
-  await tap(w / 2, h / 2);
+  await tapHeart();
   await page.locator('#bday').waitFor({ timeout: 10000 });
   await page.waitForTimeout(1500);
   await page.locator('#bday').pressSequentially(password.replace(/\D/g, ''), { delay: 20 });

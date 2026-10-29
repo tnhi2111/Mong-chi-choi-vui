@@ -2,6 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type
 import { birthdayConfig } from './config/birthday';
 import { gifts } from './data/gifts';
 import type { FinalePhase, Stage, Veil } from './types';
+import type { DustPhase } from './components/3d/TransitionDust';
 import { loadProgress, saveProgress, clearProgress } from './lib/storage';
 import { hasWebGL, initialTier, type Tier } from './lib/quality';
 import { sound } from './lib/audio';
@@ -47,6 +48,11 @@ const TAPS_NEEDED = 3;
 /** The heart of light starts as scattered light; the first touch gathers it. */
 const lightHeart = birthdayConfig.heart.style === 'particles';
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+/**
+ * The colour the star dust of a change of world carries — the light of the world she is
+ * going to, so the next room is already glowing inside the dust before she gets there.
+ */
+const DUST = { room: '#f2cdb0', final: '#f7dcc6' };
 
 export default function App() {
   const saved = useMemo(loadProgress, []);
@@ -62,6 +68,15 @@ export default function App() {
   const [veil, setVeil] = useState<Veil>(saved.unlocked ? 'iris' : 'none');
   /** The world on screen is diving into its hero light (see `transition`). */
   const [leaving, setLeaving] = useState(false);
+  /** The star dust a change of world travels through — see `TransitionDust`. */
+  const [dust, setDust] = useState<{ phase: DustPhase; color: string }>({ phase: 'none', color: DUST.room });
+  /**
+   * Who draws the dark over a change of world. In the 3D scene it is drawn inside the world,
+   * under the star dust (so the dust is what she watches). The CSS layer is kept for the
+   * two cases the canvas cannot cover: no WebGL at all, and the first moment of a reload
+   * that resumes in the room, before the canvas has drawn anything.
+   */
+  const [domCover, setDomCover] = useState(saved.unlocked);
   const [taps, setTaps] = useState(0);
   const [pulseKey, setPulseKey] = useState(0);
   const [opened, setOpened] = useState<string[]>(saved.opened.filter((id) => gifts.some((g) => g.id === id)));
@@ -91,7 +106,14 @@ export default function App() {
   useEffect(() => {
     if (!saved.unlocked) return;
     let alive = true;
-    void Promise.all([wait(300), waitReady('room-ready', 5000)]).then(() => alive && setVeil('none'));
+    void Promise.all([wait(300), waitReady('room-ready', 5000)]).then(() => {
+      if (!alive) return;
+      // hand the cover over to the world: the room opens out of its own star dust
+      setDust({ phase: 'open', color: DUST.room });
+      setDomCover(false);
+      setVeil('none');
+      setTimeout(() => alive && setDust({ phase: 'none', color: DUST.room }), 1800);
+    });
     return () => {
       alive = false;
     };
@@ -140,10 +162,14 @@ export default function App() {
       if (busy.current) return;
       busy.current = true;
       const quick = reducedMotion;
+      const color = next === 'final' ? DUST.final : DUST.room;
+      // the dust is seeded first, with the camera's little step back: the change announces
+      // itself at one point of light before anything moves (reference video 6, 3.50 s)
+      setDust({ phase: 'close', color });
       setLeaving(true);
       await wait(quick ? 0 : 180);
       setVeil('iris');
-      await wait(quick ? 450 : 1350);
+      await wait(quick ? 450 : 1050);
       if (next === 'room') resetReady('room-ready');
       setStage(next);
       setLeaving(false);
@@ -151,7 +177,10 @@ export default function App() {
       // the room compiles its shaders behind the iris; open it once it can be shown smoothly
       if (next === 'room' && webglRef.current) await waitReady('room-ready', 4000);
       setVeil('none');
+      // the motes clear from the centre outward, so the new hero is seen first
+      setDust({ phase: 'open', color });
       await wait(quick ? 450 : 1600);
+      setDust({ phase: 'none', color });
       busy.current = false;
     },
     [reducedMotion],
@@ -360,6 +389,8 @@ export default function App() {
                 onTierChange={setTier}
                 portrait={portrait}
                 leaving={leaving}
+                dust={dust.phase}
+                dustColor={dust.color}
               />
             </Suspense>
           </ErrorBoundary>
@@ -409,7 +440,7 @@ export default function App() {
       </Suspense>
 
       <MusicToggle />
-      <div className="iris" data-on={veil === 'iris'} aria-hidden="true">
+      <div className="iris" data-on={veil === 'iris' && (!webgl || domCover)} aria-hidden="true">
         <span className="iris__core" />
       </div>
       <div className="boot" data-on={webgl && !booted && !saved.unlocked} aria-hidden="true">

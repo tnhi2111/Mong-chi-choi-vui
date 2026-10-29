@@ -9,6 +9,7 @@ import { usePointerOrbit } from '../../hooks/usePointerOrbit';
 import { Glow } from './Glow';
 import { FinalGift } from './FinalGift';
 import { finaleLights } from './sceneStore';
+import { useDive } from '../../hooks/useDive';
 
 interface Props {
   phase: FinalePhase;
@@ -243,15 +244,21 @@ export function FinalWorld({ phase, photos, onFormed, reducedMotion, particleFac
     camLook = portrait ? [0, -1.75, 0] : [0, -1.15, 0];
   }
 
+  // leaving is told in two beats: the step back, then the dive into the orb (see useDive)
+  const divePhase = useDive(leaving);
+  const dive = divePhase === 'dive';
+  const pullBack = divePhase === 'pull';
+
   return (
     <>
       <CameraRig
-        // back to the room: dive into the orb (the room opens out of its own)
-        position={leaving ? [0, frame.heartY + 0.2, 3.1] : camPos}
-        lookAt={leaving ? [0, frame.heartY, 0] : camLook}
+        // back to the room: a small step back (the breath in), then dive into the orb
+        // (the room opens out of its own)
+        position={dive ? [0, frame.heartY + 0.2, 3.1] : pullBack ? [camPos[0], camPos[1], camPos[2] * 1.045] : camPos}
+        lookAt={dive ? [0, frame.heartY, 0] : camLook}
         parallax={reducedMotion || leaving ? 0 : surprise ? 0.12 : 0.35}
-        speed={leaving ? 1.35 : surprise ? 0.38 : isFormed ? 0.45 : 0.6}
-        fov={leaving ? 52 : 40}
+        speed={dive ? 1.35 : pullBack ? 2.2 : surprise ? 0.38 : isFormed ? 0.45 : 0.6}
+        fov={dive ? 52 : pullBack ? 37 : 40}
         orbit={orbit}
         orbitCamera
       />
