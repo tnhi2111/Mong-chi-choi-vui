@@ -11,7 +11,7 @@ import { Atmosphere } from './Atmosphere';
 import { Prewarm } from './Prewarm';
 import { birthdayConfig } from '../../config/birthday';
 import { IntroWorld } from './IntroWorld';
-import { TransitionDust, type DustPhase } from './TransitionDust';
+import { TransitionDust, type DustMode, type DustPhase } from './TransitionDust';
 import { RoomWorld } from './RoomWorld';
 import { FinalWorld } from './FinalWorld';
 
@@ -43,6 +43,8 @@ export interface SceneProps {
   dust: DustPhase;
   /** The light of the world she is going to, carried inside the dust. */
   dustColor: string;
+  /** How that light behaves: a holding field, or streaks flying past (into the room). */
+  dustMode: DustMode;
 }
 
 /** One persistent WebGL canvas; the "world" inside changes with the stage. */
@@ -78,7 +80,7 @@ export default function Scene3D(props: SceneProps) {
       <Suspense fallback={null}>
         <Lights mood={mood} cursorLight={finePointer && tier !== 'low' && !reducedMotion} />
       </Suspense>
-      <TransitionDust phase={props.dust} color={props.dustColor} factor={q.particles} reducedMotion={reducedMotion} />
+      <TransitionDust phase={props.dust} mode={props.dustMode} color={props.dustColor} factor={q.particles} reducedMotion={reducedMotion} />
       <Atmosphere mood={mood} bokeh={tier === 'low' ? 6 : 14} stars={tier === 'low' ? 300 : 700} awake={stage !== 'intro' || props.taps >= 1} reducedMotion={reducedMotion} />
       {stage === 'welcome' && <Prewarm gifts={props.gifts} glass={q.transmission} solidHeart={heartPoints === 0} />}
       {inIntro && (
@@ -115,6 +117,7 @@ export default function Scene3D(props: SceneProps) {
           hoverFx={finePointer}
           heartPoints={Math.round(heartPoints * 0.75)}
           leaving={props.leaving}
+          drawIn={props.dustMode === 'warp'}
         />
       )}
       {stage === 'final' && (

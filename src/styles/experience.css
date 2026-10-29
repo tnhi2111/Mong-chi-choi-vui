@@ -267,16 +267,54 @@
   color: var(--blush);
 }
 
-.gate__card.is-ok {
-  animation: gate-out 1.1s var(--ease-in-out) 0.4s forwards;
+/* The right answer: the card does not fade — its light is drawn UP into the heart that is
+   hanging above it (storyboard B, 0-0.5 s). Lines leave bottom-first, so the writing
+   appears to be pulled off the screen rather than switched off. */
+.gate__card.is-ok > * {
+  animation: gate-drawn-in var(--gather-ms, 500ms) var(--ease-in-out) both;
+  animation-delay: calc((3 - var(--i, 0)) * 70ms);
 }
 
-@keyframes gate-out {
+.gate__card.is-ok::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 40%;
+  width: 70%;
+  aspect-ratio: 3;
+  translate: -50% -50%;
+  border-radius: 50%;
+  background: radial-gradient(ellipse, rgba(255, 221, 205, 0.45) 0%, rgba(214, 120, 140, 0.18) 45%, transparent 72%);
+  pointer-events: none;
+  animation: gate-pull calc(var(--gather-ms, 500ms) * 1.5) var(--ease-out) both;
+}
+
+@keyframes gate-drawn-in {
   to {
     opacity: 0;
-    transform: translateY(-8px) scale(0.98);
-    filter: blur(4px);
+    transform: translateY(-34px) scale(0.94);
+    filter: blur(7px);
   }
+}
+
+@keyframes gate-pull {
+  from {
+    opacity: 0;
+    scale: 1 1;
+  }
+  35% {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+    scale: 0.25 0.5;
+    translate: -50% -190%;
+  }
+}
+
+[data-reduce] .gate__card.is-ok > * {
+  animation-duration: 240ms;
+  animation-delay: 0ms;
 }
 
 .shake {

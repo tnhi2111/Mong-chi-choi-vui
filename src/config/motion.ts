@@ -55,8 +55,8 @@ export const motion = {
     gatherMs: 500,
     /** The streak: light flies past the camera in three layers. */
     streak: 1.5,
-    /** The room settles out of the light (the world swap happens inside this). */
-    land: 1.6,
+    /** The room settles out of the light (starts once the camera can see the room). */
+    land: 1.9,
     /** The camera pulls back to show the whole room, lens opening again. */
     reveal: 0.9,
     /** Reduced motion / no WebGL: one short glow instead of the streaks (ms). */

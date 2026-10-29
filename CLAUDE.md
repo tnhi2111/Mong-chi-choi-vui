@@ -481,6 +481,33 @@ in the file names (a full-page screenshot costs ~350 ms on this machine, so fram
 not time). Measured: no frame over 0.7 % near-white, luminance 28 → 47 → 28 through the
 release.
 
+## The way in: the room is built out of the light (storyboard B)
+
+`motion.enterRoom` holds the timings. The password is right → the card's light is drawn up
+into the heart (`.gate__card.is-ok`: each line leaves bottom-first, a pool of light rises
+through it, `--gather-ms`) → the welcome → "Step inside" and then:
+- **the flight** (`TransitionDust` `mode="warp"`, `motion.enterRoom.streak` 1.5 s): the same
+  motes keep a fixed distance from the axis and run from z −11 to −0.3, so perspective
+  alone opens them outward; three depth layers (`aDepth`) run at different speeds, and each
+  sprite is **stretched along the way it travels on screen** (`vStretch` / `vDir` — the
+  across-axis is squeezed, so a fast mote reads as a line of light). They fade out before
+  they reach the lens. App picks `warp` only for welcome → room; every other change of
+  world keeps the quieter holding field.
+- **the room drawn in light** (`RoomBuild.tsx`, `motion.enterRoom.land` 1.9 s): when the
+  room has compiled, `sampleRoom()` takes ~15 000 points **on its real surfaces** — random
+  triangles, random barycentric point, meshes weighted by `sqrt(triangles) × radius` so a
+  bare wall gets as much light as the puppy's twenty thousand vertices. The motes start
+  gathered at the orb and fly out to those places, **lowest first** (floor and rug, then
+  what stands, then what hangs: `aDelay` from height and radius). The room itself is held
+  invisible (`drawn` in RoomWorld) until a third of the light has landed, then it takes
+  over while the last motes settle over it and fade (0.95 s). One draw, one program; the
+  sampling reads vertex buffers that are already in memory (room entry 359 ms, budget 400).
+  Only when she flies in (`drawIn`, i.e. `dustMode === 'warp'`) — a reload that resumes in
+  the room is already home — and never under reduced motion.
+QA: `qa-output/tmp/dustprobe.mjs` films it (timestamps in the file names). Measured:
+luminance 30–35 through the landing, near-white ≤ 0.7 %, no empty frame between the light
+and the room.
+
 ## Design references (`reference/`)
 
 - `reference/VIDEO_ANALYSIS.md` — the owner's reference videos, analysed (3 in the first

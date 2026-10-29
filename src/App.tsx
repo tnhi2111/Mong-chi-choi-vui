@@ -3,7 +3,7 @@ import { birthdayConfig } from './config/birthday';
 import { motion as MOTION } from './config/motion';
 import { gifts } from './data/gifts';
 import type { FinalePhase, Stage, Veil } from './types';
-import type { DustPhase } from './components/3d/TransitionDust';
+import type { DustMode, DustPhase } from './components/3d/TransitionDust';
 import { loadProgress, saveProgress, clearProgress } from './lib/storage';
 import { hasWebGL, initialTier, type Tier } from './lib/quality';
 import { sound } from './lib/audio';
@@ -70,7 +70,7 @@ export default function App() {
   /** The world on screen is diving into its hero light (see `transition`). */
   const [leaving, setLeaving] = useState(false);
   /** The star dust a change of world travels through — see `TransitionDust`. */
-  const [dust, setDust] = useState<{ phase: DustPhase; color: string }>({ phase: 'none', color: DUST.room });
+  const [dust, setDust] = useState<{ phase: DustPhase; color: string; mode: DustMode }>({ phase: 'none', color: DUST.room, mode: 'dust' });
   /**
    * Who draws the dark over a change of world. In the 3D scene it is drawn inside the world,
    * under the star dust (so the dust is what she watches). The CSS layer is kept for the
@@ -110,10 +110,10 @@ export default function App() {
     void Promise.all([wait(300), waitReady('room-ready', 5000)]).then(() => {
       if (!alive) return;
       // hand the cover over to the world: the room opens out of its own star dust
-      setDust({ phase: 'open', color: DUST.room });
+      setDust({ phase: 'open', color: DUST.room, mode: 'dust' });
       setDomCover(false);
       setVeil('none');
-      setTimeout(() => alive && setDust({ phase: 'none', color: DUST.room }), 1800);
+      setTimeout(() => alive && setDust({ phase: 'none', color: DUST.room, mode: 'dust' }), 1800);
     });
     return () => {
       alive = false;
@@ -164,13 +164,16 @@ export default function App() {
       busy.current = true;
       const quick = reducedMotion;
       const color = next === 'final' ? DUST.final : DUST.room;
+      // into the room she has never seen: the light flies past her (storyboard B).
+      // Back and forth between worlds she knows: the quieter holding field.
+      const mode: DustMode = next === 'room' && !quick ? 'warp' : 'dust';
       // the dust is seeded first, with the camera's little step back: the change announces
       // itself at one point of light before anything moves (reference video 6, 3.50 s)
-      setDust({ phase: 'close', color });
+      setDust({ phase: 'close', color, mode });
       setLeaving(true);
       await wait(quick ? 0 : 180);
       setVeil('iris');
-      await wait(quick ? 450 : 1050);
+      await wait(quick ? 450 : mode === 'warp' ? MOTION.enterRoom.streak * 1000 - 180 : 1050);
       if (next === 'room') resetReady('room-ready');
       setStage(next);
       setLeaving(false);
@@ -179,9 +182,9 @@ export default function App() {
       if (next === 'room' && webglRef.current) await waitReady('room-ready', 4000);
       setVeil('none');
       // the motes clear from the centre outward, so the new hero is seen first
-      setDust({ phase: 'open', color });
+      setDust({ phase: 'open', color, mode });
       await wait(quick ? 450 : 1600);
-      setDust({ phase: 'none', color });
+      setDust({ phase: 'none', color, mode });
       busy.current = false;
     },
     [reducedMotion],
@@ -221,6 +224,7 @@ export default function App() {
   // The gate and the welcome share one world: no cover at all. The card thanks her and
   // dissolves (CSS gate-out) while the heart beats once and drifts up; the welcome rises.
   const unlock = useCallback(async () => {
+    // the heart rings once and the card's light is drawn up into it (storyboard B, 0-0.5 s)
     setPulseKey((k) => k + 1);
     sound.flourish();
     await wait(reducedMotion ? 500 : 1500);
@@ -393,6 +397,7 @@ export default function App() {
                 leaving={leaving}
                 dust={dust.phase}
                 dustColor={dust.color}
+                dustMode={dust.mode}
               />
             </Suspense>
           </ErrorBoundary>

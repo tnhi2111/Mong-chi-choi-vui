@@ -54,6 +54,7 @@ export function PasswordGate({ onSuccess, onFail }: Props) {
   const condense = {
     '--card-ms': `${motion.unlock.cardMs}ms`,
     '--stagger': `${motion.unlock.cardStaggerMs}ms`,
+    '--gather-ms': `${motion.enterRoom.gatherMs}ms`,
   } as CSSProperties;
 
   return (

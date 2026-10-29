@@ -24,8 +24,16 @@ import { useShader } from './useShader';
  */
 export type DustPhase = 'none' | 'close' | 'open';
 
+/**
+ * `dust` — the field that holds over a cut (every change of world).
+ * `warp` — the way into the room: the same motes stretch into streaks and fly past the
+ * camera in three layers at different speeds, then brake (storyboard B, 0.5-2.0 s).
+ */
+export type DustMode = 'dust' | 'warp';
+
 interface Props {
   phase: DustPhase;
+  mode?: DustMode;
   /** Tint of the world being entered. */
   color: string;
   /** Scales the number of motes (quality tier). */
@@ -48,6 +56,9 @@ const vertex = /* glsl */ `
   uniform float uDepth;
   uniform float uSize;
   uniform float uHold;
+  uniform float uWarp;
+  uniform float uWarpT;
+  uniform float uWarpSpeed;
   uniform float uPixelRatio;
   attribute vec2 aDir;
   attribute float aBase;
@@ -57,8 +68,12 @@ const vertex = /* glsl */ `
   varying float vAlpha;
   varying float vFront;
   varying float vSeed;
+  varying float vStretch;
+  varying vec2 vDir;
 
   void main() {
+    vStretch = 1.0;
+    vDir = vec2(1.0, 0.0);
     float t = uProgress;
     // the front passing this mote: it wakes just before the front reaches its place
     float wake = smoothstep(aBase - 0.16, aBase + 0.02, t);
@@ -90,6 +105,27 @@ const vertex = /* glsl */ `
     vAlpha = clamp(lit, 0.0, 1.0) * twinkle * mix(1.0, 0.55, smoothstep(1.0, 2.2, aDepth));
     vFront = edge;
     vSeed = aSeed;
+
+    // The way in: the same motes become streaks flying past the lens. Each one keeps a
+    // fixed distance from the axis and runs from far to near, so perspective alone opens
+    // them outward; the three depth layers run at different speeds (parallax), and the
+    // sprite is stretched along the direction it is travelling on screen.
+    if (uWarp > 0.5) {
+      float r0 = 0.05 + aBase * 2.3;
+      float sp = 0.42 + aDepth * 0.5;
+      float life = fract(aSeed + uWarpT * sp);
+      float z = mix(11.0, 0.32, life);
+      vec3 wp = vec3(aDir * r0, -z);
+      vec4 wmv = modelViewMatrix * vec4(wp, 1.0);
+      gl_Position = projectionMatrix * wmv;
+      gl_PointSize = clamp(uSize * aScale * uPixelRatio * (4.2 / z), 2.0, 46.0 * uPixelRatio);
+      // in at the far end, out before it reaches the lens — never a blast in her face
+      vAlpha = smoothstep(11.0, 8.0, z) * smoothstep(0.32, 1.1, z) * twinkle * uWarp;
+      vFront = 0.35 + 0.5 * smoothstep(6.0, 1.0, z);
+      vStretch = 1.0 + 2.4 * uWarpSpeed * smoothstep(7.0, 0.8, z);
+      vec2 scr = gl_Position.xy / max(abs(gl_Position.w), 1e-4);
+      vDir = length(scr) > 1e-4 ? normalize(scr) : vec2(1.0, 0.0);
+    }
   }
 `;
 
@@ -100,10 +136,15 @@ const fragment = /* glsl */ `
   varying float vAlpha;
   varying float vFront;
   varying float vSeed;
+  varying float vStretch;
+  varying vec2 vDir;
 
   void main() {
     vec2 d = gl_PointCoord - 0.5;
-    float r = length(d);
+    // a streak: the speck keeps its length along the way it travels and is squeezed
+    // across it (so a fast mote reads as a line of light, not a dot)
+    vec2 u = vec2(dot(d, vDir), dot(d, vec2(-vDir.y, vDir.x)) * vStretch);
+    float r = length(u);
     if (r > 0.5) discard;
     // soft grain with a small hot centre — a speck of light, never a disc
     float core = smoothstep(0.5, 0.0, r);
@@ -152,7 +193,7 @@ const easeInOut = (x: number) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x 
 /** How far the window in the dark has shrunk: open → shut. */
 const HOLE = { open: 2.3, shut: -0.5 };
 
-export function TransitionDust({ phase, color, factor, reducedMotion = false }: Props) {
+export function TransitionDust({ phase, color, factor, mode = 'dust', reducedMotion = false }: Props) {
   const group = useRef<THREE.Group>(null);
   const points = useRef<THREE.Points>(null);
   const veil = useRef<THREE.Mesh>(null);
@@ -201,6 +242,9 @@ export function TransitionDust({ phase, color, factor, reducedMotion = false }: 
       uDepth: { value: DEPTH },
       uSize: { value: 6.2 },
       uHold: { value: 0 },
+      uWarp: { value: 0 },
+      uWarpT: { value: 0 },
+      uWarpSpeed: { value: 0 },
       uPixelRatio: { value: 1 },
       uIntensity: { value: 0 },
       uColor: { value: new THREE.Color('#f2cdb0') },
@@ -236,7 +280,10 @@ export function TransitionDust({ phase, color, factor, reducedMotion = false }: 
     const r = run.current;
     // reduced motion: the same shape, told in a third of the time and without the drifting
     // (App's own timings are short there too), so the change is still never a bare cut
-    const dur = (r.phase === 'open' ? OPEN : CLOSE) * (reducedMotion ? 0.35 : 1);
+    // the way into the room has its own story to tell once she is there (the light draws
+    // the room — see RoomBuild), so the dark gets out of the way faster
+    const open = mode === 'warp' ? OPEN * 0.6 : OPEN;
+    const dur = (r.phase === 'open' ? open : CLOSE) * (reducedMotion ? 0.35 : 1);
     if (r.phase !== 'none') r.t = Math.min(dur, r.t + dt);
     // the closed field HOLDS (it is what hides the change of world); only the opening one
     // fades away when it is done
@@ -255,6 +302,12 @@ export function TransitionDust({ phase, color, factor, reducedMotion = false }: 
 
     const k = Math.min(1, r.t / dur);
     if (!reducedMotion) uniforms.uTime.value += dt;
+    // the streaks: they build up, cruise, then brake as the room arrives
+    const warping = mode === 'warp' && !reducedMotion && r.phase !== 'none';
+    const speed = warping ? (r.phase === 'close' ? THREE.MathUtils.smoothstep(k, 0, 0.35) : Math.max(0, 1 - k * 2.2)) : 0;
+    uniforms.uWarpSpeed.value += (speed - uniforms.uWarpSpeed.value) * (1 - Math.exp(-dt * 4));
+    uniforms.uWarp.value += ((warping ? 1 : 0) - uniforms.uWarp.value) * (1 - Math.exp(-dt * 8));
+    uniforms.uWarpT.value += dt * uniforms.uWarpSpeed.value * 0.75;
     uniforms.uOpen.value = r.phase === 'open' ? 1 : 0;
     uniforms.uProgress.value = easeOut(k);
     // the settled field over the cut: brighter and fuller than the travelling front, which

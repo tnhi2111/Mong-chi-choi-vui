@@ -10,6 +10,7 @@ import { CameraRig } from './CameraRig';
 import { getFloorTexture, getShadowTexture } from './glowTexture';
 import { usePointerOrbit } from '../../hooks/usePointerOrbit';
 import { useDive } from '../../hooks/useDive';
+import { RoomBuild, sampleRoom, type BuildPoints } from './RoomBuild';
 import { hoverLight, roomLights } from './sceneStore';
 import { RoomSet, SIGN_PLACEMENT, STAGE_STEP, WALL_R } from './RoomSet';
 import { safeDrop } from './BirthdaySign';
@@ -36,6 +37,11 @@ interface Props {
   heartPoints: number;
   /** Leaving for the finale: the camera dives into the orb. */
   leaving?: boolean;
+  /**
+   * She has just flown in through the light (storyboard B): draw the room in light before
+   * it is there. False when the page simply resumed in the room — then it is already home.
+   */
+  drawIn?: boolean;
 }
 
 const FLOOR_Y = -0.95;
@@ -135,6 +141,7 @@ export function RoomWorld({
   hoverFx,
   heartPoints,
   leaving = false,
+  drawIn = false,
 }: Props) {
   // on a tall phone screen the ring stretches in depth, which the raised camera turns into height
   const rx = portrait ? 1.45 : 3.1;
@@ -307,6 +314,13 @@ export function RoomWorld({
   const cam = useThree((st) => st.camera);
   const scn = useThree((st) => st.scene);
   const [ready, setReady] = useState(false);
+  /**
+   * The room is drawn in light before it is there (storyboard B): once it has compiled, its
+   * own meshes are sampled and the motes fly out to those places; `drawn` then lets the real
+   * room take over. Nothing to draw (reduced motion) → the room is simply there.
+   */
+  const [build, setBuild] = useState<BuildPoints | null>(null);
+  const [drawn, setDrawn] = useState(true);
   // the first pull-back out of the orb is slower than any later glide: it is the reveal
   const [arriving, setArriving] = useState(true);
   useEffect(() => {
@@ -335,6 +349,15 @@ export function RoomWorld({
       c.fov = ORB_CLOSE.fov;
       c.updateProjectionMatrix();
       setReady(true);
+      // sample the room's real surfaces for the light to land on (cheap: it reads vertex
+      // buffers that are already here)
+      if (drawIn && !reducedMotion) {
+        const pts = sampleRoom(g);
+        if (pts) {
+          setBuild(pts);
+          setDrawn(false);
+        }
+      }
       // draw a few frames while still veiled: the first one uploads every texture and
       // buffer of the room — let that happen out of sight
       let n = 0;
@@ -359,7 +382,7 @@ export function RoomWorld({
       cancelAnimationFrame(raf);
       clearTimeout(fallback);
     };
-  }, [gl, cam, scn]);
+  }, [gl, cam, scn, reducedMotion, drawIn]);
 
   const showcase = useMemo(
     () =>
@@ -428,99 +451,104 @@ export function RoomWorld({
   }
 
   return (
-    <group ref={root} visible={ready}>
-      {ready && (
-        // mounted once the room is ready, so it starts from the orb (see `show`)
-        <CameraRig
-          position={camPos}
-          lookAt={camLook}
-          parallax={reducedMotion || opening || moment || leaving ? 0 : 0.25}
-          speed={leaving ? (divePhase === 'pull' ? 2.2 : 1.35) : moment ? MOMENT.speed : opening ? (gifts[openIndex]?.shape === 'envelope' ? 1.25 : 2.0) : arriving ? 0.75 : 1.1}
-          fov={camFov}
-          orbit={orbit}
-          orbitCamera
-          fit={portrait && !leaving ? (yaw) => 1 + 0.42 * Math.sin(yaw) ** 2 : undefined}
-        />
-      )}
-      <RoomSet
-        floorY={FLOOR_Y}
-        rx={rx}
-        rz={rz}
-        heart={allOpened ? 1 : 0.35 + (opened.length / gifts.length) * 0.5}
-        reducedMotion={reducedMotion}
-        hoverFx={hoverFx}
-        portrait={portrait}
-        dogSpot={spots.dog}
-        giftSpot={spots.gift}
-        focus={moment}
-        onMoment={onMoment}
-      />
-      <Floor rx={rx} rz={rz} />
-      <group position={[0, ORB_Y, 0]}>
-        {/* the centerpiece: a little universe of their memories, kept in glass. Touch
-            plays its constellation reveal; once every memory is open, the touch also
-            leads on to the finale (as the heart did), while the orb opens */}
-        <MemoryCelestial
-          count={heartPoints}
-          charge={allOpened ? 1 : 0.25 + (opened.length / gifts.length) * 0.5}
-          interactive={!opening && !paused && !moment}
-          onTap={allOpened ? onHeartTap : undefined}
-          tapAfter={1100}
-          hush={opening}
-          reducedMotion={reducedMotion}
-          scale={portrait ? 0.7 : 0.86}
-        />
-      </group>
-      {gifts.map((g, i) => (
-        <Gift3D
-          key={g.id}
-          gift={g}
-          index={i}
-          home={ring[i].pos}
-          facing={ring[i].angle}
-          showcase={showcase[i]}
+    <>
+      <group ref={root} visible={ready && drawn}>
+        {ready && (
+          // mounted once the room is ready, so it starts from the orb (see `show`)
+          <CameraRig
+            position={camPos}
+            lookAt={camLook}
+            parallax={reducedMotion || opening || moment || leaving ? 0 : 0.25}
+            speed={leaving ? (divePhase === 'pull' ? 2.2 : 1.35) : moment ? MOMENT.speed : opening ? (gifts[openIndex]?.shape === 'envelope' ? 1.25 : 2.0) : arriving ? 0.75 : 1.1}
+            fov={camFov}
+            orbit={orbit}
+            orbitCamera
+            fit={portrait && !leaving ? (yaw) => 1 + 0.42 * Math.sin(yaw) ** 2 : undefined}
+          />
+        )}
+        <RoomSet
           floorY={FLOOR_Y}
-          // the puppy reads a touch larger, the box a touch smaller: heart > puppy > gift
-          size={(portrait ? 0.95 : 1) * (g.shape === 'envelope' ? 1.12 : g.shape === 'box' ? 0.84 : 1)}
-          opened={opened.includes(g.id)}
-          opening={openingId === g.id}
-          disabled={opening || paused || !!moment}
-          focused={focusId === g.id}
-          quiet={allOpened}
-          // the names step away while the camera dives into the orb
-          hideLabel={leaving}
-          glass={glass}
+          rx={rx}
+          rz={rz}
+          heart={allOpened ? 1 : 0.35 + (opened.length / gifts.length) * 0.5}
           reducedMotion={reducedMotion}
           hoverFx={hoverFx}
-          onSelect={onSelect}
-          onOpened={onOpened}
-          onHover={onHover}
+          portrait={portrait}
+          dogSpot={spots.dog}
+          giftSpot={spots.gift}
+          focus={moment}
+          onMoment={onMoment}
         />
-      ))}
-      {moment === 'cake' && (
-        <Html
-          position={cakeTextAt}
-          center
-          style={{ pointerEvents: 'none' }}
-          zIndexRange={[8, 0]}
-        >
-          <Whisper lines={birthdayConfig.room.moments.cake} />
-        </Html>
-      )}
-      {moment === 'sign' && (
-        <Html position={[0, ground + MOMENT.sign.text.h, -sign.radius + MOMENT.sign.text.inward]} center style={{ pointerEvents: 'none' }} zIndexRange={[8, 0]}>
-          <Whisper lines={birthdayConfig.room.moments.sign} />
-        </Html>
-      )}
-      <ParticleField
-        count={Math.round(600 * particleFactor)}
-        radius={11}
-        innerRadius={2.5}
-        burstKey={pulseKey}
-        intensity={0.45 + (opened.length / gifts.length) * 0.3}
-        reducedMotion={reducedMotion}
-      />
-    </group>
+        <Floor rx={rx} rz={rz} />
+        <group position={[0, ORB_Y, 0]}>
+          {/* the centerpiece: a little universe of their memories, kept in glass. Touch
+              plays its constellation reveal; once every memory is open, the touch also
+              leads on to the finale (as the heart did), while the orb opens */}
+          <MemoryCelestial
+            count={heartPoints}
+            charge={allOpened ? 1 : 0.25 + (opened.length / gifts.length) * 0.5}
+            interactive={!opening && !paused && !moment}
+            onTap={allOpened ? onHeartTap : undefined}
+            tapAfter={1100}
+            hush={opening}
+            reducedMotion={reducedMotion}
+            scale={portrait ? 0.7 : 0.86}
+          />
+        </group>
+        {gifts.map((g, i) => (
+          <Gift3D
+            key={g.id}
+            gift={g}
+            index={i}
+            home={ring[i].pos}
+            facing={ring[i].angle}
+            showcase={showcase[i]}
+            floorY={FLOOR_Y}
+            // the puppy reads a touch larger, the box a touch smaller: heart > puppy > gift
+            size={(portrait ? 0.95 : 1) * (g.shape === 'envelope' ? 1.12 : g.shape === 'box' ? 0.84 : 1)}
+            opened={opened.includes(g.id)}
+            opening={openingId === g.id}
+            disabled={opening || paused || !!moment}
+            focused={focusId === g.id}
+            quiet={allOpened}
+            // the names step away while the camera dives into the orb
+            hideLabel={leaving}
+            glass={glass}
+            reducedMotion={reducedMotion}
+            hoverFx={hoverFx}
+            onSelect={onSelect}
+            onOpened={onOpened}
+            onHover={onHover}
+          />
+        ))}
+        {moment === 'cake' && (
+          <Html
+            position={cakeTextAt}
+            center
+            style={{ pointerEvents: 'none' }}
+            zIndexRange={[8, 0]}
+          >
+            <Whisper lines={birthdayConfig.room.moments.cake} />
+          </Html>
+        )}
+        {moment === 'sign' && (
+          <Html position={[0, ground + MOMENT.sign.text.h, -sign.radius + MOMENT.sign.text.inward]} center style={{ pointerEvents: 'none' }} zIndexRange={[8, 0]}>
+            <Whisper lines={birthdayConfig.room.moments.sign} />
+          </Html>
+        )}
+        <ParticleField
+          count={Math.round(600 * particleFactor)}
+          radius={11}
+          innerRadius={2.5}
+          burstKey={pulseKey}
+          intensity={0.45 + (opened.length / gifts.length) * 0.3}
+          reducedMotion={reducedMotion}
+        />
+      </group>
+      {/* the light that draws the room: outside the room's own group, so it is seen while
+          the room itself is still held back (storyboard B, 2.0-3.6 s) */}
+      {build && <RoomBuild points={build} from={[0, ORB_Y, 0]} reducedMotion={reducedMotion} onDrawn={() => setDrawn(true)} />}
+    </>
   );
 }
 
