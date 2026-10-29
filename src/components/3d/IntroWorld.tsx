@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useFrame } from '@react-three/fiber';
+import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { Stage } from '../../types';
 import { Heart3D } from './Heart3D';
@@ -22,6 +22,8 @@ interface Props {
   particleFactor: number;
   portrait: boolean;
   heartPoints: number;
+  /** Stepping inside: the camera dives into the heart (the room opens out of its orb). */
+  leaving?: boolean;
 }
 
 const target = new THREE.Vector3();
@@ -38,6 +40,7 @@ export function IntroWorld({
   particleFactor,
   portrait,
   heartPoints,
+  leaving = false,
 }: Props) {
   const holder = useRef<THREE.Group>(null);
   const charge = stage === 'intro' ? Math.min(1, taps / tapsNeeded) : 1;
@@ -46,6 +49,7 @@ export function IntroWorld({
   // little companion all move together (only while the heart is the whole scene).
   const orbit = usePointerOrbit({ enabled: stage === 'intro', sensitivity: 0.005, pitch: [-0.55, 0.75], zoom: [0.82, 1.2], friction: 2.2 });
 
+  const short = useThree((st) => st.size.height < 680 && !portrait);
   const heartPos: [number, number, number] =
     stage === 'intro'
       ? heartPoints > 0
@@ -53,7 +57,8 @@ export function IntroWorld({
         : [0, portrait ? 0.15 : 0.1, 0]
       : stage === 'gate'
         ? [0, portrait ? 1.55 : 1.2, -1.2]
-        : [0, portrait ? 1.7 : 1.35, -1.6];
+        : // (a short landscape window: the welcome's lines reach higher — lift the heart clear)
+          [0, portrait ? 1.7 : short ? 1.85 : 1.35, -1.6];
   const heartScale = stage === 'intro' ? 0.98 + charge * 0.14 + (unlocked ? 0.06 : 0) : 0.55;
 
   // The heart of light begins scattered: the first touch gathers it.
@@ -100,13 +105,25 @@ export function IntroWorld({
     h.position.lerp(target.set(...heartPos), k);
   });
 
+  // Stepping inside: the camera turns its eyes up to the heart and dives into it, the lens
+  // widening a little as it goes — the room will open out of the light it dives into.
+  // (The heart's points and shell fade right in front of the camera: no flash.)
+  const dive = leaving && stage !== 'intro';
+  const camPos: [number, number, number] = dive
+    ? [0, heartPos[1] + 0.06, heartPos[2] + 1.15]
+    : [0, heartPoints > 0 && stage === 'intro' ? 1.25 : 0.15, camZ];
+  const camLook: [number, number, number] = dive
+    ? [heartPos[0], heartPos[1], heartPos[2]]
+    : [0, stage === 'intro' ? (heartPoints > 0 ? -0.05 : 0) : 0.35, 0];
+
   return (
     <>
       <CameraRig
-        position={[0, heartPoints > 0 && stage === 'intro' ? 1.25 : 0.15, camZ]}
-        lookAt={[0, stage === 'intro' ? (heartPoints > 0 ? -0.05 : 0) : 0.35, 0]}
-        parallax={reducedMotion ? 0 : 0.22}
-        speed={stage === 'intro' ? 1.1 : 1.5}
+        position={camPos}
+        lookAt={camLook}
+        parallax={reducedMotion || dive ? 0 : 0.22}
+        speed={dive ? 1.35 : stage === 'intro' ? 1.1 : 1.5}
+        fov={dive ? 52 : 40}
         orbit={orbit}
         orbitCamera
       />

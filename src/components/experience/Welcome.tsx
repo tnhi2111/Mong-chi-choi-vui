@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { birthdayConfig } from '../../config/birthday';
 import { fill } from '../../lib/text';
 
-export function Welcome({ onEnter }: { onEnter: () => void }) {
+export function Welcome({ onEnter, leaving = false }: { onEnter: () => void; leaving?: boolean }) {
   const { lines, button } = birthdayConfig.welcome;
   const btn = useRef<HTMLButtonElement>(null);
   const step = 1.1;
@@ -13,7 +13,7 @@ export function Welcome({ onEnter }: { onEnter: () => void }) {
   }, [lines.length]);
 
   return (
-    <div className="layer welcome">
+    <div className="layer welcome" data-leaving={leaving}>
       <div className="welcome__text">
         {lines.map((l, i) => (
           <p
@@ -31,6 +31,7 @@ export function Welcome({ onEnter }: { onEnter: () => void }) {
         className="btn rise"
         style={{ animationDelay: `${0.6 + lines.length * step}s` }}
         onClick={onEnter}
+        disabled={leaving}
       >
         {button}
       </button>

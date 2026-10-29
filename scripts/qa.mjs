@@ -163,7 +163,16 @@ try {
     // First gift: click the 3D object itself (just above its floating label).
     if (i === 0 && !args.nogl && hasCanvas) {
       const label = page.locator('.gift-label').first();
-      const box = await label.boundingBox();
+      // the camera pulls back out of the orb on arrival (slowly without a GPU): wait until
+      // the gift has stopped moving on screen before aiming at it
+      let box = await label.boundingBox();
+      for (let k = 0; k < 60; k++) {
+        await page.waitForTimeout(500);
+        const next = await label.boundingBox();
+        const still = box && next && Math.abs(next.x - box.x) < 2 && Math.abs(next.y - box.y) < 2;
+        box = next;
+        if (still) break;
+      }
       if (box) {
         if (!mobile) {
           await page.mouse.move(box.x + box.width / 2, box.y - 30);

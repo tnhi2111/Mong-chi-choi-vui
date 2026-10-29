@@ -58,7 +58,10 @@ export default function App() {
   }, [reducedMotion]);
 
   const [stage, setStage] = useState<Stage>(saved.unlocked ? 'room' : 'intro');
-  const [veil, setVeil] = useState<Veil>(saved.unlocked ? 'dark' : 'none');
+  // coming back later: the room opens out of its orb, as it does on the way in
+  const [veil, setVeil] = useState<Veil>(saved.unlocked ? 'iris' : 'none');
+  /** The world on screen is diving into its hero light (see `transition`). */
+  const [leaving, setLeaving] = useState(false);
   const [taps, setTaps] = useState(0);
   const [pulseKey, setPulseKey] = useState(0);
   const [opened, setOpened] = useState<string[]>(saved.opened.filter((id) => gifts.some((g) => g.id === id)));
@@ -71,10 +74,6 @@ export default function App() {
   webglRef.current = webgl;
   const [tier, setTier] = useState<Tier>(initialTier);
   const busy = useRef(false);
-  // remember the last colour so the veil fades out in the same colour it faded in
-  const lastVeil = useRef<Exclude<Veil, 'none'>>('dark');
-  if (veil !== 'none') lastVeil.current = veil;
-  const veilKind = lastVeil.current;
 
   const allOpened = opened.length >= gifts.length;
   const activeGift = gifts.find((g) => g.id === activeId) ?? null;
@@ -128,28 +127,42 @@ export default function App() {
     };
   }, [stage, opened, saved.finaleSeen]);
 
-  /** Fade out → swap stage → (wait for the room to be ready) → fade in. */
-  const transition = useCallback(async (next: Stage, kind: Exclude<Veil, 'none'> = 'dark', hold = 250) => {
-    if (busy.current) return;
-    busy.current = true;
-    setVeil(kind);
-    await wait(750);
-    if (next === 'room') resetReady('room-ready');
-    setStage(next);
-    await wait(hold);
-    // the room compiles its shaders behind the veil; lift it once it can be shown smoothly
-    if (next === 'room' && webglRef.current) await waitReady('room-ready', 4000);
-    setVeil('none');
-    await wait(700);
-    busy.current = false;
-  }, []);
+  /**
+   * One change of world, always told the same way (like a product that never leaves the
+   * frame while the set changes around it): the camera of the world on screen dives into
+   * its hero light (the heart, the orb of memories) while the screen closes in from the edges
+   * onto that light; the next world mounts behind it and compiles; then its camera pulls
+   * back out of ITS hero light while the screen opens from the centre. Same place on
+   * screen, same colour, same light on both sides of the cut — no flash, no blank page.
+   */
+  const transition = useCallback(
+    async (next: Stage) => {
+      if (busy.current) return;
+      busy.current = true;
+      const quick = reducedMotion;
+      setLeaving(true);
+      await wait(quick ? 0 : 180);
+      setVeil('iris');
+      await wait(quick ? 450 : 1350);
+      if (next === 'room') resetReady('room-ready');
+      setStage(next);
+      setLeaving(false);
+      await wait(quick ? 120 : 260);
+      // the room compiles its shaders behind the iris; open it once it can be shown smoothly
+      if (next === 'room' && webglRef.current) await waitReady('room-ready', 4000);
+      setVeil('none');
+      await wait(quick ? 450 : 1600);
+      busy.current = false;
+    },
+    [reducedMotion],
+  );
 
   /* ── Intro ─────────────────────────────────────────────────────────── */
   const tapHeart = useCallback(() => {
     if (stage === 'room') {
       if (allOpened && !openingId && !activeId) {
         sound.flourish();
-        void transition('final', 'light', 400);
+        void transition('final');
       }
       return;
     }
@@ -174,12 +187,14 @@ export default function App() {
   }, [stage, allOpened, openingId, activeId, transition, reducedMotion]);
 
   /* ── Gate ──────────────────────────────────────────────────────────── */
+  // The gate and the welcome share one world: no cover at all. The card thanks her and
+  // dissolves (CSS gate-out) while the heart beats once and drifts up; the welcome rises.
   const unlock = useCallback(async () => {
     setPulseKey((k) => k + 1);
     sound.flourish();
-    await wait(reducedMotion ? 300 : 1100);
-    void transition('welcome', 'light', 500);
-  }, [transition, reducedMotion]);
+    await wait(reducedMotion ? 500 : 1500);
+    setStage((s) => (s === 'gate' ? 'welcome' : s));
+  }, [reducedMotion]);
 
   /* ── Room ──────────────────────────────────────────────────────────── */
   const selectGift = useCallback(
@@ -198,10 +213,10 @@ export default function App() {
       if (revealing.current === id) return; // the 3D scene and the safety net may both call this
       revealing.current = id;
       sound.chime(5, 0.06);
-      setVeil('light');
-      await wait(reducedMotion ? 150 : 520);
+      // the gift has had its product shot; the memory settles over it (sheet-in), the room
+      // stays there behind, out of focus — no cover in between
+      await wait(reducedMotion ? 60 : 240);
       setActiveId(id);
-      setVeil('none');
     },
     [reducedMotion],
   );
@@ -209,6 +224,7 @@ export default function App() {
   // Safety net: if the 3D opening stalls (very slow device, context loss), open the memory anyway.
   useEffect(() => {
     if (!openingId || activeId) return;
+    if ((window as unknown as { __shotHold?: number }).__shotHold !== undefined) return; // QA: a held product shot
     const id = setTimeout(() => void giftOpened(openingId), reducedMotion ? 2500 : 3500);
     return () => clearTimeout(id);
   }, [openingId, activeId, giftOpened, reducedMotion]);
@@ -227,7 +243,7 @@ export default function App() {
   const goFinal = useCallback(() => {
     sound.flourish();
     setFinalePhase('gather');
-    void transition('final', 'light', 400);
+    void transition('final');
   }, [transition]);
 
   /* ── Finale ────────────────────────────────────────────────────────── */
@@ -249,7 +265,7 @@ export default function App() {
     setFinalePhase('secret');
   }, []);
 
-  const backToRoom = useCallback(() => void transition('room', 'dark'), [transition]);
+  const backToRoom = useCallback(() => void transition('room'), [transition]);
 
   const replay = useCallback(() => {
     clearProgress();
@@ -295,6 +311,7 @@ export default function App() {
                 tier={tier}
                 onTierChange={setTier}
                 portrait={portrait}
+                leaving={leaving}
               />
             </Suspense>
           </ErrorBoundary>
@@ -310,12 +327,20 @@ export default function App() {
           <IntroOverlay taps={taps} tapsNeeded={TAPS_NEEDED} onTap={tapHeart} fallback={!webgl} />
         )}
         {stage === 'gate' && <PasswordGate onSuccess={unlock} onFail={() => sound.chime(0, 0.03)} />}
-        {stage === 'welcome' && <Welcome onEnter={() => void transition('room', 'dark', 300)} />}
+        {stage === 'welcome' && (
+          <Welcome
+            leaving={leaving}
+            onEnter={() => {
+              sound.gather(reducedMotion ? 0.8 : 1.6);
+              void transition('room');
+            }}
+          />
+        )}
         {stage === 'room' && (
           <RoomUI
             gifts={gifts}
             opened={opened}
-            busy={!!openingId || overlayOpen || veil !== 'none' || moment}
+            busy={!!openingId || overlayOpen || veil !== 'none' || leaving || moment}
             onSelect={selectGift}
             onFocusGift={setFocusId}
             onFinal={goFinal}
@@ -336,8 +361,8 @@ export default function App() {
       </Suspense>
 
       <MusicToggle />
-      <div className="veil" data-kind={veilKind} data-on={veil !== 'none'} aria-hidden="true">
-        <span className="veil__light" />
+      <div className="iris" data-on={veil === 'iris'} aria-hidden="true">
+        <span className="iris__core" />
       </div>
       <div className="boot" data-on={webgl && !booted && !saved.unlocked} aria-hidden="true">
         <span className="boot__light" />

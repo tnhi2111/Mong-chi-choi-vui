@@ -237,6 +237,18 @@
   padding-bottom: max(12vh, calc(env(safe-area-inset-bottom) + 48px));
 }
 
+/* stepping inside: the words lift away into the light the camera is diving into */
+.welcome[data-leaving='true'] {
+  transition: opacity 0.6s var(--ease-in-out), transform 0.9s var(--ease-in-out), filter 0.9s var(--ease-in-out);
+  opacity: 0;
+  transform: translateY(-18px) scale(0.985);
+  filter: blur(6px);
+}
+
+.welcome[data-leaving='true'] > * {
+  pointer-events: none;
+}
+
 .welcome__text {
   display: grid;
   gap: 10px;

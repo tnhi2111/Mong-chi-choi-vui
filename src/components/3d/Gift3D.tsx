@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useFrame, type ThreeEvent } from '@react-three/fiber';
-import { Html, RoundedBox } from '@react-three/drei';
+import { RoundedBox } from '@react-three/drei';
+import { ScreenLabel } from './ScreenLabel';
+import { ShotTitle } from './ShotTitle';
 import * as THREE from 'three';
 import { useShader } from './useShader';
 import type { Gift } from '../../data/gifts';
@@ -28,6 +30,8 @@ interface Props {
   focused: boolean;
   /** Hide the title (e.g. when everything is opened and the heart takes the stage). */
   quiet?: boolean;
+  /** The room is being left: the floating name goes first (see RoomWorld). */
+  hideLabel?: boolean;
   glass: boolean;
   reducedMotion: boolean;
   /** Fine pointer present: hover sparkles, tilt and sound. */
@@ -676,6 +680,7 @@ export function Gift3D({
   disabled,
   focused,
   quiet = false,
+  hideLabel = false,
   glass,
   reducedMotion,
   hoverFx,
@@ -696,6 +701,9 @@ export function Gift3D({
   const washColor = useMemo(() => new THREE.Color('#14040a').lerp(new THREE.Color(gift.tint), 0.08), [gift.tint]);
   const backColor = useMemo(() => new THREE.Color(gift.tint).offsetHSL(0, 0.2, -0.05), [gift.tint]);
   const stage = useMemo(() => new Spring(0), []);
+  // its name, set large behind it (a beat after the pedestal: product first, then the words)
+  const titleCard = useRef<THREE.Mesh>(null);
+  const titleIn = useMemo(() => new Spring(0), []);
   const recede = useMemo(() => new Spring(0), []);
   const label = useRef<HTMLDivElement>(null);
   const progress = useRef(0);
@@ -739,6 +747,9 @@ export function Gift3D({
     // timing runs on real time (not frames), so a slow phone opens just as quickly
     const real = Math.min(rawDt, 0.25);
     progress.current = opening ? Math.min(1, progress.current + real * speed) : Math.max(0, progress.current - real * 1.6);
+    // QA (?debug): window.__shotHold = 0.8 holds an opening product shot at that point
+    const hold = (window as unknown as { __shotHold?: number }).__shotHold;
+    if (opening && hold !== undefined) progress.current = Math.min(progress.current, hold);
     const o = progress.current;
     // opening: a breath of stillness first (the light gathers), then it rises to her
     const oo = THREE.MathUtils.clamp((o - 0.14) / 0.86, 0, 1);
@@ -785,6 +796,26 @@ export function Gift3D({
       toCam.copy(r.position).sub(state.camera.position).normalize();
       wash.current.position.copy(r.position).addScaledVector(toCam, 1.7);
       wash.current.scale.setScalar(7.5);
+    }
+    if (titleCard.current) {
+      const tc = titleCard.current;
+      const k = titleIn.step(opening && !isDog ? THREE.MathUtils.smoothstep(o, 0.3, 0.95) : 0, 5.5, dt);
+      const m = tc.material as THREE.MeshBasicMaterial;
+      m.opacity = THREE.MathUtils.clamp(k, 0, 1) * 0.36;
+      tc.visible = m.opacity > 0.003;
+      if (tc.visible) {
+        // between the wash and the gift, facing the camera; it rises into place as it comes
+        // in and fits the frame's width (on a phone it nearly spans it)
+        const behind = 1.25;
+        tc.position.copy(r.position).addScaledVector(toCam, behind);
+        const cam = state.camera as THREE.PerspectiveCamera;
+        const dist = cam.position.distanceTo(tc.position);
+        const viewW = 2 * dist * Math.tan(THREE.MathUtils.degToRad(cam.fov / 2)) * cam.aspect;
+        const w = Math.min(3.8, viewW * 0.9) * (1.04 - 0.04 * k);
+        tc.scale.set(w, w, 1);
+        tc.position.y += 0.3 - (1 - k) * 0.22;
+        tc.quaternion.copy(cam.quaternion);
+      }
     }
     if (backlight.current) {
       const m = backlight.current.material as THREE.SpriteMaterial;
@@ -887,6 +918,7 @@ export function Gift3D({
           <spriteMaterial map={getGlowTexture()} color={backColor} transparent opacity={0} depthWrite={false} blending={THREE.AdditiveBlending} toneMapped={false} />
         </sprite>
       )}
+      {!isDog && <ShotTitle ref={titleCard} title={gift.title} subtitle={gift.subtitle} />}
       <group ref={root} position={home}>
         <Glow ref={glow} color={gift.tint} size={1.5} opacity={0.14} position={isDog ? [0, 0.55, 0] : undefined} />
         {!isDog && (
@@ -955,13 +987,14 @@ export function Gift3D({
           </mesh>
         </group>
         {hoverFx && !reducedMotion && <HoverSparkles on={hover} />}
-        {!opening && (
-          <Html center position={[0, isDog ? -0.34 : -0.7, 0]} style={{ pointerEvents: 'none' }} zIndexRange={[5, 0]}>
-            <div ref={label} className={`gift-label${active ? ' is-active' : ''}${opened ? ' is-opened' : ''}${quiet ? ' is-quiet' : ''}`}>
-              <span className="gift-label__num">{opened ? '✓' : number}</span>
-              <span className="gift-label__title">{gift.title}</span>
-            </div>
-          </Html>
+        {!opening && !hideLabel && (
+          <ScreenLabel
+            position={[0, isDog ? -0.34 : -0.7, 0]}
+            labelRef={label}
+            className={`gift-label${active ? ' is-active' : ''}${opened ? ' is-opened' : ''}${quiet ? ' is-quiet' : ''}`}
+            num={opened ? '✓' : number}
+            title={gift.title}
+          />
         )}
       </group>
     </>

@@ -17,6 +17,8 @@ interface Props {
   particleFactor: number;
   portrait: boolean;
   heartPoints: number;
+  /** Back to the room: the camera dives into the orb. */
+  leaving?: boolean;
 }
 
 const easeInOut = (x: number) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2);
@@ -126,7 +128,7 @@ function MemoryFragments({
 }
 
 /** Stage 5: the finale. */
-export function FinalWorld({ phase, photos, onFormed, reducedMotion, particleFactor, portrait, heartPoints }: Props) {
+export function FinalWorld({ phase, photos, onFormed, reducedMotion, particleFactor, portrait, heartPoints, leaving = false }: Props) {
   const clock = useRef(0);
   const orb = useRef<MemoryCelestialHandle>(null);
   const gathered = useRef({ current: 0 }).current;
@@ -183,10 +185,12 @@ export function FinalWorld({ phase, photos, onFormed, reducedMotion, particleFac
   return (
     <>
       <CameraRig
-        position={[0, lookY, camZ]}
-        lookAt={[0, lookY, 0]}
-        parallax={reducedMotion ? 0 : 0.35}
-        speed={isFormed ? 0.45 : 0.6}
+        // back to the room: dive into the orb (the room opens out of its own)
+        position={leaving ? [0, frame.heartY + 0.2, 3.1] : [0, lookY, camZ]}
+        lookAt={leaving ? [0, frame.heartY, 0] : [0, lookY, 0]}
+        parallax={reducedMotion || leaving ? 0 : 0.35}
+        speed={leaving ? 1.35 : isFormed ? 0.45 : 0.6}
+        fov={leaving ? 52 : 40}
         orbit={orbit}
         orbitCamera
       />

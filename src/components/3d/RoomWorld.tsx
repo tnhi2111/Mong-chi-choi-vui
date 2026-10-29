@@ -33,9 +33,15 @@ interface Props {
   portrait: boolean;
   hoverFx: boolean;
   heartPoints: number;
+  /** Leaving for the finale: the camera dives into the orb. */
+  leaving?: boolean;
 }
 
 const FLOOR_Y = -0.95;
+/** The centerpiece orb — every arrival pulls back out of it, every departure dives into it. */
+const ORB_Y = 0.3;
+/** Where the camera stands, in front of the orb, at the cut (un-rotated; the orbit swings it). */
+const ORB_CLOSE = { pos: [0, ORB_Y + 0.3, 2.5] as [number, number, number], fov: 52 };
 
 /**
  * The hidden moments (touch the cake, or the HAPPY BIRTHDAY sign): how the camera leans in.
@@ -127,6 +133,7 @@ export function RoomWorld({
   portrait,
   hoverFx,
   heartPoints,
+  leaving = false,
 }: Props) {
   // on a tall phone screen the ring stretches in depth, which the raised camera turns into height
   const rx = portrait ? 1.45 : 3.1;
@@ -297,6 +304,18 @@ export function RoomWorld({
   const cam = useThree((st) => st.camera);
   const scn = useThree((st) => st.scene);
   const [ready, setReady] = useState(false);
+  // the first pull-back out of the orb is slower than any later glide: it is the reveal
+  const [arriving, setArriving] = useState(true);
+  useEffect(() => {
+    if (!ready) return;
+    const id = setTimeout(() => setArriving(false), 2600);
+    return () => clearTimeout(id);
+  }, [ready]);
+  useEffect(() => {
+    if (!leaving) return;
+    orbit.tPitch = 0;
+    orbit.tZoom = 1;
+  }, [leaving, orbit]);
   useEffect(() => {
     const g = root.current;
     if (!g) return;
@@ -304,6 +323,14 @@ export function RoomWorld({
     resetReady('room-ready');
     const show = () => {
       if (!alive) return;
+      // the room opens out of its orb: the camera starts right in front of it (where the
+      // last world's camera dove into its own light) and the rig pulls back from there
+      const c = cam as THREE.PerspectiveCamera;
+      c.position.set(...ORB_CLOSE.pos);
+      (c.userData.look ??= new THREE.Vector3()).set(0, ORB_Y, 0);
+      c.lookAt(0, ORB_Y, 0);
+      c.fov = ORB_CLOSE.fov;
+      c.updateProjectionMatrix();
       setReady(true);
       // draw a few frames while still veiled: the first one uploads every texture and
       // buffer of the room — let that happen out of sight
@@ -363,6 +390,11 @@ export function RoomWorld({
     camPos = momentNear
       ? [0, camLook[1] + MOMENT.sign.lift[pi], camLook[2] + MOMENT.sign.back[pi]]
       : [0, camLook[1] + Math.max(MOMENT.far.lift[pi], MOMENT.sign.lift[pi]), camLook[2] + Math.max(MOMENT.far.back[pi], MOMENT.sign.back[pi])];
+  } else if (leaving) {
+    // on to the finale: dive into the orb from wherever she stands
+    camPos = ORB_CLOSE.pos;
+    camLook = [0, ORB_Y, 0];
+    camFov = ORB_CLOSE.fov;
   } else if (opening && openIndex >= 0 && gifts[openIndex]?.shape === 'envelope') {
     // the puppy is a memory too: the camera walks up to it (same rig, same swing round to
     // face it) and settles a little low, the puppy's face and the letter it gives framed
@@ -388,16 +420,19 @@ export function RoomWorld({
 
   return (
     <group ref={root} visible={ready}>
-      <CameraRig
-        position={camPos}
-        lookAt={camLook}
-        parallax={reducedMotion || opening || moment ? 0 : 0.25}
-        speed={moment ? MOMENT.speed : opening ? (gifts[openIndex]?.shape === 'envelope' ? 1.25 : 2.0) : 1.1}
-        fov={camFov}
-        orbit={orbit}
-        orbitCamera
-        fit={portrait ? (yaw) => 1 + 0.42 * Math.sin(yaw) ** 2 : undefined}
-      />
+      {ready && (
+        // mounted once the room is ready, so it starts from the orb (see `show`)
+        <CameraRig
+          position={camPos}
+          lookAt={camLook}
+          parallax={reducedMotion || opening || moment || leaving ? 0 : 0.25}
+          speed={leaving ? 1.35 : moment ? MOMENT.speed : opening ? (gifts[openIndex]?.shape === 'envelope' ? 1.25 : 2.0) : arriving ? 0.75 : 1.1}
+          fov={camFov}
+          orbit={orbit}
+          orbitCamera
+          fit={portrait && !leaving ? (yaw) => 1 + 0.42 * Math.sin(yaw) ** 2 : undefined}
+        />
+      )}
       <RoomSet
         floorY={FLOOR_Y}
         rx={rx}
@@ -412,7 +447,7 @@ export function RoomWorld({
         onMoment={onMoment}
       />
       <Floor rx={rx} rz={rz} />
-      <group position={[0, 0.3, 0]}>
+      <group position={[0, ORB_Y, 0]}>
         {/* the centerpiece: a little universe of their memories, kept in glass. Touch
             plays its constellation reveal; once every memory is open, the touch also
             leads on to the finale (as the heart did), while the orb opens */}
@@ -443,6 +478,8 @@ export function RoomWorld({
           disabled={opening || paused || !!moment}
           focused={focusId === g.id}
           quiet={allOpened}
+          // the names step away while the camera dives into the orb
+          hideLabel={leaving}
           glass={glass}
           reducedMotion={reducedMotion}
           hoverFx={hoverFx}

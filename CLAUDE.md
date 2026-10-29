@@ -373,6 +373,35 @@ Ideas the owner may ask for next (not requested yet): ears even closer to the ph
 (slimmer, wavier fur fringe at the bottom), the puppy turned so the tail shows from
 the default view, real names/photos/letter.
 
+## Transitions between worlds (latest pass — from the owner's 3 reference videos)
+
+Analysis of the videos: `reference/VIDEO_ANALYSIS.md` (the videos themselves are not in
+the repo). Lesson: the hero never leaves the frame; a scene change is a move *through*
+something, never a white/black cover.
+- **One transition, everywhere** (`App.tsx` `transition(next)`): `leaving` → the current
+  world's camera dives into its hero light (IntroWorld: into the heart, fov 52; RoomWorld /
+  FinalWorld: up to the orb) while `.iris` (global.css, `@property --iris`) closes in
+  wine-dark from the edges onto a soft core of the same light; the stage swaps under it;
+  the room compiles (`room-ready`); RoomWorld's rig is mounted only once ready and the camera
+  is placed at `ORB_CLOSE` in front of the orb, so it pulls back out of it (slower,
+  `arriving` speed 0.75, for 2.6 s) while the iris opens. Reload-resume starts closed too.
+  The old `.veil` (white `light` / black `dark`) is gone; `Veil = 'none' | 'iris'`.
+- gate → welcome: no cover (same world): `gate-out` + the heart drifts up. On a short
+  landscape window the welcome heart sits higher (`short` in IntroWorld) — the title used
+  to overlap it. Welcome text lifts away (`.welcome[data-leaving]`).
+- gift → memory: no white flash any more; the sheet settles over the product shot.
+- Product shot: the gift's name in big Cormorant capitals behind it (`ShotTitle.tsx`,
+  driven from Gift3D: `titleIn` spring, fitted to the frame width) — "type behind the
+  product" from reference 1.
+- Gift labels are `ScreenLabel.tsx` (plain DOM following a 3D point), not drei `<Html>`:
+  tearing down five `<Html>` roots with the room threw `removeChild … not a child` (a
+  pageerror on room → finale, present before this pass too).
+- QA: `node scripts/qa-transitions.mjs [--gpu] [--size=800x500]` films gate → welcome,
+  welcome → room and room → finale as frame strips (exits 1 on page errors).
+  `?debug` + `window.__shotHold = 0.9` freezes a gift's product shot (the App safety net
+  waits) — click a `.gift-nav__btn` and screenshot.
+  Without a GPU, 3D runs ~1–5 fps while CSS runs in real time — judge timing with `--gpu`.
+
 ## Running & testing
 
 ```bash
@@ -390,6 +419,7 @@ node scripts/qa-visual.mjs --gpu [--only=heart] [--size=390x844 --mobile]  # her
 node scripts/qa-keyboard.mjs
 node scripts/qa-qr.mjs
 node scripts/qa-perf.mjs --gpu                       # entering the room must not stall
+node scripts/qa-transitions.mjs --gpu                # frame strips of every change of world
 ```
 
 `qa-output/` is git-ignored (screenshots and a few throwaway helper scripts live there).

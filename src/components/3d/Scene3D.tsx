@@ -36,6 +36,8 @@ export interface SceneProps {
   tier: Tier;
   onTierChange: (t: Tier) => void;
   portrait: boolean;
+  /** The page is changing worlds: the world on screen dives into its hero light. */
+  leaving: boolean;
 }
 
 /** One persistent WebGL canvas; the "world" inside changes with the stage. */
@@ -85,6 +87,7 @@ export default function Scene3D(props: SceneProps) {
           particleFactor={q.particles}
           portrait={portrait}
           heartPoints={heartPoints}
+          leaving={props.leaving}
         />
       )}
       {stage === 'room' && (
@@ -105,6 +108,7 @@ export default function Scene3D(props: SceneProps) {
           portrait={portrait}
           hoverFx={finePointer}
           heartPoints={Math.round(heartPoints * 0.75)}
+          leaving={props.leaving}
         />
       )}
       {stage === 'final' && (
@@ -117,6 +121,7 @@ export default function Scene3D(props: SceneProps) {
           particleFactor={q.particles}
           portrait={portrait}
           heartPoints={Math.round(heartPoints * 0.7)}
+          leaving={props.leaving}
         />
       )}
     </Canvas>
