@@ -10,10 +10,12 @@ interface Props {
   gift: Gift;
   index: number;
   onClose: () => void;
+  /** The page is folding back into the gift it came out of. */
+  closing?: boolean;
 }
 
 /** A memory, opened: title, date, photo, message, timeline, polaroids, note. */
-export default function MemoryView({ gift, index, onClose }: Props) {
+export default function MemoryView({ gift, index, onClose, closing = false }: Props) {
   const dialog = useDialog<HTMLDivElement>(onClose);
   const scroller = useRef<HTMLDivElement>(null);
   const number = String(index + 1).padStart(2, '0');
@@ -24,7 +26,7 @@ export default function MemoryView({ gift, index, onClose }: Props) {
   return (
     <div
       ref={dialog}
-      className={`sheet${from.className}`}
+      className={`sheet${from.className}${closing ? ' is-closing' : ''}`}
       role="dialog"
       aria-modal="true"
       aria-labelledby="memory-title"

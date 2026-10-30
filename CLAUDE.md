@@ -662,6 +662,21 @@ in those films. `--log` prints leader / camera / weight per frame.
   `useGiftOrigin` (page widens from the object), box 01 = lid lifted off + walls hinged at the
   base + wine satin lining + rising blank pictures. `window.__shotHold` still freezes a
   shot (`qa-output/tmp/giftsteps.mjs N`). QA waits for `.sheet` up to 15 s.
+- **Pace** (`src/lib/pace.ts`, no three.js): every scene clock (sprite legs, heart opening,
+  dust, gift/LetterDog clocks, IntroWorld unlock) multiplies dt by `pace.rate`. App calls
+  `beginScene(name)` / `endScene()` around each scripted moment and waits with `sceneWait(ms)`
+  (scaled). A tap or any key during a scene → `hurryUp()`: a smooth ramp to ×3.5, never a
+  jump. Seen before (`localStorage` `love-story:seen`, cleared by `?reset`) → ×2.5 (≈40 %).
+  `window.__pace` in `?debug`.
+- **Second pass of H and I** (see STORYBOARD H/I): BuildGate `mode` (`grow`/`drop`/`rise`/`pop`)
+  + `pivot` (each thing scales about where it stands; RoomBuild's sampler puts gates at their
+  pivot while it samples); the wall rises like a curtain and the ceiling comes last;
+  gifts 02–05 have their own openings (bottle scroll, journal star + pages + journey line,
+  music-box notes → motes + ripples, the letter's wax seal cracking and the letter unfolding),
+  mechanism sounds in `audio.ts`, and closing runs backwards (`closingSheet` in App,
+  `.sheet.is-closing`). **Keep the build tests inline in the wall/ceiling shaders** — a shared
+  helper call in the ceiling hung the GPU on D3D (context lost → white screen).
+  QA: `qa-output/tmp/openclose.mjs N` (open → page → close, timestamps), `tour.mjs`.
 
 ## Design references (`reference/`)
 

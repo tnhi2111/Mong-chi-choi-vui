@@ -48,11 +48,14 @@ export function sampleRoom(root: THREE.Object3D, limit = 15000, sweep = false): 
   // Anything waiting for the light (BuildGate) is scaled to nothing right now — sampling it
   // as it stands would pile all of its points on one spot. Open every gate for the moment
   // it takes to read the vertices, then shut them again.
-  const gates: { o: THREE.Object3D; s: THREE.Vector3 }[] = [];
+  const gates: { o: THREE.Object3D; s: THREE.Vector3; p: THREE.Vector3 }[] = [];
   root.traverse((o) => {
     if (o.userData?.buildGate) {
-      gates.push({ o, s: o.scale.clone() });
+      gates.push({ o, s: o.scale.clone(), p: o.position.clone() });
       o.scale.setScalar(1);
+      // (and where it will stand: a falling seed is still up in the air right now)
+      const pv = o.userData.pivot as [number, number, number] | undefined;
+      if (pv) o.position.set(pv[0], pv[1], pv[2]);
     }
   });
   root.updateWorldMatrix(true, true);
@@ -69,7 +72,11 @@ export function sampleRoom(root: THREE.Object3D, limit = 15000, sweep = false): 
     // puppy has twenty thousand).
     parts.push({ mesh: m, tris, weight: Math.sqrt(tris) * size });
   });
-  const restore = () => gates.forEach(({ o, s: v }) => o.scale.copy(v));
+  const restore = () =>
+    gates.forEach(({ o, s: v, p: q }) => {
+      o.scale.copy(v);
+      o.position.copy(q);
+    });
   if (!parts.length) {
     restore();
     return null;

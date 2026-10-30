@@ -600,6 +600,13 @@ const wallFragment = /* glsl */ `
     // nothing of the room exists before the light has flown past it
     float built = spriteBuilt(vWorld);
     if (uBuild.z > 0.5 && built < 0.5) discard;
+    // the wall rises from its foot like a curtain drawn up, a soft line of light at its top
+    // (written out by hand, not through a helper: see the ceiling below)
+    float aW = atan(vWorld.x, -vWorld.z);
+    float climb = (uBuild.z > 0.5 ? smoothstep(aW - 0.3, aW + 0.75, uBuild.y) : 1.0) * 3.6;
+    float above = vWorld.y - uFloorY - climb;
+    if (uBuild.z > 0.5 && above > 0.0) discard;
+    col += vec3(1.0, 0.8, 0.6) * 0.35 * (uBuild.z > 0.5 ? smoothstep(-0.18, 0.0, above) : 0.0);
     col = col * (0.55 + 0.45 * built) + spriteGlow(vWorld) * (0.06 + col * 1.4) * (1.0 - inWin * 0.8);
     gl_FragColor = vec4(col, 1.0);
   }
@@ -635,8 +642,13 @@ const ceilingFragment = /* glsl */ `
     col *= 1.0 - smoothstep(0.12, 0.0, ${WALL_R.toFixed(1)} - r) * 0.4;
     col *= light * 1.6;
     // nothing of the room exists before the light has flown past it
+    // …and the ceiling last of all: it closes over a stretch only once the wall below it has
+    // risen all the way (floor, then wall, then ceiling — a builder's order)
+    // (written out by hand: calling spriteRise() here made the GPU hang on the D3D backend
+    //  and the WebGL context was lost a few seconds into the room)
     float built = spriteBuilt(vWorld);
-    if (uBuild.z > 0.5 && built < 0.5) discard;
+    float aC = atan(vWorld.x, -vWorld.z);
+    if (uBuild.z > 0.5 && (built < 0.5 || uBuild.y < aC + 0.75)) discard;
     col = col * (0.55 + 0.45 * built) + spriteGlow(vWorld) * (0.04 + col * 1.2);
     gl_FragColor = vec4(col, uInside);
   }
@@ -2100,7 +2112,7 @@ export function RoomSet({ floorY: stageY, rx, rz, heart, reducedMotion, hoverFx,
       </mesh>
       <Ceiling floorY={floorY} lamps={floorU.uLamps} />
       {candles.map((c, i) => (
-        <BuildGate key={i} at={[c.x, c.z]} seed={c.seed * 0.08} grow={0.4}>
+        <BuildGate key={i} at={[c.x, c.z]} pivot={[c.x, floorY, c.z]} seed={c.seed * 0.08} grow={0.4}>
           <mesh
             position={[c.x, floorY + c.h / 2, c.z]}
             rotation={[Math.sin(c.seed * 3.1) * 0.035, 0, Math.cos(c.seed * 1.7) * 0.035]}
@@ -2111,7 +2123,7 @@ export function RoomSet({ floorY: stageY, rx, rz, heart, reducedMotion, hoverFx,
       ))}
       {/* the flames come near the end: the room's shapes first, then its warmth — but
           before the light leaves, so the room is never dark between the two */}
-      <BuildGate at={[0, 0]} angle={1.5} grow={0.9}>
+      <BuildGate at={[0, 0]} angle={1.5} mode="pop">
         <points geometry={flames} material={flameMat} frustumCulled={false} />
       </BuildGate>
       <Dust candles={candles} candleVec={candleVec} floorY={floorY} count={portrait ? 90 : 170} motion={motion} />
@@ -2131,16 +2143,24 @@ export function RoomSet({ floorY: stageY, rx, rz, heart, reducedMotion, hoverFx,
         <planeGeometry args={[1.9, 2.0]} />
         <meshBasicMaterial transparent opacity={0} depthWrite={false} colorWrite={false} />
       </mesh>
-      <BuildGate at={[0, -WALL_R]} grow={0.8}>
+      <BuildGate at={[0, -WALL_R]} pivot={[0, floorY + 2.6, -WALL_R * 0.9]} grow={0.8}>
         <Garland floorY={floorY} />
       </BuildGate>
       <group ref={(g) => void (cutGroups.current[4] = g)} userData={{ anchor: WINDOW_ANGLE }}>
-        <BuildGate at={[Math.sin(WINDOW_ANGLE) * WALL_R, -Math.cos(WINDOW_ANGLE) * WALL_R]} grow={0.7}>
+        <BuildGate
+          at={[Math.sin(WINDOW_ANGLE) * WALL_R, -Math.cos(WINDOW_ANGLE) * WALL_R]}
+          pivot={[Math.sin(WINDOW_ANGLE) * WALL_R, floorY + 1.9, -Math.cos(WINDOW_ANGLE) * WALL_R]}
+          grow={0.7}
+        >
           <ArchedWindow floorY={floorY} motion={motion} />
         </BuildGate>
       </group>
       <group ref={(g) => void (cutGroups.current[0] = g)} userData={{ anchor: 0 }}>
-        <BuildGate at={[0, -SIGN_PLACEMENT[portrait ? 'portrait' : 'landscape'].radius]} grow={0.75}>
+        <BuildGate
+          at={[0, -SIGN_PLACEMENT[portrait ? 'portrait' : 'landscape'].radius]}
+          pivot={[0, floorY + 2.0, -SIGN_PLACEMENT[portrait ? 'portrait' : 'landscape'].radius]}
+          grow={0.75}
+        >
           <BirthdaySign floorY={floorY} {...SIGN_PLACEMENT[portrait ? 'portrait' : 'landscape']} heart={heart} motion={motion} focused={focus === 'sign'} onTap={onMoment && (() => onMoment('sign'))} />
         </BuildGate>
       </group>
@@ -2148,7 +2168,7 @@ export function RoomSet({ floorY: stageY, rx, rz, heart, reducedMotion, hoverFx,
       <RoomProps floorY={floorY} windowAngle={WINDOW_ANGLE} wallR={WALL_R} candleVec={candleVec} candleCount={candles.length} heart={heart} motion={motion} />
       {dogSpot && <Petals spot={dogSpot} y={stageY} motion={motion} />}
       <group position={cakeAt} scale={0.82} ref={(g) => void (cutGroups.current[1] = g)} userData={{ anchor: LAYOUT.cake }}>
-        <BuildGate at={[cakeAt[0], cakeAt[2]]} grow={0.8}>
+        <BuildGate at={[cakeAt[0], cakeAt[2]]} pivot={[0, 0, 0]} mode="rise" grow={1.1}>
         <Cake
           at={[0, 0, 0]}
           outward={cakeAt}
@@ -2162,7 +2182,7 @@ export function RoomSet({ floorY: stageY, rx, rz, heart, reducedMotion, hoverFx,
       </group>
       <group ref={(g) => void (cutGroups.current[2] = g)} userData={{ anchor: LAYOUT.sideboard }}>
         {balloons.map((b, i) => (
-          <BuildGate key={i} at={[b.at[0], b.at[2]]} seed={i * 0.05} grow={0.55}>
+          <BuildGate key={i} at={[b.at[0], b.at[2]]} pivot={b.at} seed={i * 0.05} grow={0.9}>
             <Balloon {...b} motion={motion} hoverFx={hoverFx} />
           </BuildGate>
         ))}

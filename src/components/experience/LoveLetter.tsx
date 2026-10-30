@@ -7,12 +7,14 @@ import { useDialog } from '../ui/useDialog';
 interface Props {
   onClose: () => void;
   reducedMotion: boolean;
+  /** The letter's page is folding back into the letter. */
+  closing?: boolean;
 }
 
 const CHARS_PER_SECOND = 52;
 
 /** The letter: paper, handwriting-ish, words arriving at a readable pace (skippable). */
-export default function LoveLetter({ onClose, reducedMotion }: Props) {
+export default function LoveLetter({ onClose, reducedMotion, closing = false }: Props) {
   const cfg = birthdayConfig.letter;
   const dialog = useDialog<HTMLDivElement>(onClose);
   const paragraphs = useMemo(() => cfg.paragraphs.map(fill), [cfg.paragraphs]);
@@ -58,7 +60,7 @@ export default function LoveLetter({ onClose, reducedMotion }: Props) {
   return (
     <div
       ref={dialog}
-      className={`sheet sheet--letter${from.className}`}
+      className={`sheet sheet--letter${from.className}${closing ? ' is-closing' : ''}`}
       style={from.style}
       role="dialog"
       aria-modal="true"

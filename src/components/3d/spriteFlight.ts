@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { pace } from '../../lib/pace';
 import { motion } from '../../config/motion';
 import { Spring } from './spring';
 import { story } from '../../lib/story';
@@ -347,7 +348,7 @@ class SpriteController {
     // ── the leader ─────────────────────────────────────────────
     const L = this.playing ? this.legs[this.leg] : undefined;
     if (L) {
-      this.legT += dt;
+      this.legT += dt * pace.rate; // scene time: hurried by a touch, shorter when seen
       if (L.curve) {
         const u = Math.min(1, this.legT / Math.max(0.001, L.duration));
         L.curve.getPointAt((L.ease ?? easeInOut)(u), this.leader);

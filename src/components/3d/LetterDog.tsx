@@ -2,9 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { RoundedBox } from '@react-three/drei';
 import * as THREE from 'three';
+import { pace as scene } from '../../lib/pace';
+import { sound } from '../../lib/audio';
 import { EAR_PIVOT, FACE, HEAD_PIVOT, HEAD_REST, JAW_PIVOT, TAIL_PIVOT, type V3 } from './letterDogModel';
 import { loadLetterDog, letterDogReady, type LetterDogGeometry } from './letterDogGeometry';
-import { getHeartGeometry } from './heartShape';
 import { getPaperTexture, getShadowTexture } from './glowTexture';
 import { surface, type GiftMaterials } from './Gift3D';
 
@@ -165,6 +166,19 @@ const T_PRESENT = 0.8;
 const T_MOUTH = 1.3;
 const T_RELEASE = 1.65;
 const SETTLE = 0.6;
+/**
+ * Storyboard I.5: the letter, once it lies before her (seconds after SETTLE). The seal warms,
+ * then cracks; the flap lifts; the letter slides out, rises toward her and opens its folds.
+ * Only then is it delivered (the page opens out of the unfolded letter).
+ */
+const LETTER = {
+  glow: [0, 0.55],
+  crack: [0.5, 1.0],
+  flap: [1.0, 1.0],
+  slide: [1.5, 2.2],
+  rise: [2.0, 3.0],
+  unfold: [2.8, 3.8],
+} as const;
 /** gentle "paper" gravity: a letter drops, but air slows it */
 const GRAVITY = 3.4;
 
@@ -179,6 +193,8 @@ interface Props {
   reducedMotion: boolean;
   /** the letter has been delivered — open it now */
   onDelivered: () => void;
+  /** Set to the unfolded letter while it rises: the memory page opens out of it. */
+  markRef?: { current: THREE.Object3D | null };
 }
 
 type Letter = {
@@ -192,7 +208,7 @@ type Letter = {
   returnFrom: { pos: THREE.Vector3; quat: THREE.Quaternion; at: number } | null;
 };
 
-export function LetterDog({ opening, hover, aim, mats, reducedMotion, onDelivered }: Props) {
+export function LetterDog({ opening, hover, aim, mats, reducedMotion, onDelivered, markRef }: Props) {
   const [geo, setGeo] = useState<LetterDogGeometry | null>(letterDogReady);
   useEffect(() => {
     if (geo) return;
@@ -230,6 +246,11 @@ export function LetterDog({ opening, hover, aim, mats, reducedMotion, onDelivere
   const anchor = useRef<THREE.Object3D>(null);
   const letter = useRef<THREE.Group>(null);
   const lid = useRef<THREE.Group>(null);
+  /** Storyboard I.5: the wax seal's two halves, the sheet inside and its two outer folds. */
+  const sealHalves = useRef<(THREE.Group | null)[]>([]);
+  const sheet = useRef<THREE.Group>(null);
+  const folds = useRef<(THREE.Group | null)[]>([]);
+  const sealed = useRef({ cracked: false, unfolded: false });
   const eyeLids = useRef<THREE.Group[]>([]);
   const ears = useRef<THREE.Group[]>([]);
   // QA (?debug): the head, for close-up framings (window.__camOverride = { in: 'dogHead', … })
@@ -248,7 +269,7 @@ export function LetterDog({ opening, hover, aim, mats, reducedMotion, onDelivere
   const shadow = useRef<THREE.Mesh>(null);
 
   // the performance clock, and smoothed channels
-  const perf = useRef({ startedAt: -1, deliveredAt: -1, happyAfter: 0 });
+  const perf = useRef({ startedAt: -1, clock: 0, deliveredAt: -1, happyAfter: 0, restClock: 0 });
   const ch = useRef({ look: HEAD_REST[0], turn: HEAD_REST[1], tilt: HEAD_REST[2], jaw: 0, smile: 0, crouch: 0, present: 0, wagAmp: 0.07, wagFreq: 2.2, wagPhase: 0, lid: 0 });
   const blink = useRef(2 + Math.random() * 3);
   const L0 = useRef<Letter>({
@@ -282,7 +303,8 @@ export function LetterDog({ opening, hover, aim, mats, reducedMotion, onDelivere
     const dt = Math.min(rawDt, 0.05);
     const now = state.clock.elapsedTime;
     const motion = reducedMotion ? 0.25 : 1;
-    const pace = reducedMotion ? 2 : 1;
+    // (scene time: a touch hurries the delivery, a second time is shorter — lib/pace)
+    const pace = (reducedMotion ? 2 : 1) * scene.rate;
     const p = perf.current;
     const c = ch.current;
     const h = hover.current;
@@ -291,7 +313,10 @@ export function LetterDog({ opening, hover, aim, mats, reducedMotion, onDelivere
     // ── state ──────────────────────────────────────────────────────────────
     if (opening && p.startedAt < 0) {
       p.startedAt = now;
+      p.clock = 0;
+      p.restClock = 0;
       p.deliveredAt = -1;
+      sealed.current = { cracked: false, unfolded: false };
     }
     if (!opening && p.startedAt >= 0) {
       // the letter was closed: pick it back up
@@ -300,7 +325,8 @@ export function LetterDog({ opening, hover, aim, mats, reducedMotion, onDelivere
       Lt.mode = Lt.mode === 'held' ? 'held' : 'returning';
       p.happyAfter = 1;
     }
-    const T = p.startedAt >= 0 ? (now - p.startedAt) * pace : -1;
+    if (p.startedAt >= 0) p.clock += dt * pace;
+    const T = p.startedAt >= 0 ? p.clock : -1;
     const notice = T >= 0 ? ease(T / 0.35) : 0;
     const happy = T >= 0 ? ease((T - 0.3) / 0.5) : 0;
     const mouth = T >= 0 ? ease((T - T_MOUTH) / (T_RELEASE - T_MOUTH)) : 0;
@@ -442,7 +468,10 @@ export function LetterDog({ opening, hover, aim, mats, reducedMotion, onDelivere
       // a last little settle as the paper lies down flat
       Lt.quat.slerp(tmp.flat, 1 - Math.exp(-dt * 10));
       lg.matrix.compose(Lt.pos, Lt.quat, tmp.one);
-      if (p.deliveredAt < 0 && now - Lt.landedAt > SETTLE / pace) {
+      if (opening) p.restClock += dt * pace;
+      // Storyboard I.5: the seal warms and cracks, the flap lifts, the letter slides out,
+      // rises toward her and opens its folds; only then is it delivered
+      if (p.deliveredAt < 0 && p.restClock > SETTLE + LETTER.unfold[1]) {
         p.deliveredAt = now;
         onDelivered();
       }
@@ -470,10 +499,57 @@ export function LetterDog({ opening, hover, aim, mats, reducedMotion, onDelivere
       (sh.material as THREE.MeshBasicMaterial).opacity = 0.42 * Math.exp(-hgt * 2.2);
     }
 
-    // the flap lifts once it lies before her
-    const lidT = Lt.mode === 'resting' ? 1 : 0;
-    c.lid += (lidT - c.lid) * (1 - Math.exp(-dt * 4));
+    // the letter opening, once it has landed (times from LETTER, counted after SETTLE)
+    const rt = Lt.mode === 'resting' && opening ? p.restClock - SETTLE : -1;
+    const beat = (a: readonly [number, number]) => (rt < 0 ? 0 : ease((rt - a[0]) / Math.max(1e-3, a[1] - a[0])));
+    const glowK = beat(LETTER.glow);
+    const crackK = beat(LETTER.crack);
+    if (rt >= LETTER.crack[0] && !sealed.current.cracked) {
+      sealed.current.cracked = true;
+      sound.seal();
+    }
+    // the wax warms first: it glows from inside, as hot wax does
+    const seal = mats.seal as THREE.MeshStandardMaterial | undefined;
+    if (seal && seal.emissive) {
+      seal.emissive.set('#ff4a2a');
+      seal.emissiveIntensity = glowK * (1 - crackK * 0.7) * 1.4;
+    }
+    // then it splits down the middle, each half tipping away and dropping
+    sealHalves.current.forEach((g, i) => {
+      if (!g) return;
+      const side = i === 0 ? -1 : 1;
+      g.position.set(side * crackK * 0.018, -crackK * crackK * 0.012, crackK * 0.006);
+      g.rotation.set(0, side * crackK * 0.9, side * crackK * 0.35);
+      g.visible = rt < LETTER.slide[1];
+    });
+    // the flap lifts once the seal has given (closed again whenever she is not opening it)
+    const lidT = rt >= LETTER.flap[0] ? 1 : 0;
+    c.lid += (lidT - c.lid) * (1 - Math.exp(-dt * 3.2 * pace));
     if (lid.current) lid.current.rotation.x = -c.lid * 2.4;
+    // the letter slides out of it, rises toward her and opens its folds
+    const slideK = beat(LETTER.slide);
+    const riseK = beat(LETTER.rise);
+    const unfoldK = beat(LETTER.unfold);
+    const sh2 = sheet.current;
+    if (sh2) {
+      sh2.visible = slideK > 0.001;
+      const L2 = FACE.letter;
+      sh2.position.set(0, slideK * L2.h * 0.95 + riseK * L2.h * 0.4, L2.t * 0.5 + riseK * 0.34);
+      // it turns up to face her (the camera looks down at the letter on the floor)
+      sh2.rotation.set(riseK * -1.05, 0, Math.sin(now * 0.9) * 0.02 * riseK);
+      sh2.scale.setScalar(1 + riseK * 0.55);
+      folds.current.forEach((f, i) => {
+        if (!f) return;
+        // the top fold opens first, then the bottom one, a beat apart
+        const e = ease(THREE.MathUtils.clamp(unfoldK * 1.6 - i * 0.6, 0, 1));
+        f.rotation.x = (i === 0 ? -1 : 1) * (1 - e) * (Math.PI - 0.04);
+      });
+      if (unfoldK > 0.05 && !sealed.current.unfolded) {
+        sealed.current.unfolded = true;
+        sound.paper(2, 260);
+      }
+      if (markRef) markRef.current = riseK > 0.3 ? sh2 : null;
+    }
   });
 
   const L = FACE.letter;
@@ -560,7 +636,29 @@ export function LetterDog({ opening, hover, aim, mats, reducedMotion, onDelivere
             <RoundedBox args={[L.w, L.h, L.t]} radius={0.004} smoothness={2} material={mats.main} />
             <group ref={lid} position={[0, L.h / 2 - 0.004, L.t / 2 + 0.001]}>
               <mesh geometry={flap} material={mats.flap ?? mats.main} />
-              <mesh geometry={getHeartGeometry('low')} position={[0, -L.h * 0.5, 0.008]} scale={[0.026, 0.026, 0.014]} material={mats.seal ?? mats.main} />
+              {/* the wax seal, in two halves that meet: it cracks along that line */}
+              <group position={[0, -L.h * 0.5, 0.008]}>
+                {[0, 1].map((i) => (
+                  <group key={i} ref={(g) => void (sealHalves.current[i] = g)}>
+                    <mesh rotation-x={Math.PI / 2} scale={[1, 0.42, 1]} material={mats.seal ?? mats.main}>
+                      <sphereGeometry args={[0.024, 14, 8, i === 0 ? Math.PI * 0.5 : Math.PI * 1.5, Math.PI]} />
+                    </mesh>
+                  </group>
+                ))}
+              </group>
+            </group>
+            {/* the letter inside, folded in three: it slides out, rises and opens */}
+            <group ref={sheet} visible={false} position={[0, 0, L.t * 0.5]}>
+              <mesh material={mats.main}>
+                <boxGeometry args={[L.w * 0.9, L.h * 0.86, 0.0015]} />
+              </mesh>
+              {[0, 1].map((i) => (
+                <group key={i} ref={(g) => void (folds.current[i] = g)} position={[0, (i === 0 ? 1 : -1) * L.h * 0.43, i === 0 ? 0.0012 : -0.0012]}>
+                  <mesh position={[0, (i === 0 ? 1 : -1) * L.h * 0.43, 0]} material={mats.main}>
+                    <boxGeometry args={[L.w * 0.9, L.h * 0.86, 0.0015]} />
+                  </mesh>
+                </group>
+              ))}
             </group>
           </group>
         </>

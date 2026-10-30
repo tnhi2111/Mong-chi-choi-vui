@@ -6,6 +6,7 @@ import { motion as MOTION } from '../../config/motion';
 import { publishGiftMark } from '../../lib/giftMark';
 import { ShotTitle } from './ShotTitle';
 import * as THREE from 'three';
+import { pace } from '../../lib/pace';
 import { useShader } from './useShader';
 import type { Gift } from '../../data/gifts';
 import { Glow } from './Glow';
@@ -436,6 +437,24 @@ function Motes({ count, radius, level, seed = 1 }: { count: number; radius: numb
 }
 
 const openOf = (o: number) => THREE.MathUtils.smoothstep(o, 0.4, 0.85);
+/** The journal: how many loose pages flick past, the star's trail, the dotted journey. */
+const PAGES = 7;
+const TRAIL = 9;
+const JOURNEY: [number, number][] = Array.from({ length: 22 }, (_, j) => {
+  const u = j / 21;
+  return [-0.17 + u * 0.34, Math.sin(u * Math.PI * 2.2) * 0.07 + (u - 0.5) * 0.05];
+});
+/** The music box's tune: [where in the opening it plays, pentatonic step]. */
+const MUSIC_NOTES: [number, number][] = [
+  [0.44, 4],
+  [0.5, 6],
+  [0.56, 8],
+  [0.62, 6],
+  [0.68, 4],
+  [0.74, 1],
+  [0.8, 4],
+  [0.9, 6],
+];
 /** How long a steady press takes to lift a lid all the way (seconds). */
 const HOLD_SECS = 0.7;
 
@@ -478,7 +497,10 @@ function GiftBody({
   reducedMotion,
   opening,
   onDelivered,
+  markRef,
 }: {
+  /** The thing the memory page opens out of (the note, the page, the letter…), if not the gift itself. */
+  markRef: { current: THREE.Object3D | null };
   gift: Gift;
   progress: Progress;
   /** 0..1 — how far her press has lifted the lid, before the opening itself begins. */
@@ -507,6 +529,22 @@ function GiftBody({
   /** When each comb tooth was last plucked (s, scene clock). */
   const plucked = useRef<number[]>([]);
   const clockNow = useRef(0);
+  /** Storyboard I: what each gift lets out — the bottle's note, the journal's star and its
+   *  trail and journey, the music box's notes. */
+  const note = useRef<THREE.Group>(null);
+  const scroll = useRef<THREE.Group>(null);
+  const roll = useRef<THREE.Group>(null);
+  const twineRing = useRef<THREE.Group>(null);
+  const flyStar = useRef<THREE.Group>(null);
+  const trail = useRef<(THREE.Mesh | null)[]>([]);
+  const journey = useRef<(THREE.Mesh | null)[]>([]);
+  const coverStar = useRef<THREE.Mesh>(null);
+  const pageTop = useRef<THREE.Group>(null);
+  const mouth = useRef<THREE.Group>(null);
+  const noteFx = useRef<{ mote: THREE.Mesh | null; ring: THREE.Mesh | null }[]>([]);
+  const noteAt = useRef<number[]>([]);
+  /** Sounds and moments that happen once per opening. */
+  const fired = useRef(new Set<string>());
   const mats = useGiftMaterials(gift, glass);
   // the little pictures in box 01: two tints of the gift's own colour, never words
   const tintSoft = useMemo(() => new THREE.Color(gift.tint).lerp(new THREE.Color('#f6e3dc'), 0.55), [gift.tint]);
@@ -521,18 +559,39 @@ function GiftBody({
     [star, bottle],
   );
 
-  // the music box plays a few soft notes as its lid lifts
+  // every opening starts from the beginning: its sounds and moments can happen again
   useEffect(() => {
-    if (!opening || gift.shape !== 'orb') return;
-    const ids = [7, 9, 11, 9, 7, 4].map((p, i) =>
-      setTimeout(() => {
-        sound.chime(p, 0.04);
-        // the tooth that sounds that note rings (higher note, shorter tooth)
-        plucked.current[Math.min(COMB_TEETH - 1, Math.max(0, p - 1))] = clockNow.current;
-      }, 420 + i * 260),
-    );
-    return () => ids.forEach(clearTimeout);
-  }, [opening, gift.shape]);
+    if (!opening) {
+      fired.current.clear();
+      noteAt.current = [];
+    }
+  }, [opening]);
+  // the memory page opens out of the thing that came out (Gift3D reads it)
+  useEffect(() => {
+    markRef.current = gift.shape === 'capsule' ? note.current : gift.shape === 'star' ? pageTop.current : gift.shape === 'orb' ? mouth.current : null;
+  });
+  const noteMats = useMemo(
+    () =>
+      gift.shape === 'orb'
+        ? MUSIC_NOTES.map(() => ({
+            mote: new THREE.MeshBasicMaterial({ color: '#ffe1bf', transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false }),
+            ring: new THREE.MeshBasicMaterial({ color: '#f2a6b6', transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false, side: THREE.DoubleSide }),
+          }))
+        : [],
+    [gift.shape],
+  );
+  useEffect(() => () => noteMats.forEach((m) => (m.mote.dispose(), m.ring.dispose())), [noteMats]);
+  const glowMats = useMemo(
+    () => ({
+      gold: new THREE.MeshBasicMaterial({ color: '#f4cf8a', toneMapped: false }),
+      spark: new THREE.MeshBasicMaterial({ color: '#ffd9a0', transparent: true, opacity: 0.75, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false }),
+      ink: new THREE.MeshBasicMaterial({ color: '#8a2a3e' }),
+      paper: new THREE.MeshBasicMaterial({ color: '#d8c6a6', side: THREE.DoubleSide }),
+      page: new THREE.MeshBasicMaterial({ color: '#cdb99c' }),
+    }),
+    [],
+  );
+  useEffect(() => () => Object.values(glowMats).forEach((m) => m.dispose()), [glowMats]);
 
   const motion = reducedMotion ? 0.3 : 1;
 
@@ -545,6 +604,13 @@ function GiftBody({
     // her press, before the opening itself: enough to feel the thing give, never enough to
     // see inside — that is what the opening is for (storyboard C)
     const lift = hold.current * (1 - open);
+    const once = (key: string, at: number, fn: () => void) => {
+      if (opening && o >= at && !fired.current.has(key)) {
+        fired.current.add(key);
+        fn();
+      }
+    };
+    const ss = THREE.MathUtils.smoothstep;
     switch (gift.shape) {
       case 'box': {
         // Storyboard I.1 — the box opens the way a gift box does when it is made to be
@@ -563,8 +629,10 @@ function GiftBody({
           lid.current.position.y = 0.24 + pop * 0.05 + off * 1.9 + lift * 0.035;
           lid.current.position.z = -0.33 - off * 0.7;
         }
+        once('satin', 0.14, () => sound.satin());
         walls.current.forEach((w, i) => {
           if (!w) return;
+          once(`wall${i}`, 0.5 + i * 0.05, () => sound.hinge());
           const k = THREE.MathUtils.smoothstep(o, 0.46 + i * 0.05, 0.8 + i * 0.04);
           // a petal does not drop flat: it opens to ~70°, and settles there with a breath
           w.rotation.x = k * 1.22 + Math.sin(t * 1.4 + i) * 0.015 * k;
@@ -583,25 +651,87 @@ function GiftBody({
         if (tag.current) tag.current.rotation.z = Math.sin(t * 1.3 * motion + 0.6) * (0.05 + h * 0.12) * motion + open * 0.4;
         break;
       }
-      case 'capsule':
-        // the cork works loose and lifts off, tilting; the motes inside rise out
-        if (cork.current) {
-          const pop = THREE.MathUtils.smoothstep(o, 0.3, 0.6);
-          cork.current.position.y = 0.3 + pop * 0.22 + open * 0.1 + lift * 0.04 + Math.sin(t * 40) * 0.003 * h * (1 - pop);
-          cork.current.rotation.z = pop * 0.6 + lift * 0.12;
-          cork.current.position.x = pop * 0.08;
+      case 'capsule': {
+        // Storyboard I.2 — the twine loosens, the cork works free and pops (slowly), the
+        // rolled note rises out of the neck, unrolls in the air and grows into the page; the
+        // glass, emptied, thins into light.
+        const loose = ss(o, 0.12, 0.26);
+        if (twineRing.current) {
+          twineRing.current.position.y = -loose * 0.03;
+          twineRing.current.scale.setScalar(1 + loose * 0.16);
         }
+        once('cork', 0.2, () => sound.cork());
+        if (cork.current) {
+          const pop = ss(o, 0.2, 0.4);
+          cork.current.position.y = 0.3 + pop * 0.34 + lift * 0.04 + Math.sin(t * 40) * 0.003 * h * (1 - pop);
+          cork.current.rotation.z = pop * 1.2 + lift * 0.12;
+          cork.current.position.x = pop * 0.2;
+        }
+        const rise = ss(o, 0.38, 0.64);
+        const unroll = ss(o, 0.6, 0.88);
+        const grow = ss(o, 0.82, 1);
+        once('unroll', 0.6, () => sound.paper(1));
+        if (note.current) {
+          // out of the neck, straightening upright as it comes (it lay at a slant inside)
+          note.current.position.set(unroll * -0.12, -0.03 + rise * 0.62, rise * 0.06);
+          note.current.rotation.set(0.2 * (1 - rise), 0, 0.42 * (1 - rise) - 0.16 * rise);
+          note.current.scale.setScalar(1 + grow * 0.8);
+        }
+        if (scroll.current) {
+          scroll.current.scale.x = Math.max(0.001, unroll);
+          scroll.current.visible = unroll > 0.002;
+        }
+        if (roll.current) roll.current.position.x = unroll * 0.26;
+        const glassMat = mats.main as THREE.MeshPhysicalMaterial;
+        glassMat.opacity = 0.26 * (1 - 0.32 * unroll);
         break;
-      case 'star':
-        // the journal's cover swings open, then two pages turn after it
-        if (cover.current) cover.current.rotation.z = open * 2.5 + lift * 0.3 + h * 0.06 * (1 - open);
+      }
+      case 'star': {
+        // Storyboard I.3 — the gilt star on the cover lifts off and rises with a trail of
+        // gold; the cover opens, the ribbon marker lifts; the pages flick past fast, then
+        // slower and slower; a dotted "journey" draws itself across the open page.
+        const starK = ss(o, 0.14, 0.5);
+        once('star', 0.14, () => sound.comb(4));
+        if (coverStar.current) coverStar.current.visible = starK < 0.02;
+        const starAt = (k: number, out: THREE.Vector3) => {
+          const a = k * 4.2;
+          return out.set(0.02 + Math.sin(a) * 0.12 * k, 0.046 + k * 0.62, Math.cos(a) * 0.08 * k - k * 0.06);
+        };
+        if (flyStar.current) {
+          flyStar.current.visible = starK > 0.02;
+          starAt(starK, flyStar.current.position);
+          flyStar.current.rotation.set(-Math.PI / 2 + starK * 1.4, starK * 6, 0.08);
+        }
+        trail.current.forEach((m, j) => {
+          if (!m) return;
+          const k = Math.max(0, starK - (j + 1) * 0.045);
+          m.visible = starK > 0.02 && k > 0 && starK < 0.995;
+          starAt(k, m.position);
+          m.scale.setScalar((1 - j / TRAIL) * 0.7);
+        });
+        const coverK = ss(o, 0.24, 0.46);
+        if (cover.current) cover.current.rotation.z = coverK * 2.5 + lift * 0.3 + h * 0.06 * (1 - coverK);
+        once('pages', 0.44, () => sound.paper(PAGES, 95));
         pages.current.forEach((pg, i) => {
           if (!pg) return;
-          const d = THREE.MathUtils.smoothstep(o, 0.62 + i * 0.1, 0.95 + i * 0.03);
-          pg.rotation.z = d * (2.35 - i * 0.12) + Math.sin(t * 3 + i) * 0.02 * h;
+          // a flick: the first pages go fast, each one after takes longer to turn
+          const f = i / (PAGES - 1);
+          const a0 = 0.44 + 0.3 * Math.pow(f, 1.7);
+          const d = ss(o, a0, a0 + 0.05 + 0.1 * f);
+          pg.rotation.z = d * (2.42 - i * 0.03) + Math.sin(t * 3 + i) * 0.02 * h;
+          // a real page bends as it turns: its free half lags behind
+          const bend = pg.children[1] as THREE.Object3D | undefined;
+          if (bend) bend.rotation.z = -Math.sin(d * Math.PI) * 0.5;
         });
-        if (ribbonTail.current) ribbonTail.current.rotation.x = Math.sin(t * 0.9 * motion) * 0.12 * motion;
+        const path = ss(o, 0.7, 0.95);
+        journey.current.forEach((m, j) => {
+          if (!m) return;
+          const k = THREE.MathUtils.clamp(path * JOURNEY.length - j, 0, 1);
+          m.scale.setScalar(Math.max(0.0001, k));
+        });
+        if (ribbonTail.current) ribbonTail.current.rotation.x = Math.sin(t * 0.9 * motion) * 0.12 * motion - coverK * 0.7;
         break;
+      }
       case 'orb':
         // the music box: the lid lifts, the little heart rises on its spindle and turns
         if (lid.current) lid.current.rotation.x = -open * 1.75 - lift * 0.3;
@@ -611,6 +741,31 @@ function GiftBody({
         }
         if (key.current) key.current.rotation.x = t * (0.25 * motion + open * 2.4);
         if (drum.current) drum.current.rotation.x = t * open * 3;
+        // Storyboard I.4 — every note the comb plays lets a mote of light go up, and leaves a
+        // ripple running out across the velvet
+        MUSIC_NOTES.forEach(([at, pitch], n) => {
+          once(`note${n}`, at, () => {
+            sound.comb(pitch);
+            plucked.current[Math.min(COMB_TEETH - 1, Math.max(0, pitch + 2))] = t;
+            noteAt.current[n] = t;
+          });
+          const fx = noteFx.current[n];
+          const m = noteMats[n];
+          if (!fx || !m) return;
+          const since = noteAt.current[n] === undefined ? -1 : t - noteAt.current[n];
+          const live = since >= 0 && since < 2.4;
+          if (fx.mote) {
+            fx.mote.visible = live;
+            fx.mote.position.set(0.1 - 0.05 + (n % 5) * 0.025, 0.09 + since * 0.22, -0.01 + Math.sin(since * 3 + n) * 0.02);
+            m.mote.opacity = live ? Math.min(1, since * 6) * Math.exp(-since * 1.1) * 0.9 : 0;
+          }
+          if (fx.ring) {
+            fx.ring.visible = live;
+            const r = 0.01 + since * 0.11;
+            fx.ring.scale.set(r, r, r);
+            m.ring.opacity = live ? Math.exp(-since * 2.2) * 0.55 : 0;
+          }
+        });
         // each plucked tooth rings: a fast, decaying shiver at its free end
         teeth.current.forEach((m, i) => {
           if (!m) return;
@@ -728,17 +883,30 @@ function GiftBody({
         <group rotation={[0, 0, 0.16]}>
           <Liquid tint={gift.tint} level={() => openOf(progress.current)} />
           <mesh geometry={bottle!} material={mats.main} />
-          <mesh position={[0, -0.03, 0]} rotation={[0.2, 0, 0.42]} material={mats.paper}>
-            <cylinderGeometry args={[0.035, 0.035, 0.22, 18]} />
-          </mesh>
-          <mesh position={[0, -0.03, 0]} rotation={[0.2, 0, 0.42]} material={mats.ribbon}>
-            <cylinderGeometry args={[0.037, 0.037, 0.02, 18]} />
-          </mesh>
-          {[0.2, 0.215].map((y, i) => (
-            <mesh key={i} position={[0, y, 0]} rotation-x={Math.PI / 2} material={mats.twine}>
-              <torusGeometry args={[0.06, 0.006, 6, 24]} />
-            </mesh>
-          ))}
+          {/* the rolled note: it rises out of the neck and unrolls in the air (the paper
+              stays blank — it is an image of a letter, the words are on the page) */}
+          <group ref={note} position={[0, -0.03, 0]} rotation={[0.2, 0, 0.42]} userData={{ markR: 0.2 }}>
+            <group ref={scroll} scale-x={0.001} visible={false}>
+              <mesh position={[0.13, 0, 0]} material={glowMats.paper}>
+                <boxGeometry args={[0.26, 0.2, 0.0016]} />
+              </mesh>
+            </group>
+            <group ref={roll}>
+              <mesh material={mats.paper}>
+                <cylinderGeometry args={[0.035, 0.035, 0.22, 18]} />
+              </mesh>
+              <mesh material={mats.ribbon}>
+                <cylinderGeometry args={[0.037, 0.037, 0.02, 18]} />
+              </mesh>
+            </group>
+          </group>
+          <group ref={twineRing}>
+            {[0.2, 0.215].map((y, i) => (
+              <mesh key={i} position={[0, y, 0]} rotation-x={Math.PI / 2} material={mats.twine}>
+                <torusGeometry args={[0.06, 0.006, 6, 24]} />
+              </mesh>
+            ))}
+          </group>
           <mesh position={[0.05, 0.17, 0.03]} rotation={[0.3, 0, -0.4]} material={mats.twine}>
             <cylinderGeometry args={[0.005, 0.005, 0.1, 4]} />
           </mesh>
@@ -769,20 +937,47 @@ function GiftBody({
           <mesh position={[-0.232, 0, 0]} material={mats.main}>
             <boxGeometry args={[0.02, 0.082, 0.34]} />
           </mesh>
-          {/* two loose pages, turning after the cover */}
-          {[0, 1].map((i) => (
-            <group key={i} ref={(g) => void (g && (pages.current[i] = g))} position={[-0.22, 0.027 + i * 0.001, 0]}>
-              <mesh position={[0.22, 0, 0]} material={mats.paper}>
-                <boxGeometry args={[0.43, 0.002, 0.315]} />
+          {/* loose pages, turning after the cover — a flick, fast then slow; each in two
+              halves so it bends as it turns */}
+          {Array.from({ length: PAGES }, (_, i) => (
+            <group key={i} ref={(g) => void (g && (pages.current[i] = g))} position={[-0.22, 0.027 + i * 0.0006, 0]}>
+              <mesh position={[0.11, 0, 0]} material={mats.paper}>
+                <boxGeometry args={[0.22, 0.002, 0.315]} />
               </mesh>
+              <group position={[0.22, 0, 0]}>
+                <mesh position={[0.105, 0, 0]} material={mats.paper}>
+                  <boxGeometry args={[0.21, 0.002, 0.315]} />
+                </mesh>
+              </group>
             </group>
+          ))}
+          {/* the open page: a dotted journey draws itself across it (only a line, no words) */}
+          <group ref={pageTop} position={[0, 0.03, 0]} userData={{ markR: 0.24 }}>
+            {/* the open page the journey is drawn on (under the loose pages until they turn) */}
+            <mesh position={[0, -0.0038, 0]} rotation-x={-Math.PI / 2} material={glowMats.page}>
+              <planeGeometry args={[0.42, 0.3]} />
+            </mesh>
+            {JOURNEY.map(([x, z], j) => (
+              <mesh key={j} ref={(m) => void (journey.current[j] = m)} position={[x, 0.0015, z]} scale={0.0001} material={glowMats.ink}>
+                <sphereGeometry args={[0.0085, 6, 4]} />
+              </mesh>
+            ))}
+          </group>
+          {/* the gilt star, lifted off the cover, and the trail of gold it leaves */}
+          <group ref={flyStar} visible={false}>
+            <mesh geometry={star!} scale={[0.32, 0.32, 0.12]} material={glowMats.gold} />
+          </group>
+          {Array.from({ length: TRAIL }, (_, j) => (
+            <mesh key={j} ref={(m) => void (trail.current[j] = m)} visible={false} material={glowMats.spark}>
+              <sphereGeometry args={[0.012, 6, 4]} />
+            </mesh>
           ))}
           <group ref={cover} position={[-0.23, 0.034, 0]}>
             <group position={[0.23, 0, 0]}>
               <mesh material={mats.main}>
                 <boxGeometry args={[0.46, 0.014, 0.34]} />
               </mesh>
-              <mesh geometry={star!} position={[0.02, 0.012, 0]} rotation={[-Math.PI / 2, 0, 0.08]} scale={[0.32, 0.32, 0.12]} material={mats.metal} />
+              <mesh ref={coverStar} geometry={star!} position={[0.02, 0.012, 0]} rotation={[-Math.PI / 2, 0, 0.08]} scale={[0.32, 0.32, 0.12]} material={mats.metal} />
               {/* a fine pressed border */}
               {[-1, 1].map((sz) => (
                 <mesh key={sz} position={[0.0, 0.0075, sz * 0.15]} material={mats.metal}>
@@ -812,6 +1007,25 @@ function GiftBody({
           <mesh position={[0, 0.101, 0]} rotation-x={-Math.PI / 2} material={mats.velvet}>
             <planeGeometry args={[0.4, 0.26]} />
           </mesh>
+          {/* the mouth of the box (the page opens out of its velvet), and what each note
+              lets go: a mote of light rising, a ripple across the velvet */}
+          <group ref={mouth} position={[0, 0.11, 0]} userData={{ markR: 0.22 }} />
+          {noteMats.map((m, n) => (
+            <group key={n}>
+              <mesh ref={(x) => void ((noteFx.current[n] ??= { mote: null, ring: null }).mote = x)} visible={false} material={m.mote}>
+                <sphereGeometry args={[0.009, 8, 6]} />
+              </mesh>
+              <mesh
+                ref={(x) => void ((noteFx.current[n] ??= { mote: null, ring: null }).ring = x)}
+                visible={false}
+                position={[-0.06 + (n % 4) * 0.04, 0.103, 0.02 - (n % 3) * 0.03]}
+                rotation-x={-Math.PI / 2}
+                material={m.ring}
+              >
+                <ringGeometry args={[0.85, 1, 32]} />
+              </mesh>
+            </group>
+          ))}
           {[-1, 1].flatMap((sx) =>
             [-1, 1].map((sz) => (
               <mesh key={`${sx}${sz}`} position={[sx * 0.215, -0.08, sz * 0.145]} material={mats.metal}>
@@ -879,7 +1093,7 @@ function GiftBody({
       );
     case 'envelope':
       // the letter isn't a floating envelope any more: a golden puppy brings it, in its mouth
-      return <LetterDog opening={opening} hover={hover} aim={aim} mats={mats} reducedMotion={reducedMotion} onDelivered={onDelivered} />;
+      return <LetterDog opening={opening} hover={hover} aim={aim} mats={mats} reducedMotion={reducedMotion} onDelivered={onDelivered} markRef={markRef} />;
   }
 }
 
@@ -1022,6 +1236,7 @@ export function Gift3D({
   const openSecs = reducedMotion ? MOTION.gift.quick : (MOTION.gift.open as Record<string, number>)[gift.shape] ?? 5.2;
   const clockOpen = useRef(0);
   const markAt = useMemo(() => new THREE.Vector3(), []);
+  const markObj = useRef<THREE.Object3D | null>(null);
   const markUp = useMemo(() => new THREE.Vector3(), []);
   const [stiff, damp] = MOTION.hand.spring[heavy ? 'heavy' : 'light'];
 
@@ -1053,10 +1268,14 @@ export function Gift3D({
     // timing runs on real time (not frames), so a slow phone opens just as quickly
     const real = Math.min(rawDt, 0.25);
     if (opening) {
-      clockOpen.current = Math.min(openSecs, clockOpen.current + real);
+      clockOpen.current = Math.min(openSecs, clockOpen.current + real * pace.rate);
+      progress.current = openWarp(clockOpen.current / openSecs);
+    } else if (clockOpen.current > 0) {
+      // closing: the same curve, run backwards — what came out goes back in, the walls rise,
+      // the lid comes down — a little quicker than it opened
+      clockOpen.current = Math.max(0, clockOpen.current - real * 1.8);
       progress.current = openWarp(clockOpen.current / openSecs);
     } else {
-      clockOpen.current = 0;
       progress.current = Math.max(0, progress.current - real * 1.6);
     }
     // QA (?debug): window.__shotHold = 0.8 holds an opening product shot at that point
@@ -1234,13 +1453,17 @@ export function Gift3D({
     // Where this gift is on the screen, so the memory page can open OUT of it instead of
     // sliding over it (storyboard I: the same element, carried from the world into the page).
     if (opening && o > 0.5) {
-      r.getWorldPosition(markAt);
-      const half = size * (isDog ? 0.75 : 0.62) * (1 + e * 0.12);
+      // (the thing that came out, if the gift says so — the note, the page, the letter)
+      const from = markObj.current;
+      const half = from ? Math.max(0.12, (from.userData.markR as number) ?? 0.2) * size : size * (isDog ? 0.75 : 0.62) * (1 + e * 0.12);
+      if (from) from.getWorldPosition(markAt);
+      else r.getWorldPosition(markAt);
+      markUp.copy(markAt).setY(markAt.y + half);
       markAt.project(state.camera);
       const w = state.size.width;
       const hgt = state.size.height;
-      // the gift's own radius in screen px, from a point one radius above it
-      markUp.copy(r.position).setY(r.position.y + half).project(state.camera);
+      // the thing's own radius in screen px, from a point one radius above it
+      markUp.project(state.camera);
       const px = Math.max(40, Math.abs(markUp.y - markAt.y) * 0.5 * hgt);
       publishGiftMark({ x: (markAt.x * 0.5 + 0.5) * w, y: (-markAt.y * 0.5 + 0.5) * hgt, width: px * 2, height: px * 2, tint: gift.tint });
     }
@@ -1382,6 +1605,7 @@ export function Gift3D({
           }}
         >
           <GiftBody
+            markRef={markObj}
             gift={gift}
             progress={progress}
             hold={hold}

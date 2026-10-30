@@ -8,6 +8,7 @@ import { ParticleHeart, type DormantRing, type ParticleHeartHandle } from './Par
 import type { OrbitInput } from '../../hooks/usePointerOrbit';
 import { sound } from '../../lib/audio';
 import { motion as MOTION } from '../../config/motion';
+import { pace } from '../../lib/pace';
 
 interface Props {
   /** Increment to make the heart beat once, strongly. */
@@ -122,7 +123,8 @@ export function Heart3D({
   }, [pulseKey]);
 
   useEffect(() => {
-    openAt.current = opening ? clock.current : -1;
+    // (a clock of its own, in scene time: a touch hurries the bloom, a repeat is shorter)
+    openAt.current = opening ? 0 : -1;
   }, [opening]);
 
   useEffect(() => {
@@ -149,7 +151,8 @@ export function Heart3D({
     // the third touch: the breath in (a short contraction, held), then the light leaves
     const U = MOTION.unlock;
     const quick = reducedMotion;
-    const ut = openAt.current >= 0 ? t - openAt.current : -1;
+    if (openAt.current >= 0) openAt.current += Math.min(rawDt, 0.05) * pace.rate;
+    const ut = openAt.current;
     const squeeze =
       ut < 0 ? 0 : ut < U.anticipate ? THREE.MathUtils.smoothstep(ut, 0, U.anticipate) : Math.max(0, 1 - (ut - U.anticipate) / 0.3);
     const release =

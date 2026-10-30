@@ -8,6 +8,7 @@ import { CameraRig } from './CameraRig';
 import { usePointerOrbit } from '../../hooks/usePointerOrbit';
 import { useDive } from '../../hooks/useDive';
 import { motion as MOTION } from '../../config/motion';
+import { pace, sceneWait } from '../../lib/pace';
 import { HeartVortex } from './HeartVortex';
 import { LightDog } from './LightDog';
 import { heartTipY } from './heartShape';
@@ -77,11 +78,12 @@ export function IntroWorld({
     const rel = reducedMotion ? U.quick.release : U.release;
     const settleAt = (U.anticipate + rel) * 1000;
     setUnlockPhase('hold');
-    const a = setTimeout(() => setUnlockPhase('open'), U.anticipate * 1000);
-    const b = setTimeout(() => setUnlockPhase('settle'), settleAt);
+    // scene time (lib/pace): a touch hurries it, a repeat is shorter
+    let alive = true;
+    void sceneWait(U.anticipate * 1000).then(() => alive && setUnlockPhase((p) => (p === 'hold' ? 'open' : p)));
+    void sceneWait(settleAt).then(() => alive && setUnlockPhase('settle'));
     return () => {
-      clearTimeout(a);
-      clearTimeout(b);
+      alive = false;
     };
   }, [unlocked, reducedMotion]);
   const settling = unlockPhase === 'settle';
@@ -136,10 +138,14 @@ export function IntroWorld({
     arcFrom.current = orbit.tYaw;
     const U = MOTION.unlock;
     let raf = 0;
-    const t0 = performance.now();
+    let last = performance.now();
+    let el = 0;
     const span = (U.anticipate + U.release) * 1000;
     const step = () => {
-      const k = Math.min(1, (performance.now() - t0) / span);
+      const now = performance.now();
+      el += (now - last) * pace.rate;
+      last = now;
+      const k = Math.min(1, el / span);
       const e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2; // in-out: it leans away and settles
       orbit.tYaw = arcFrom.current + U.arc * e;
       orbit.tPitch = U.craneUp * Math.sin(Math.PI * e); // up, then back down to her eye line

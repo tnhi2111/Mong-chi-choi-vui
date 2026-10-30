@@ -1,6 +1,8 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
 import { birthdayConfig } from './config/birthday';
 import { motion as MOTION } from './config/motion';
+import { beginScene, endScene, hurryUp, sceneWait } from './lib/pace';
+import { giftMark, publishGiftMark } from './lib/giftMark';
 import { gifts } from './data/gifts';
 import type { FinalePhase, Stage, Veil } from './types';
 import type { DustMode, DustPhase } from './components/3d/TransitionDust';
@@ -125,6 +127,17 @@ export default function App() {
     };
   }, [saved.unlocked]);
 
+  // A touch or any key while a scene plays hurries it — smoothly, never a cut (lib/pace.ts)
+  useEffect(() => {
+    const on = () => void hurryUp();
+    window.addEventListener('pointerdown', on);
+    window.addEventListener('keydown', on);
+    return () => {
+      window.removeEventListener('pointerdown', on);
+      window.removeEventListener('keydown', on);
+    };
+  }, []);
+
   // a hidden moment in the room (cake / sign): the room's edges dim, the UI steps back
   const [moment, setMoment] = useState(false);
   useEffect(() => {
@@ -168,6 +181,8 @@ export default function App() {
       if (busy.current) return;
       busy.current = true;
       const quick = reducedMotion;
+      const scene = next === 'room' ? (stage === 'welcome' ? 'enter-room' : 'back-to-room') : `to-${next}`;
+      beginScene(scene, quick);
       const color = next === 'final' ? DUST.final : DUST.room;
       // Storyboard D: the light sprite leads the way into the room (a corridor of its own
       // flock — only the dark at the edges is kept from the dust) and out of it through the
@@ -178,14 +193,15 @@ export default function App() {
         setLeaving(true);
         // RoomWorld flies the sprite to the arched window; the finale is swapped in when the
         // camera, following it, reaches the glass
-        await Promise.race([story.wait('window'), wait(5500)]);
+        await Promise.race([story.wait('window'), sceneWait(5500)]);
         // the night she flew into is the first sky of the finale: it washes into the
         // finale's own colour (reference video 5: a colour wash as the change of scene)
         setNight(true);
         setStage(next);
         setLeaving(false);
         setTimeout(() => setNight(false), 120);
-        await wait(1200);
+        await sceneWait(1200);
+        endScene(scene);
         busy.current = false;
         return;
       }
@@ -196,13 +212,13 @@ export default function App() {
       // itself at one point of light before anything moves (reference video 6, 3.50 s)
       setDust({ phase: 'close', color, mode });
       setLeaving(true);
-      await wait(quick ? 0 : 180);
+      await sceneWait(quick ? 0 : 180);
       setVeil('iris');
-      await wait(quick ? 450 : mode === 'veil' ? MOTION.sprite.room.leave * 1000 - 180 : mode === 'warp' ? MOTION.enterRoom.streak * 1000 - 180 : 1050);
+      await sceneWait(quick ? 450 : mode === 'veil' ? MOTION.sprite.room.leave * 1000 - 180 : mode === 'warp' ? MOTION.enterRoom.streak * 1000 - 180 : 1050);
       if (next === 'room') resetReady('room-ready');
       setStage(next);
       setLeaving(false);
-      await wait(quick ? 120 : 260);
+      await sceneWait(quick ? 120 : 260);
       // the room compiles its shaders behind the iris; open it once it can be shown smoothly
       if (next === 'room' && webglRef.current) await waitReady('room-ready', 4000);
       setVeil('none');
@@ -211,9 +227,12 @@ export default function App() {
       // the way in tells its story inside the room (the light lands on it), so she may
       // touch things as soon as she can see them — the lock is only for a second change
       // of world, not for her hand
-      await wait(quick ? 450 : mode === 'warp' ? 900 : 1600);
+      await sceneWait(quick ? 450 : mode === 'warp' ? 900 : 1600);
       setDust({ phase: 'none', color, mode });
       busy.current = false;
+      // (a led entry ends when the tour is home; every other change of world ends here)
+      if (mode === 'veil') void story.wait('room-home').then(() => endScene(scene));
+      else endScene(scene);
       // led in: the tour of the room is still flying — choosing a gift now ends it first
       if (mode === 'veil') {
         touringRef.current = true;
@@ -250,7 +269,10 @@ export default function App() {
         // sprite can leave the heart and draw its frame before the writing condenses
         const U = MOTION.unlock;
         const at = reducedMotion ? U.quick.gateAt : webglRef.current ? U.anticipate + U.release : U.gateAt;
-        setTimeout(() => setStage('gate'), at * 1000);
+        // a scene: shorter the second time, hurried by a touch (src/lib/pace.ts)
+        beginScene('unlock', reducedMotion);
+        void sceneWait(at * 1000).then(() => setStage('gate'));
+        void story.wait('gate-home').then(() => endScene('unlock'));
       }
       return next;
     });
@@ -264,7 +286,10 @@ export default function App() {
     // the heart rings once and the card's light is drawn up into it (storyboard B, 0-0.5 s)
     setPulseKey((k) => k + 1);
     sound.flourish();
-    await wait(reducedMotion ? 500 : 1500);
+    endScene('unlock');
+    beginScene('welcome-in', reducedMotion);
+    await sceneWait(reducedMotion ? 500 : 1500);
+    endScene('welcome-in');
     setStage((s) => (s === 'gate' ? 'welcome' : s));
   }, [reducedMotion]);
 
@@ -278,6 +303,9 @@ export default function App() {
         story.signal('skip-tour');
       }
       setFocusId(null);
+      // (the place the page opens out of is this gift's, never the last one's)
+      publishGiftMark(null);
+      beginScene(`gift:${id}`, reducedMotion);
       setOpeningId(id);
       sound.chime(gifts.findIndex((g) => g.id === id) + 2);
     },
@@ -289,6 +317,7 @@ export default function App() {
     async (id: string) => {
       if (revealing.current === id) return; // the 3D scene and the safety net may both call this
       revealing.current = id;
+      endScene(`gift:${id}`);
       sound.chime(5, 0.06);
       // the gift has had its product shot; the memory settles over it (sheet-in), the room
       // stays there behind, out of focus — no cover in between
@@ -310,16 +339,28 @@ export default function App() {
     return () => clearTimeout(id);
   }, [openingId, activeId, giftOpened, reducedMotion]);
 
+  /**
+   * Closing a memory runs the opening backwards (storyboard I): the page folds back into the
+   * thing it came out of, the room is live again behind it, and then the gift closes itself
+   * along the same curve it opened on (Gift3D runs its clock down).
+   */
+  const [closingSheet, setClosingSheet] = useState(false);
   const closeGift = useCallback(() => {
     const id = activeId;
-    revealing.current = null;
-    setActiveId(null);
-    setOpeningId(null);
-    if (id) {
+    if (!id || closingSheet) return;
+    const finish = () => {
+      setClosingSheet(false);
+      revealing.current = null;
+      setActiveId(null);
+      setOpeningId(null);
       setOpened((o) => (o.includes(id) ? o : [...o, id]));
       setPulseKey((k) => k + 1);
-    }
-  }, [activeId]);
+    };
+    if (reducedMotion || !giftMark.at) return finish();
+    setClosingSheet(true);
+    sound.paper(1);
+    setTimeout(finish, MOTION.gift.closeMs);
+  }, [activeId, closingSheet, reducedMotion]);
 
   const goFinal = useCallback(() => {
     sound.flourish();
@@ -406,7 +447,8 @@ export default function App() {
     [],
   );
 
-  const overlayOpen = !!activeGift;
+  // (while the page folds back into the gift the room is live again behind it)
+  const overlayOpen = !!activeGift && !closingSheet;
   const sceneProps = {
     stage,
     gifts,
@@ -488,9 +530,9 @@ export default function App() {
 
       <Suspense fallback={null}>
         {activeGift?.kind === 'memory' && (
-          <MemoryView gift={activeGift} index={gifts.indexOf(activeGift)} onClose={closeGift} />
+          <MemoryView gift={activeGift} index={gifts.indexOf(activeGift)} onClose={closeGift} closing={closingSheet} />
         )}
-        {activeGift?.kind === 'letter' && <LoveLetter onClose={closeGift} reducedMotion={reducedMotion} />}
+        {activeGift?.kind === 'letter' && <LoveLetter onClose={closeGift} reducedMotion={reducedMotion} closing={closingSheet} />}
       </Suspense>
 
       <MusicToggle />

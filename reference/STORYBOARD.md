@@ -212,16 +212,27 @@ Empty means **not drawn** — not dimmed. Timings in `motion.sprite.room`.
 Measured (`qa-output/tmp/tour.mjs`, which counts the room's standing things as it films):
 at 10 % of the tour **1 of 25**, at 30 % **3 of 25**, at 50 % 6, at 70 % 15, at 100 % 25.
 
-Trade-off, stated plainly: every surface uses ONE sweep (a discard by angle) and every
-standing thing one gate. The individually authored choreography in the brief — planks
-unrolling one by one, the wall rising like a curtain, the window frame drawn before its
-glass fills with night, balloons inflating from their knots, the cake rising tier by tier,
-the gifts falling as seeds — is **not** built. That is a piece per element, and the sweep is
-what makes the room build itself in the time available.
+Second pass — each thing arrives in its own way (`BuildGate` `mode` + `pivot`, so it grows
+from where it stands, never from the middle of the room):
+- the **wall rises like a curtain** behind the light: its shader discards everything above a
+  height that climbs from the floor to 3.6 m as the sweep passes its angle (a thin line of
+  light rides the top edge); the **ceiling** comes last, after the wall under it;
+- the **gifts fall as seeds** (`drop`): a small seed of each drops out of the air onto its
+  place and blooms into the gift;
+- the **cake rises** from its table (`rise`: height first, then it fills out);
+- the **balloons swell** from their knots (pivot at the knot); the garland and the window grow
+  about their hooks/frame; candle flames simply **catch** (`pop`) near the end.
+
+Still not built (stated plainly): planks unrolling one by one, the window frame drawn before
+its glass fills with night, garland bulbs lighting one at a time, the cake tier by tier.
+
+GPU note: the ceiling/wall reveal is written out inline in each shader. Calling a shared GLSL
+helper from the ceiling (`spriteRise(vWorld * 0.9)`) hung the GPU on Windows' D3D backend
+(WebGL context lost ~3.7 s into the room → white screen). Keep these tests inline.
 
 ---
 
-## I. Opening a gift (5–6.5 s each) — first pass
+## I. Opening a gift (5–6.5 s each)
 
 The owner: *"không loé sáng rồi nhảy sang bức thư."* Timings in `motion.gift`.
 
@@ -245,10 +256,21 @@ Shared by all five:
 | 3.4–5.4 s | **little pictures** (blank — an image of memories, never content) rise out on a spiral |
 | 5.4–6.3 s | the memory page widens out of the box |
 
-Not done in this pass (stated plainly): the satin ribbon untying into an S-curve; the
-bottle's scroll flying out and unrolling into the page; the journal's gilt star lifting off
-with a trail and the dotted "journey" line; the music box's notes leaving motes and ripples
-on the velvet; the wax seal cracking on the letter. Gifts 02–05 open with their existing
-mechanisms (cork, cover and pages, lid and dancing heart, the puppy's delivery) at the new
-pace and into the same widening page. Closing still runs the old way (it does not yet run
-the opening backwards).
+The other four (second pass), each into the same widening page, each with its sound
+(`audio.ts`: `cork`, `paper`, `seal`, `hinge`, `satin`, `comb` — filtered noise + tiny tones):
+- **02 bottle**: the twine loosens and slips down the neck, the cork pops (`cork`), the rolled
+  note rises out of the neck, **unrolls** (`paper`) and the page widens from the scroll.
+- **03 journal**: the cover opens, the **gilt star lifts off** the cover with a trail of light,
+  **seven pages flick** fast then slower, each bending as it turns (`paper`), a **dotted
+  journey line** draws itself across the open spread, and the page widens from it.
+- **04 music box**: the lid lifts (`hinge`), the drum turns; on each of 8 notes (`comb`) a mote
+  leaves the comb and a **ripple** spreads on the velvet; the page widens from the box's mouth.
+- **05 letter** (the puppy): after it lays the letter down, the **wax seal glows and cracks in
+  two** (`seal`), the flap lifts, the letter **slides out, rises toward her and unfolds its
+  folds** (`paper`), and the letter page widens from the sheet; its words still ink in.
+
+**Closing runs it backwards, slower**: the page shrinks back into the object
+(`.sheet.is-closing`, `motion.gift.closeMs`), and the gift's own clock runs down through the
+same warp (×1.8) — pages, lid, cork go back, then it sinks onto the ring.
+
+Not built: the box's satin ribbon untying in an S-curve (the lid is lifted off with the bow).

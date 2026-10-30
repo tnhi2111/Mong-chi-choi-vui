@@ -328,6 +328,110 @@ class SoundSystem {
     }
   }
 
+  /**
+   * A short burst of filtered noise — the raw material for paper, cork, wood and wax.
+   * `f0 → f1` sweeps the filter, `q` narrows it (a crack is narrow, paper is wide).
+   */
+  private noiseHit(gain: number, ms: number, f0: number, f1: number, type: BiquadFilterType = 'bandpass', q = 1.2, delay = 0) {
+    const ctx = this.ready();
+    if (!ctx || !this.out) return;
+    try {
+      const now = ctx.currentTime + delay;
+      const dur = ms / 1000;
+      const len = Math.ceil(ctx.sampleRate * (dur + 0.05));
+      const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+      const data = buf.getChannelData(0);
+      for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      const f = ctx.createBiquadFilter();
+      f.type = type;
+      f.Q.value = q;
+      f.frequency.setValueAtTime(f0, now);
+      f.frequency.exponentialRampToValueAtTime(Math.max(40, f1), now + dur);
+      const env = ctx.createGain();
+      env.gain.setValueAtTime(0.0001, now);
+      env.gain.exponentialRampToValueAtTime(gain, now + Math.min(0.008, dur * 0.2));
+      env.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+      src.connect(f).connect(env).connect(this.out);
+      src.start(now);
+      src.stop(now + dur + 0.05);
+    } catch {
+      /* decoration only */
+    }
+  }
+
+  /** A cork working loose and popping: a squeak of friction, then the hollow pop. */
+  cork(): void {
+    this.noiseHit(0.03, 260, 1800, 2600, 'bandpass', 6);
+    const ctx = this.ready();
+    if (!ctx || !this.out) return;
+    try {
+      const now = ctx.currentTime + 0.3;
+      const osc = ctx.createOscillator();
+      const env = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(520, now);
+      osc.frequency.exponentialRampToValueAtTime(190, now + 0.09);
+      env.gain.setValueAtTime(0.0001, now);
+      env.gain.exponentialRampToValueAtTime(0.12, now + 0.006);
+      env.gain.exponentialRampToValueAtTime(0.0001, now + 0.14);
+      osc.connect(env).connect(this.out);
+      osc.start(now);
+      osc.stop(now + 0.16);
+    } catch {
+      /* ignore */
+    }
+    this.noiseHit(0.05, 70, 3200, 900, 'bandpass', 1.4, 0.3);
+  }
+
+  /** Paper: a page turning (`n` pages, fast then slow) or a sheet unfolding. */
+  paper(n = 1, gap = 140): void {
+    for (let i = 0; i < n; i++) {
+      // each turn a little later and softer than the one before: a flick that slows
+      const at = (i * gap * (1 + i * 0.18)) / 1000;
+      this.noiseHit(0.05 * Math.pow(0.86, i), 160, 5200, 1600, 'highpass', 0.7, at);
+    }
+  }
+
+  /** A wax seal: it warms (a low hum), then cracks — two dry snaps and a crumble. */
+  seal(): void {
+    this.bell(110, 0.025, 0.9, [
+      [1, 1],
+      [2, 0.2],
+    ]);
+    this.noiseHit(0.09, 45, 2600, 1200, 'bandpass', 5, 0.7);
+    this.noiseHit(0.07, 40, 3400, 1500, 'bandpass', 5, 0.86);
+    this.noiseHit(0.025, 380, 4200, 2000, 'highpass', 0.8, 0.92);
+  }
+
+  /** A wooden hinge giving: a soft creak and the knock of the panel settling. */
+  hinge(delay = 0): void {
+    this.noiseHit(0.025, 300, 420, 760, 'bandpass', 9, delay);
+    this.noiseHit(0.04, 90, 300, 120, 'lowpass', 0.8, delay + 0.3);
+  }
+
+  /** Satin sliding over satin (a ribbon coming loose). */
+  satin(delay = 0): void {
+    this.noiseHit(0.02, 520, 2400, 6000, 'highpass', 0.6, delay);
+  }
+
+  /** One note of a music-box comb: bright, short, with the steel's high partial. */
+  comb(pitch = 0, delay = 0): void {
+    const freq = 1046.5 * Math.pow(2, PENTATONIC[pitch % PENTATONIC.length] / 12);
+    this.bell(
+      freq,
+      0.045,
+      1.3,
+      [
+        [1, 1],
+        [3.9, 0.18],
+        [6.2, 0.05],
+      ],
+      delay,
+    );
+  }
+
   /** The deep, muffled "thump" under a heartbeat. */
   thump(strength = 1): void {
     const ctx = this.ready();

@@ -861,6 +861,26 @@ html[data-reduce] .room-whisper span {
   }
 }
 
+/* closing runs it backwards: the page folds back into the thing it came out of */
+.sheet.from-gift.is-closing {
+  animation: sheet-shrink var(--close-ms, 1050ms) var(--ease-in-out) both;
+  pointer-events: none;
+}
+
+@keyframes sheet-shrink {
+  from {
+    opacity: 1;
+    clip-path: inset(0 0 0 0 round 0);
+  }
+  70% {
+    opacity: 0.8;
+  }
+  to {
+    opacity: 0;
+    clip-path: inset(var(--clip-top) var(--clip-right) var(--clip-bottom) var(--clip-left) round 50%);
+  }
+}
+
 [data-reduce] .sheet.from-gift {
   animation: sheet-in 260ms var(--ease-out) both;
 }

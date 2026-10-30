@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
+import { pace } from '../../lib/pace';
 import { useShader } from './useShader';
 
 /**
@@ -286,7 +287,7 @@ export function TransitionDust({ phase, color, factor, mode = 'dust', reducedMot
     // the room — see RoomBuild), so the dark gets out of the way faster
     const open = mode === 'warp' ? OPEN * 0.6 : OPEN;
     const dur = (r.phase === 'open' ? open : CLOSE) * (reducedMotion ? 0.35 : 1);
-    if (r.phase !== 'none') r.t = Math.min(dur, r.t + dt);
+    if (r.phase !== 'none') r.t = Math.min(dur, r.t + dt * pace.rate);
     // the closed field HOLDS (it is what hides the change of world); only the opening one
     // fades away when it is done
     const live = r.phase !== 'none' && (r.phase === 'close' || r.t < dur);

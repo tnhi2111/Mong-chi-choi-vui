@@ -303,22 +303,12 @@ export function RoomWorld({
     orbit.tZoom = 1;
   }, [openIndex, orbit, ring]);
 
-  // The tour is a gift, not a gate: any touch, click or key during it brings the light home
-  // at once (the camera glides back on its spring) — and a slow device that stretches the
-  // flight never keeps her hands tied.
+  // The tour is a gift, not a gate: a touch or a key during it HURRIES it (the whole flight
+  // speeds up toward its end — App's lib/pace listener; never a cut), and choosing a gift
+  // brings the light home at once (`skip-tour`).
   useEffect(() => {
     if (!touring) return;
-    let armed = false;
-    const arm = window.setTimeout(() => (armed = true), 600);
-    const skip = () => armed && sprite.skip();
-    window.addEventListener('pointerdown', skip);
-    window.addEventListener('keydown', skip);
     void story.wait('skip-tour').then(() => sprite.skip());
-    return () => {
-      window.clearTimeout(arm);
-      window.removeEventListener('pointerdown', skip);
-      window.removeEventListener('keydown', skip);
-    };
   }, [touring]);
 
   // a sweep of her hand across three or more gifts turns the whole ring a little, on its
@@ -698,7 +688,7 @@ export function RoomWorld({
           </BuildGate>
         </group>
         {gifts.map((g, i) => (
-          <BuildGate key={g.id} at={[ring[i].pos[0], ring[i].pos[2]]} grow={0.7}>
+          <BuildGate key={g.id} at={[ring[i].pos[0], ring[i].pos[2]]} pivot={[ring[i].pos[0], FLOOR_Y, ring[i].pos[2]]} mode="drop" grow={1.1}>
           <Gift3D
             gift={g}
             index={i}
