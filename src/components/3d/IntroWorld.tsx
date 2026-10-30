@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
+import { setLightOrigin } from '../../lib/lightOrigin';
 import * as THREE from 'three';
 import type { Stage } from '../../types';
 import { Heart3D } from './Heart3D';
@@ -36,6 +37,7 @@ const target = new THREE.Vector3();
 const heartAt = new THREE.Vector3();
 
 /** Stage 1–3: the lone heart in the dark, then the gate and the welcome. */
+const heroAt = new THREE.Vector3();
 export function IntroWorld({
   stage,
   taps,
@@ -170,6 +172,11 @@ export function IntroWorld({
   const drawnCard = useRef(-1);
   useFrame(({ camera, size }, dt) => {
     orbit.step(Math.min(dt, 0.05));
+    // L: the words of this world are written by the heart's light — where is it on screen?
+    if (holder.current) {
+      holder.current.getWorldPosition(heroAt).project(camera);
+      setLightOrigin((heroAt.x * 0.5 + 0.5) * size.width, (-heroAt.y * 0.5 + 0.5) * size.height);
+    }
     if (stage === 'gate' && !reducedMotion && gateMarks.marks && gateMarks.version !== drawnCard.current && holder.current) {
       drawnCard.current = gateMarks.version;
       holder.current.getWorldPosition(heartAt);

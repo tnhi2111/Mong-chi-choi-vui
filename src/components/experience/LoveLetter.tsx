@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useGiftOrigin } from '../../hooks/useGiftOrigin';
+import { useLeaf } from '../../hooks/useLeaf';
+import { motion } from '../../config/motion';
 import { birthdayConfig } from '../../config/birthday';
 import { fill } from '../../lib/text';
 import { useDialog } from '../ui/useDialog';
@@ -47,6 +49,8 @@ export default function LoveLetter({ onClose, reducedMotion, closing = false }: 
 
   // the letter's page opens out of the letter itself (storyboard I)
   const from = useGiftOrigin();
+  // K: the letter page IS the letter that flew out of the envelope
+  const leaf = useLeaf(closing, reducedMotion);
 
   // slice the running character count across paragraphs
   let budget = shown;
@@ -60,8 +64,8 @@ export default function LoveLetter({ onClose, reducedMotion, closing = false }: 
   return (
     <div
       ref={dialog}
-      className={`sheet sheet--letter${from.className}${closing ? ' is-closing' : ''}`}
-      style={from.style}
+      className={`sheet sheet--letter${leaf.carried ? ' is-carried' : from.className}${closing ? ' is-closing' : ''}`}
+      style={{ ...from.style, ['--page-ms' as string]: `${motion.gift.pageMs}ms`, ['--close-ms' as string]: `${motion.gift.closeMs}ms` }}
       role="dialog"
       aria-modal="true"
       aria-labelledby="letter-greeting"
@@ -80,8 +84,9 @@ export default function LoveLetter({ onClose, reducedMotion, closing = false }: 
         )}
       </div>
 
-      <div className="sheet__scroll">
-        <article className="letter rise" style={{ animationDelay: '0.2s' }}>
+      <div ref={leaf.ref} className={leaf.className} style={leaf.style} data-fold={leaf.fold}>
+      <div className="sheet__scroll leaf__scroll">
+        <article className="letter leaf__ink">
           <p id="letter-greeting" className="letter__greeting">
             {fill(cfg.greeting)}
           </p>
@@ -115,6 +120,7 @@ export default function LoveLetter({ onClose, reducedMotion, closing = false }: 
             Back to our room
           </button>
         </div>
+      </div>
       </div>
     </div>
   );

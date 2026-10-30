@@ -881,6 +881,125 @@ html[data-reduce] .room-whisper span {
   }
 }
 
+/* ── K: the page's paper is the sheet that flew out of the gift ─────────────
+   `.leaf` is laid out at exactly `leafRect()` (the 3D side aims the sheet at it), and while
+   it takes over from the sheet it is only paper — the same colour, no shadow, no words. The
+   dark of the page is a layer of its own, so the paper never fades with it. */
+.leaf {
+  position: absolute;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--paper);
+  color: var(--paper-ink);
+  box-shadow: 0 40px 90px rgba(0, 0, 0, 0.5), 0 0 120px rgba(241, 211, 214, 0.06);
+  /* ink on paper: the page's own tokens, redefined for what is written on it */
+  --text: var(--paper-ink);
+  --text-dim: rgba(59, 34, 40, 0.74);
+  --text-faint: rgba(59, 34, 40, 0.6);
+  --line: rgba(59, 34, 40, 0.14);
+  will-change: transform;
+}
+.leaf.is-carried {
+  box-shadow: none;
+  transition: box-shadow 0.6s var(--ease-out);
+}
+.leaf.is-carried.is-inked {
+  box-shadow: 0 40px 90px rgba(0, 0, 0, 0.5), 0 0 120px rgba(241, 211, 214, 0.06);
+}
+/* the creases it was folded along stay on the page, faintly */
+.leaf[data-fold='tri']::after,
+.leaf[data-fold='half']::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(to bottom, transparent calc(33.333% - 1px), rgba(59, 34, 40, 0.07) 33.333%, rgba(255, 255, 255, 0.35) calc(33.333% + 1px), transparent calc(33.333% + 3px)),
+    linear-gradient(to bottom, transparent calc(66.666% - 1px), rgba(59, 34, 40, 0.07) 66.666%, rgba(255, 255, 255, 0.35) calc(66.666% + 1px), transparent calc(66.666% + 3px));
+}
+.leaf[data-fold='half']::after {
+  background: linear-gradient(to bottom, transparent calc(50% - 1px), rgba(59, 34, 40, 0.07) 50%, rgba(255, 255, 255, 0.35) calc(50% + 1px), transparent calc(50% + 3px));
+}
+.leaf .leaf__scroll {
+  padding: clamp(28px, 6vw, 56px) clamp(20px, 6vw, 56px) max(40px, env(safe-area-inset-bottom));
+}
+.leaf__ink {
+  opacity: 0;
+  transform: translateY(6px);
+  transition:
+    opacity 0.55s var(--ease-out),
+    transform 0.55s var(--ease-out);
+}
+.leaf.is-inked .leaf__ink {
+  opacity: 1;
+  transform: none;
+}
+.sheet.is-closing .leaf__ink {
+  transition-duration: 0.14s;
+}
+.leaf .btn {
+  border-color: rgba(91, 36, 51, 0.38);
+  background: rgba(91, 36, 51, 0.05);
+}
+.leaf .btn:hover {
+  background: rgba(91, 36, 51, 0.1);
+  border-color: rgba(91, 36, 51, 0.6);
+  box-shadow: 0 0 28px rgba(212, 154, 165, 0.25);
+}
+.leaf .display {
+  color: var(--wine);
+}
+.memory__star {
+  display: block;
+  font-size: 22px;
+  line-height: 1;
+  color: #b88a3e;
+  text-shadow: 0 0 12px rgba(232, 190, 110, 0.5);
+}
+/* the letter is already paper: on the leaf it is only its writing */
+.leaf .letter {
+  background: none;
+  box-shadow: none;
+  padding: 0;
+  max-width: 620px;
+}
+.leaf .letter::after {
+  display: none;
+}
+/* the page's dark comes in on its own layer, round the paper */
+.sheet.is-carried {
+  animation: none;
+  background: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+.sheet.is-carried::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 80% 50% at 50% 0%, color-mix(in srgb, var(--tint, #d49aa5) 16%, transparent), transparent 70%),
+    linear-gradient(180deg, rgba(18, 10, 13, 0.8), rgba(11, 6, 8, 0.93) 60%);
+  -webkit-backdrop-filter: blur(18px) saturate(1.1);
+  backdrop-filter: blur(18px) saturate(1.1);
+  animation: sheet-in var(--page-ms, 750ms) var(--ease-out) both;
+}
+.sheet.is-carried .sheet__bar {
+  animation: sheet-in var(--page-ms, 750ms) var(--ease-out) both;
+}
+.sheet.is-carried.is-closing::before,
+.sheet.is-carried.is-closing .sheet__bar {
+  animation: sheet-out var(--close-ms, 950ms) var(--ease-in-out) both;
+}
+@keyframes sheet-out {
+  to {
+    opacity: 0;
+  }
+}
+
 [data-reduce] .sheet.from-gift {
   animation: sheet-in 260ms var(--ease-out) both;
 }
@@ -1732,4 +1851,117 @@ body:has(.sheet) .music {
   html[data-reduce] .polaroid {
     transform: none;
   }
+}
+
+/* K, reduced motion: no sheet flies — the page slides out a little, flat, never warped */
+html[data-reduce] .leaf {
+  animation: leaf-slide 0.32s var(--ease-out) both;
+}
+@keyframes leaf-slide {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+}
+
+/* ── L: words that arrive as light (LightText) ────────────────────────────
+   The words are real text; until their light has landed they are not shown. Each word's
+   own delay (set by LightText) is when its light lands. */
+.light-text-layer {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 70;
+}
+.lt__w {
+  display: inline-block;
+  opacity: 0;
+}
+.lt.is-run .lt__w {
+  animation: lt-in 0.55s var(--ease-out) both;
+}
+.lt--ink.is-run .lt__w {
+  animation-duration: 0.45s;
+}
+.lt--constellation.is-run .lt__w {
+  animation: lt-sharpen 1.2s var(--ease-out) both;
+}
+.lt--bloom.is-run .lt__w {
+  animation: lt-bloom 1.3s var(--ease-out) both;
+}
+.lt.is-plain .lt__w {
+  animation: lt-plain 0.4s var(--ease-out) both;
+}
+.lt.is-leaving .lt__w {
+  animation: lt-out 0.9s var(--ease-in-out) forwards;
+}
+@keyframes lt-in {
+  from {
+    opacity: 0;
+    filter: blur(3px);
+    text-shadow: 0 0 16px rgba(255, 214, 170, 0.9);
+  }
+  60% {
+    opacity: 1;
+  }
+  to {
+    opacity: 1;
+    filter: none;
+  }
+}
+@keyframes lt-sharpen {
+  from {
+    opacity: 0;
+    filter: blur(9px);
+  }
+  45% {
+    opacity: 0.75;
+    filter: blur(3px);
+  }
+  to {
+    opacity: 1;
+    filter: none;
+  }
+}
+@keyframes lt-bloom {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+    text-shadow: 0 0 30px rgba(255, 200, 150, 0.95), 0 0 6px rgba(255, 236, 214, 1);
+  }
+  35% {
+    opacity: 1;
+    transform: scale(1.015);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes lt-plain {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes lt-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+    filter: blur(6px);
+  }
+}
+/* the days together count up, each step a small sparkle */
+.count-up {
+  font-variant-numeric: tabular-nums;
+  transition: text-shadow 0.18s;
+}
+.count-up.is-tick {
+  text-shadow: 0 0 14px rgba(255, 214, 170, 0.85);
 }

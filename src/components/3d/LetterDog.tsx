@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { RoundedBox } from '@react-three/drei';
 import * as THREE from 'three';
+import type { CarrierPose } from './PaperCarrier';
 import { pace as scene } from '../../lib/pace';
 import { sound } from '../../lib/audio';
 import { EAR_PIVOT, FACE, HEAD_PIVOT, HEAD_REST, JAW_PIVOT, TAIL_PIVOT, type V3 } from './letterDogModel';
@@ -165,19 +166,17 @@ function flapGeometry(w: number, h: number): THREE.ExtrudeGeometry {
 const T_PRESENT = 0.8;
 const T_MOUTH = 1.3;
 const T_RELEASE = 1.65;
-const SETTLE = 0.6;
+const SETTLE = 0.35;
 /**
- * Storyboard I.5: the letter, once it lies before her (seconds after SETTLE). The seal warms,
- * then cracks; the flap lifts; the letter slides out, rises toward her and opens its folds.
- * Only then is it delivered (the page opens out of the unfolded letter).
+ * Storyboard I.5 / K.5: the letter, once it lies before her (seconds after SETTLE). The seal
+ * warms, then cracks; the flap lifts; the letter slides out. From there the sheet itself
+ * (Gift3D's carrier) rises toward her, opens its three folds and becomes the letter page.
  */
 const LETTER = {
-  glow: [0, 0.55],
-  crack: [0.5, 1.0],
-  flap: [1.0, 1.0],
-  slide: [1.5, 2.2],
-  rise: [2.0, 3.0],
-  unfold: [2.8, 3.8],
+  glow: [0, 0.35],
+  crack: [0.3, 0.6],
+  flap: [0.6, 0.6],
+  slide: [0.8, 1.3],
 } as const;
 /** gentle "paper" gravity: a letter drops, but air slows it */
 const GRAVITY = 3.4;
@@ -193,8 +192,10 @@ interface Props {
   reducedMotion: boolean;
   /** the letter has been delivered — open it now */
   onDelivered: () => void;
-  /** Set to the unfolded letter while it rises: the memory page opens out of it. */
+  /** Set to the letter once it is out of the envelope: the sheet flies on from there (K). */
   markRef?: { current: THREE.Object3D | null };
+  /** K: the sheet is flying — the puppy's own letter steps aside for it. */
+  carrying?: { current: CarrierPose };
 }
 
 type Letter = {
@@ -208,7 +209,7 @@ type Letter = {
   returnFrom: { pos: THREE.Vector3; quat: THREE.Quaternion; at: number } | null;
 };
 
-export function LetterDog({ opening, hover, aim, mats, reducedMotion, onDelivered, markRef }: Props) {
+export function LetterDog({ opening, hover, aim, mats, reducedMotion, onDelivered, markRef, carrying }: Props) {
   const [geo, setGeo] = useState<LetterDogGeometry | null>(letterDogReady);
   useEffect(() => {
     if (geo) return;
@@ -469,9 +470,10 @@ export function LetterDog({ opening, hover, aim, mats, reducedMotion, onDelivere
       Lt.quat.slerp(tmp.flat, 1 - Math.exp(-dt * 10));
       lg.matrix.compose(Lt.pos, Lt.quat, tmp.one);
       if (opening) p.restClock += dt * pace;
-      // Storyboard I.5: the seal warms and cracks, the flap lifts, the letter slides out,
-      // rises toward her and opens its folds; only then is it delivered
-      if (p.deliveredAt < 0 && p.restClock > SETTLE + LETTER.unfold[1]) {
+      // Storyboard I.5: the seal warms and cracks, the flap lifts, the letter slides out; the
+      // sheet then flies to her by itself (Gift3D) — only without it (reduced motion) is the
+      // letter delivered from here
+      if (reducedMotion && p.deliveredAt < 0 && p.restClock > SETTLE + LETTER.slide[1]) {
         p.deliveredAt = now;
         onDelivered();
       }
@@ -526,29 +528,22 @@ export function LetterDog({ opening, hover, aim, mats, reducedMotion, onDelivere
     const lidT = rt >= LETTER.flap[0] ? 1 : 0;
     c.lid += (lidT - c.lid) * (1 - Math.exp(-dt * 3.2 * pace));
     if (lid.current) lid.current.rotation.x = -c.lid * 2.4;
-    // the letter slides out of it, rises toward her and opens its folds
+    // the letter slides out of it; then the sheet takes over (it rises, unfolds, is the page)
     const slideK = beat(LETTER.slide);
-    const riseK = beat(LETTER.rise);
-    const unfoldK = beat(LETTER.unfold);
     const sh2 = sheet.current;
     if (sh2) {
-      sh2.visible = slideK > 0.001;
+      sh2.visible = slideK > 0.001 && !carrying?.current.show;
       const L2 = FACE.letter;
-      sh2.position.set(0, slideK * L2.h * 0.95 + riseK * L2.h * 0.4, L2.t * 0.5 + riseK * 0.34);
-      // it turns up to face her (the camera looks down at the letter on the floor)
-      sh2.rotation.set(riseK * -1.05, 0, Math.sin(now * 0.9) * 0.02 * riseK);
-      sh2.scale.setScalar(1 + riseK * 0.55);
+      sh2.position.set(0, slideK * L2.h * 0.95, L2.t * 0.5);
+      sh2.rotation.set(0, 0, 0);
       folds.current.forEach((f, i) => {
-        if (!f) return;
-        // the top fold opens first, then the bottom one, a beat apart
-        const e = ease(THREE.MathUtils.clamp(unfoldK * 1.6 - i * 0.6, 0, 1));
-        f.rotation.x = (i === 0 ? -1 : 1) * (1 - e) * (Math.PI - 0.04);
+        if (f) f.rotation.x = (i === 0 ? -1 : 1) * (Math.PI - 0.04);
       });
-      if (unfoldK > 0.05 && !sealed.current.unfolded) {
+      if (slideK > 0.999 && !sealed.current.unfolded) {
         sealed.current.unfolded = true;
         sound.paper(2, 260);
       }
-      if (markRef) markRef.current = riseK > 0.3 ? sh2 : null;
+      if (markRef) markRef.current = slideK > 0.999 ? sh2 : null;
     }
   });
 
@@ -648,7 +643,7 @@ export function LetterDog({ opening, hover, aim, mats, reducedMotion, onDelivere
               </group>
             </group>
             {/* the letter inside, folded in three: it slides out, rises and opens */}
-            <group ref={sheet} visible={false} position={[0, 0, L.t * 0.5]}>
+            <group ref={sheet} visible={false} position={[0, 0, L.t * 0.5]} userData={{ carryW: L.w * 0.9 }}>
               <mesh material={mats.main}>
                 <boxGeometry args={[L.w * 0.9, L.h * 0.86, 0.0015]} />
               </mesh>

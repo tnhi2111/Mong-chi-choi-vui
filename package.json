@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "typecheck": "tsc -p .",
     "qa": "node scripts/qa.mjs",
-    "test": "node --experimental-strip-types --no-warnings tests/password.test.ts",
+    "test": "node --experimental-strip-types --no-warnings tests/password.test.ts && node --experimental-strip-types --no-warnings tests/carrier.test.ts",
     "qa:keyboard": "node scripts/qa-keyboard.mjs",
     "qa:qr": "node scripts/qa-qr.mjs",
     "qa:visual": "node scripts/qa-visual.mjs",

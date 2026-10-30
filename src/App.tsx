@@ -3,6 +3,8 @@ import { birthdayConfig } from './config/birthday';
 import { motion as MOTION } from './config/motion';
 import { beginScene, endScene, hurryUp, sceneWait } from './lib/pace';
 import { giftMark, publishGiftMark } from './lib/giftMark';
+import { carrier } from './lib/carrier';
+import { LightTextLayer } from './components/ui/LightText';
 import { gifts } from './data/gifts';
 import type { FinalePhase, Stage, Veil } from './types';
 import type { DustMode, DustPhase } from './components/3d/TransitionDust';
@@ -308,6 +310,10 @@ export default function App() {
       // (the place the page opens out of is this gift's, never the last one's)
       publishGiftMark(null);
       beginScene(`gift:${id}`, reducedMotion);
+      // (the page's code is fetched now, while the gift opens: the sheet must never stand
+      //  waiting in front of her for a download — K)
+      void import('./components/experience/MemoryView');
+      void import('./components/experience/LoveLetter');
       setOpeningId(id);
       sound.chime(gifts.findIndex((g) => g.id === id) + 2);
     },
@@ -323,7 +329,8 @@ export default function App() {
       sound.chime(5, 0.06);
       // the gift has had its product shot; the memory settles over it (sheet-in), the room
       // stays there behind, out of focus — no cover in between
-      await wait(reducedMotion ? 60 : 240);
+      // (K: the sheet is holding still in front of her — the page takes it over at once)
+      await wait(reducedMotion ? 60 : 30);
       setActiveId(id);
     },
     [reducedMotion],
@@ -358,7 +365,7 @@ export default function App() {
       setOpened((o) => (o.includes(id) ? o : [...o, id]));
       setPulseKey((k) => k + 1);
     };
-    if (reducedMotion || !giftMark.at) return finish();
+    if (reducedMotion || (!giftMark.at && !carrier.live)) return finish();
     setClosingSheet(true);
     sound.paper(1);
     setTimeout(finish, MOTION.gift.closeMs);
@@ -498,6 +505,7 @@ export default function App() {
       </div>
 
       <CursorLayer reducedMotion={reducedMotion} />
+      <LightTextLayer />
 
       <main className="stage" data-stage={stage} data-veil={veil} data-leaving={leaving} data-opening={openingId ?? ""} inert={overlayOpen}>
         {stage === 'intro' && (
@@ -532,7 +540,7 @@ export default function App() {
 
       <Suspense fallback={null}>
         {activeGift?.kind === 'memory' && (
-          <MemoryView gift={activeGift} index={gifts.indexOf(activeGift)} onClose={closeGift} closing={closingSheet} />
+          <MemoryView gift={activeGift} index={gifts.indexOf(activeGift)} onClose={closeGift} closing={closingSheet} reducedMotion={reducedMotion} />
         )}
         {activeGift?.kind === 'letter' && <LoveLetter onClose={closeGift} reducedMotion={reducedMotion} closing={closingSheet} />}
       </Suspense>

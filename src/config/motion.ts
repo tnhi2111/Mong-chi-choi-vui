@@ -97,15 +97,49 @@ export const motion = {
    */
   gift: {
     /** The opening, per shape (the App's safety net is read from here too). */
-    open: { box: t(5.4), capsule: t(5.0), star: t(5.2), orb: t(5.6), envelope: t(6.4) },
+    // (K3: the owner found the box slow. Press → the page standing straight is now ≈ 3.5–4.5 s:
+    //  the opening, then `carry.pageMs` while the page straightens out of the sheet.)
+    open: { box: t(3.0), capsule: t(3.0), star: t(3.1), orb: t(3.3), envelope: t(5.4) },
     /** A held beat before the thing inside comes out (the breath before it gives). */
     hold: t(0.5),
     /** The memory page grows out of the thing on screen (ms — CSS reads it). */
-    pageMs: ms(900),
+    pageMs: ms(750),
     /** Closing runs the same way back, a little slower. */
-    closeMs: ms(1050),
+    closeMs: ms(950),
+    /**
+     * K — the sheet that comes out of the gift IS the page. It flies to `dist` m in front of
+     * the lens and stops at `hand` of the page's size, leaning back by `tilt` rad — still a
+     * thing in the world, in perspective — and there the page takes it over (≤ 2 px) and
+     * straightens out of it. `arc`: how high its flight bows (m). `dogSecs`: the puppy's
+     * letter's flight from the envelope to her.
+     */
+    carry: { dist: 1.15, hand: 0.5, tilt: 0.16, arc: 0.1, dogSecs: t(1.3) },
     /** Reduced motion / no WebGL: one short opening. */
     quick: t(1.4),
+  },
+
+  /**
+   * L — words that arrive as light (`LightText`). Why: a line that fades in is information; a
+   * line that light gathers into is a gift. Each word lands a beat after the one before (the
+   * reading pace), the motes hold for a breath on its shape, then the real word takes over.
+   * Seconds / px.
+   */
+  lightText: {
+    /** between one word and the next */
+    stagger: t(0.075),
+    /** a mote's flight from the hero to its place in the word */
+    flight: t(0.85),
+    /** how wide the cloud of light it leaves the hero as (px) */
+    spread: 70,
+    /** how far a mote's path bows (px) */
+    bend: 180,
+    /** the motes hold on the word, then fade as the word takes over */
+    hold: t(0.12),
+    fade: t(0.4),
+    /** sparks a blooming word lets fall */
+    sparks: 5,
+    /** most motes one line may use (×0.6 on a phone) */
+    maxMotes: 1600,
   },
 
   /**

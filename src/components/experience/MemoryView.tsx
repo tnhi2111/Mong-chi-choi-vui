@@ -1,5 +1,7 @@
 import { useRef } from 'react';
 import { useGiftOrigin } from '../../hooks/useGiftOrigin';
+import { useLeaf } from '../../hooks/useLeaf';
+import { motion } from '../../config/motion';
 import type { Gift } from '../../data/gifts';
 import { assetUrl } from '../../lib/text';
 import { Reveal } from '../ui/Reveal';
@@ -12,25 +14,33 @@ interface Props {
   onClose: () => void;
   /** The page is folding back into the gift it came out of. */
   closing?: boolean;
+  reducedMotion?: boolean;
 }
 
 /** A memory, opened: title, date, photo, message, timeline, polaroids, note. */
-export default function MemoryView({ gift, index, onClose, closing = false }: Props) {
+export default function MemoryView({ gift, index, onClose, closing = false, reducedMotion = false }: Props) {
   const dialog = useDialog<HTMLDivElement>(onClose);
   const scroller = useRef<HTMLDivElement>(null);
   const number = String(index + 1).padStart(2, '0');
   const meta = [gift.date, gift.location].filter(Boolean).join(' · ');
   // the page opens out of the thing that came out of the gift (storyboard I)
   const from = useGiftOrigin();
+  // K: the page's paper IS the sheet that flew out of the gift (it takes over from it)
+  const leaf = useLeaf(closing, reducedMotion);
 
   return (
     <div
       ref={dialog}
-      className={`sheet${from.className}${closing ? ' is-closing' : ''}`}
+      className={`sheet${leaf.carried ? ' is-carried' : from.className}${closing ? ' is-closing' : ''}`}
       role="dialog"
       aria-modal="true"
       aria-labelledby="memory-title"
-      style={{ ...from.style, ['--tint' as string]: gift.tint }}
+      style={{
+        ...from.style,
+        ['--tint' as string]: gift.tint,
+        ['--page-ms' as string]: `${motion.gift.pageMs}ms`,
+        ['--close-ms' as string]: `${motion.gift.closeMs}ms`,
+      }}
     >
       <div className="sheet__bar">
         <button type="button" className="btn btn--quiet" onClick={onClose} data-autofocus>
@@ -41,9 +51,16 @@ export default function MemoryView({ gift, index, onClose, closing = false }: Pr
         </button>
       </div>
 
-      <div ref={scroller} className="sheet__scroll">
-        <article className="memory">
+      <div ref={leaf.ref} className={leaf.className} style={leaf.style} data-fold={leaf.fold} data-shape={gift.shape}>
+      <div ref={scroller} className="sheet__scroll leaf__scroll">
+        <article className="memory leaf__ink">
           <header className="memory__head rise" style={{ animationDelay: '0.15s' }}>
+            {/* the journal's gilt star flew up to the top of its page (K2.3) */}
+            {gift.shape === 'star' && (
+              <span className="memory__star" aria-hidden="true">
+                ✦
+              </span>
+            )}
             <p className="eyebrow">
               {number}
               {gift.subtitle ? ` — ${gift.subtitle}` : ''}
@@ -106,6 +123,7 @@ export default function MemoryView({ gift, index, onClose, closing = false }: Pr
             </button>
           </div>
         </article>
+      </div>
       </div>
     </div>
   );

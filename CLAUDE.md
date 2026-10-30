@@ -699,6 +699,37 @@ in those films. `--log` prints leader / camera / weight per frame.
 - **J4 — the finale's ways out** ("Back to our room", "From the beginning") appear only when no
   step is left: in `waiting`, or in `secret` once the surprise has been seen (`surpriseAhead`).
 
+## The sheet that comes out of a gift IS the memory page (stage K)
+
+- **Carrier** (`PaperCarrier.tsx`): each gift lets out one paper sheet in 3D — box: a note
+  folded once under the pictures; bottle: the scroll (rolled, `roll`); journal: the right-hand
+  page (`page` curl); music box: a paper folded in three in the lid (`tri`); the puppy: its letter
+  once it has slid out of the envelope (`tri`, real creases). Anchors are groups in GiftBody
+  (`boxSheet`, `noteSheet`, `pageSheet`, `mouthSheet`, LetterDog's `sheet`) with
+  `userData.carryW`; timings in `CARRY` (Gift3D). Its pose is a function of the opening's
+  progress (source in the gift → in front of the lens at `motion.gift.carry.dist`, `hand` of the
+  page's size, leaning back `tilt`), so closing runs it back. The puppy's letter flies on its own
+  clock (`carry.dogSecs`) and Gift3D delivers it (LetterDog only delivers under reduced motion).
+- **Handoff** (`src/lib/carrier.ts`, `src/hooks/useLeaf.ts`): the carrier reports its four
+  corners on screen from `onBeforeRender` (the camera of THAT frame). The page's paper `.leaf`
+  is laid out at exactly `leafRect()`; on mount it is mapped onto those corners with a CSS
+  `matrix3d` homography (`quadMatrix`, transform-origin 0 0) — chosen over drei `<Html
+  transform>` because four projected corners are exact by construction and the page stays a
+  normal dialog — `carrier.handed` makes the 3D sheet stop drawing (it keeps rendering with
+  `colorWrite` off, so it keeps reporting), the corners glide to the leaf's place
+  (`pageMs`, ease-out that carries the sheet's speed on), then the words ink in. Closing: words
+  out, the leaf glides onto the live corners, `handed = false`, the gift runs its clock back.
+  The page's dark is its own `::before` layer (the paper never fades). Creases stay on the leaf
+  (`data-fold`). The 3D sheet's paper is written straight out (no tone mapping) = `--paper`.
+- **Pace (K3)**: openings 3.0–3.3 s (`motion.gift.open`), a 0.15 s held breath, walls/lid/light
+  overlap; press → page straight ≈ 4.2–4.4 s (puppy ≈ 6.5 s: its delivery performance).
+  The page chunks are fetched when a gift starts opening (they were the 0.6 s stall).
+- QA: `node scripts/qa-handoff.mjs --gpu [--size=390x844 --mobile] [--only=1,5] [--nofilm]`
+  films each gift (timestamps + `scripts/frame-sheet.py` sheets) and measures the handoff
+  (`__leafHold` keeps the page on the sheet; `scripts/handoff-corners.py` compares the paper's
+  corners in a page-shot and a sheet-shot): ≤ 1.4 px on desktop and phone. `npm test` checks
+  the homography lands on its corners. `?debug` → `window.__carrier`.
+
 ## Design references (`reference/`)
 
 - `reference/VIDEO_ANALYSIS.md` — the owner's reference videos, analysed (3 in the first

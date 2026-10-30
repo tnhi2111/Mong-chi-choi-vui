@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
+import { setLightOrigin } from '../../lib/lightOrigin';
 import * as THREE from 'three';
 import { SURPRISE_PHASES, type FinalePhase } from '../../types';
 import { MemoryCelestial, type MemoryCelestialHandle } from './MemoryCelestial';
@@ -136,6 +137,7 @@ function MemoryFragments({
 }
 
 /** Stage 5: the finale. */
+const heroAt = new THREE.Vector3();
 export function FinalWorld({ phase, photos, onFormed, reducedMotion, particleFactor, portrait, heartPoints, leaving = false }: Props) {
   const clock = useRef(0);
   const orb = useRef<MemoryCelestialHandle>(null);
@@ -157,6 +159,12 @@ export function FinalWorld({ phase, photos, onFormed, reducedMotion, particleFac
    * stars, and the leader flies on into the orb — which then gathers as before.
    */
   const arrived = useRef(false);
+  // L: the finale's words are written by the orb's light — where is it on screen?
+  useFrame(({ camera, size }) => {
+    if (!group.current) return;
+    group.current.getWorldPosition(heroAt).project(camera);
+    setLightOrigin((heroAt.x * 0.5 + 0.5) * size.width, (-heroAt.y * 0.5 + 0.5) * size.height);
+  });
   useFrame(({ camera }) => {
     if (arrived.current) return;
     arrived.current = true;
