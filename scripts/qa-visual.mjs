@@ -195,7 +195,7 @@ try {
   await snap('gift-opening-1');
   await page.waitForTimeout(450);
   await snap('gift-opening-2');
-  await page.locator('.sheet').waitFor({ timeout: 8000 });
+  await page.locator('.sheet').waitFor({ timeout: 15000 }); // each opening is 5–6.5 s now (motion.gift.open)
   await page.waitForTimeout(1200);
   await snap('memory');
 } catch (e) {

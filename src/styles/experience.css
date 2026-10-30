@@ -836,6 +836,35 @@ html[data-reduce] .room-whisper span {
   }
 }
 
+/* Storyboard I: the page is not a sheet sliding over the room — it is UNCOVERED from the
+   thing that came out of the gift. Gift3D leaves that thing's place and size on screen and
+   the page's clip-path opens from exactly there. The room stays behind it the whole time. */
+.sheet.from-gift {
+  animation: sheet-grow var(--page-ms, 900ms) var(--ease-out) both;
+}
+
+@keyframes sheet-grow {
+  /* (from nothing: a dark disc over the gift would read as the gift being eaten — the page
+     has to arrive as the gift's own light widening) */
+  from {
+    opacity: 0;
+    clip-path: inset(var(--clip-top) var(--clip-right) var(--clip-bottom) var(--clip-left) round 50%);
+    -webkit-backdrop-filter: blur(0px) saturate(1);
+    backdrop-filter: blur(0px) saturate(1);
+  }
+  35% {
+    opacity: 0.85;
+  }
+  to {
+    opacity: 1;
+    clip-path: inset(0 0 0 0 round 0);
+  }
+}
+
+[data-reduce] .sheet.from-gift {
+  animation: sheet-in 260ms var(--ease-out) both;
+}
+
 .sheet__bar {
   position: absolute;
   top: 0;

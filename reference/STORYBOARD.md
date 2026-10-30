@@ -218,3 +218,37 @@ unrolling one by one, the wall rising like a curtain, the window frame drawn bef
 glass fills with night, balloons inflating from their knots, the cake rising tier by tier,
 the gifts falling as seeds — is **not** built. That is a piece per element, and the sweep is
 what makes the room build itself in the time available.
+
+---
+
+## I. Opening a gift (5–6.5 s each) — first pass
+
+The owner: *"không loé sáng rồi nhảy sang bức thư."* Timings in `motion.gift`.
+
+Shared by all five:
+- **Its own clock**: `motion.gift.open[shape]` (box 5.4 s, bottle 5.0, journal 5.2, music box
+  5.6, letter 6.4). Real seconds are warped (`openWarp` in Gift3D): it rises onto its light
+  (10 %), **holds its breath** ~0.5 s (the plateau where the light gathers), its mechanism
+  works (to 76 %), and what is inside comes to her slowest of all.
+- **The page opens out of the object**: while it opens, Gift3D leaves the object's place and
+  size on screen (`src/lib/giftMark.ts`); the memory page (`useGiftOrigin`) starts as a
+  clipped circle exactly there and widens to the full screen (`.sheet.from-gift`,
+  `sheet-grow`), arriving from transparent — the gift's light widening, not a panel over it.
+- App's safety net waits for that gift's own duration (+1.2 s), not a fixed 3.5 s.
+
+| t (box 01) | What happens |
+|---|---|
+| 0–0.5 s | it rises onto the pedestal; its name comes up behind it |
+| 0.5–1.0 s | held: the light gathers, nothing else moves but the light |
+| 1.0–2.7 s | the lid pops and is **lifted off**, up and away over the back, out of the frame |
+| 2.5–4.3 s | the **four walls, hinged at the base, fall open like petals**, one a beat after the other; the inside is lined in the ribbon's wine satin |
+| 3.4–5.4 s | **little pictures** (blank — an image of memories, never content) rise out on a spiral |
+| 5.4–6.3 s | the memory page widens out of the box |
+
+Not done in this pass (stated plainly): the satin ribbon untying into an S-curve; the
+bottle's scroll flying out and unrolling into the page; the journal's gilt star lifting off
+with a trail and the dotted "journey" line; the music box's notes leaving motes and ripples
+on the velvet; the wax seal cracking on the letter. Gifts 02–05 open with their existing
+mechanisms (cork, cover and pages, lid and dancing heart, the puppy's delivery) at the new
+pace and into the same widening page. Closing still runs the old way (it does not yet run
+the opening backwards).

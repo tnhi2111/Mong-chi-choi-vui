@@ -3,6 +3,7 @@ import { useFrame, type ThreeEvent } from '@react-three/fiber';
 import { RoundedBox } from '@react-three/drei';
 import { ScreenLabel } from './ScreenLabel';
 import { motion as MOTION } from '../../config/motion';
+import { publishGiftMark } from '../../lib/giftMark';
 import { ShotTitle } from './ShotTitle';
 import * as THREE from 'three';
 import { useShader } from './useShader';
@@ -437,6 +438,33 @@ function Motes({ count, radius, level, seed = 1 }: { count: number; radius: numb
 const openOf = (o: number) => THREE.MathUtils.smoothstep(o, 0.4, 0.85);
 /** How long a steady press takes to lift a lid all the way (seconds). */
 const HOLD_SECS = 0.7;
+
+/**
+ * Real time → how far the opening has got (storyboard I). Not a straight line: the thing
+ * settles on its light, HOLDS ITS BREATH (the plateau at 0.14 — where Gift3D already waits
+ * with the light gathering), then its mechanism works, and what is inside comes to her
+ * slowest of all. The numbers are fractions of the gift's own duration.
+ */
+const OPEN_KEYS: [number, number][] = [
+  [0, 0],
+  [0.1, 0.14],
+  // the held breath: ~0.5 s of a 5–6 s opening — long enough to feel, never a still picture
+  [0.19, 0.14],
+  [0.76, 0.72],
+  [1, 1],
+];
+function openWarp(u: number): number {
+  const x = THREE.MathUtils.clamp(u, 0, 1);
+  for (let i = 1; i < OPEN_KEYS.length; i++) {
+    const [ax, ay] = OPEN_KEYS[i - 1];
+    const [bx, by] = OPEN_KEYS[i];
+    if (x <= bx) {
+      const k = bx > ax ? (x - ax) / (bx - ax) : 1;
+      return ay + (by - ay) * (k * k * (3 - 2 * k));
+    }
+  }
+  return 1;
+}
 /** QA (?debug): window.__giftHold shows which lid is being lifted, and how far. */
 const DEBUG = typeof location !== 'undefined' && new URLSearchParams(location.search).has('debug');
 
@@ -463,6 +491,9 @@ function GiftBody({
   onDelivered: () => void;
 }) {
   const lid = useRef<THREE.Group>(null);
+  /** Box 01: its four walls (hinged at the base) and the little pictures that rise out of it. */
+  const walls = useRef<(THREE.Group | null)[]>([]);
+  const photos = useRef<(THREE.Group | null)[]>([]);
   const light = useRef<THREE.Sprite>(null);
   const tag = useRef<THREE.Group>(null);
   const cork = useRef<THREE.Group>(null);
@@ -477,6 +508,9 @@ function GiftBody({
   const plucked = useRef<number[]>([]);
   const clockNow = useRef(0);
   const mats = useGiftMaterials(gift, glass);
+  // the little pictures in box 01: two tints of the gift's own colour, never words
+  const tintSoft = useMemo(() => new THREE.Color(gift.tint).lerp(new THREE.Color('#f6e3dc'), 0.55), [gift.tint]);
+  const tintDeep = useMemo(() => new THREE.Color(gift.tint).lerp(new THREE.Color('#4a1d2a'), 0.35), [gift.tint]);
   const star = useMemo(() => (gift.shape === 'star' ? starGeometry() : null), [gift.shape]);
   const bottle = useMemo(() => (gift.shape === 'capsule' ? bottleGeometry() : null), [gift.shape]);
   useEffect(
@@ -512,16 +546,43 @@ function GiftBody({
     // see inside — that is what the opening is for (storyboard C)
     const lift = hold.current * (1 - open);
     switch (gift.shape) {
-      case 'box':
+      case 'box': {
+        // Storyboard I.1 — the box opens the way a gift box does when it is made to be
+        // opened: the lid pops and swings away, then the four walls, hinged at the base,
+        // fall open like petals (slowly, each a beat after the one before), and what was
+        // inside rises out on a spiral. Nothing flashes: the light is the box's own.
+        const lidK = THREE.MathUtils.smoothstep(o, 0.18, 0.5);
         if (lid.current) {
-          // the lid lifts a breath first, then swings open on its back edge
-          const pop = THREE.MathUtils.smoothstep(o, 0.25, 0.45);
-          lid.current.rotation.x = -open * 1.35 - lift * 0.22;
-          lid.current.position.y = 0.24 + pop * 0.04 + open * 0.08 + lift * 0.035;
+          // it pops, swings back over its hinge and hangs down behind the box — out of the
+          // way of what is about to rise, instead of standing up in front of it
+          // it pops, then is LIFTED OFF — up and away over the back, tipping a little the
+          // way a lid does in a hand — and leaves the frame before the walls fall
+          const pop = THREE.MathUtils.smoothstep(o, 0.14, 0.24);
+          const off = lidK * lidK;
+          lid.current.rotation.x = -lidK * 0.55 - lift * 0.22;
+          lid.current.position.y = 0.24 + pop * 0.05 + off * 1.9 + lift * 0.035;
+          lid.current.position.z = -0.33 - off * 0.7;
         }
+        walls.current.forEach((w, i) => {
+          if (!w) return;
+          const k = THREE.MathUtils.smoothstep(o, 0.46 + i * 0.05, 0.8 + i * 0.04);
+          // a petal does not drop flat: it opens to ~70°, and settles there with a breath
+          w.rotation.x = k * 1.22 + Math.sin(t * 1.4 + i) * 0.015 * k;
+        });
+        const up = THREE.MathUtils.smoothstep(o, 0.62, 1);
+        photos.current.forEach((g, j) => {
+          if (!g) return;
+          const e = THREE.MathUtils.clamp(up * 1.3 - j * 0.08, 0, 1);
+          const a = j * 1.2566 + e * 2.4 + t * 0.15 * e;
+          const r = 0.06 + 0.42 * e;
+          g.position.set(Math.sin(a) * r, -0.1 + e * (0.62 + j * 0.09), Math.cos(a) * r + 0.06 * e);
+          g.rotation.set(-0.15 * e, a * 0.25 + Math.sin(t * 0.8 + j) * 0.08, Math.sin(t + j * 2) * 0.06);
+          g.scale.setScalar(Math.max(0.0001, e * e * (3 - 2 * e)));
+        });
         // the little brass tag swings on its thread — a touch more when her hand is near
         if (tag.current) tag.current.rotation.z = Math.sin(t * 1.3 * motion + 0.6) * (0.05 + h * 0.12) * motion + open * 0.4;
         break;
+      }
       case 'capsule':
         // the cork works loose and lifts off, tilting; the motes inside rise out
         if (cork.current) {
@@ -560,29 +621,62 @@ function GiftBody({
     }
     if (light.current) {
       // a warm breath of light from inside — it shows the inside, it doesn't blind
-      (light.current.material as THREE.SpriteMaterial).opacity = open * 0.32 + lift * 0.12;
-      light.current.scale.setScalar(0.4 + open * 0.9);
+      // (the open box shows its pale inside walls to the light: much less of it there, or
+      //  the inside of the box was the one white thing on the screen)
+      const inner = gift.shape === 'box' ? 0.05 : 0.32;
+      (light.current.material as THREE.SpriteMaterial).opacity = open * inner + lift * 0.12;
+      light.current.scale.setScalar(0.4 + open * (gift.shape === 'box' ? 0.5 : 0.9));
       light.current.position.y = (gift.shape === 'capsule' ? 0.3 : 0.1) + open * 0.4;
     }
     // warm the surface a touch when she hovers, and flare as it opens
-    if (gift.shape !== 'capsule') mats.main.emissiveIntensity = h * 0.12 + open * 0.3;
+    if (gift.shape !== 'capsule') mats.main.emissiveIntensity = h * 0.12 + open * (gift.shape === 'box' ? 0.06 : 0.3);
   });
 
   switch (gift.shape) {
     case 'box':
       return (
         <group>
-          <RoundedBox args={[0.6, 0.48, 0.6]} radius={0.035} smoothness={4} material={mats.main} />
-          {/* a wide band of cream paper under the satin: wrapped in two layers, by hand */}
-          <mesh material={mats.paper} rotation-y={0.015}>
-            <boxGeometry args={[0.22, 0.482, 0.603]} />
+          {/* the base, and four walls hinged at their foot (they fall open like petals) */}
+          <RoundedBox args={[0.6, 0.03, 0.6]} position={[0, -0.225, 0]} radius={0.012} smoothness={3} material={mats.main} />
+          <mesh position={[0, -0.209, 0]} rotation-x={-Math.PI / 2} material={mats.ribbon}>
+            <planeGeometry args={[0.57, 0.57]} />
           </mesh>
-          <mesh material={mats.ribbon}>
-            <boxGeometry args={[0.1, 0.485, 0.605]} />
-          </mesh>
-          <mesh material={mats.ribbon}>
-            <boxGeometry args={[0.605, 0.485, 0.1]} />
-          </mesh>
+          {[0, 1, 2, 3].map((i) => (
+            <group key={i} rotation-y={(i * Math.PI) / 2}>
+              <group ref={(g) => void (walls.current[i] = g)} position={[0, -0.24, 0.285]}>
+                <group position={[0, 0.24, 0]}>
+                  <RoundedBox args={[0.6, 0.48, 0.03]} radius={0.012} smoothness={3} material={mats.main} />
+                  {/* lined inside in the ribbon's wine satin, as a good gift box is: when the
+                      walls fall the inside is a colour, not a pale wall burning white */}
+                  <mesh position={[0, 0, -0.0165]} rotation-y={Math.PI} material={mats.ribbon}>
+                    <planeGeometry args={[0.57, 0.45]} />
+                  </mesh>
+                  {/* a band of cream paper under the satin on two sides: wrapped by hand */}
+                  {i % 2 === 0 && (
+                    <mesh material={mats.paper} position={[0.004, 0, 0.0012]}>
+                      <boxGeometry args={[0.22, 0.482, 0.031]} />
+                    </mesh>
+                  )}
+                  <mesh material={mats.ribbon} position={[0, 0, 0.002]}>
+                    <boxGeometry args={[0.1, 0.485, 0.033]} />
+                  </mesh>
+                </group>
+              </group>
+            </group>
+          ))}
+          {/* what was inside: little pictures (blank — they are an image of memories, not
+              content), tucked in the box until the walls fall, then rising on a spiral */}
+          {[0, 1, 2, 3, 4].map((j) => (
+            <group key={j} ref={(g) => void (photos.current[j] = g)} scale={0.0001}>
+              <mesh material={mats.paper}>
+                <boxGeometry args={[0.17, 0.135, 0.004]} />
+              </mesh>
+              <mesh position={[0, 0.008, 0.0025]}>
+                <planeGeometry args={[0.145, 0.092]} />
+                <meshBasicMaterial color={j % 2 ? tintSoft : tintDeep} toneMapped={false} />
+              </mesh>
+            </group>
+          ))}
           <Glow ref={light} color="#ffc9a8" size={0.4} opacity={0} />
           {/* a brass tag on a thread, hanging from the ribbon at the front, not quite straight */}
           <group ref={tag} position={[0.05, 0.18, 0.31]}>
@@ -924,6 +1018,11 @@ export function Gift3D({
    * spring the thing has and by how long its lid takes to lift.
    */
   const heavy = gift.shape === 'box' || gift.shape === 'orb';
+  /** How long THIS gift takes to open, and the clock of it. */
+  const openSecs = reducedMotion ? MOTION.gift.quick : (MOTION.gift.open as Record<string, number>)[gift.shape] ?? 5.2;
+  const clockOpen = useRef(0);
+  const markAt = useMemo(() => new THREE.Vector3(), []);
+  const markUp = useMemo(() => new THREE.Vector3(), []);
   const [stiff, damp] = MOTION.hand.spring[heavy ? 'heavy' : 'light'];
 
   useEffect(() => {
@@ -951,10 +1050,15 @@ export function Gift3D({
     const dt = Math.min(rawDt, 0.05);
     const t = state.clock.elapsedTime;
 
-    const speed = reducedMotion ? 2.4 : 1.05;
     // timing runs on real time (not frames), so a slow phone opens just as quickly
     const real = Math.min(rawDt, 0.25);
-    progress.current = opening ? Math.min(1, progress.current + real * speed) : Math.max(0, progress.current - real * 1.6);
+    if (opening) {
+      clockOpen.current = Math.min(openSecs, clockOpen.current + real);
+      progress.current = openWarp(clockOpen.current / openSecs);
+    } else {
+      clockOpen.current = 0;
+      progress.current = Math.max(0, progress.current - real * 1.6);
+    }
     // QA (?debug): window.__shotHold = 0.8 holds an opening product shot at that point
     const shotHold = (window as unknown as { __shotHold?: number }).__shotHold;
     if (opening && shotHold !== undefined) progress.current = Math.min(progress.current, shotHold);
@@ -1086,7 +1190,7 @@ export function Gift3D({
     }
     if (backlight.current) {
       const m = backlight.current.material as THREE.SpriteMaterial;
-      m.opacity = THREE.MathUtils.clamp(st, 0, 1) * 0.42;
+      m.opacity = THREE.MathUtils.clamp(st, 0, 1) * 0.42 * (gift.shape === 'box' ? 0.55 : 1);
       backlight.current.visible = m.opacity > 0.003;
       backlight.current.position.copy(r.position).addScaledVector(toCam, 0.8);
       backlight.current.scale.setScalar(2.2 + st * 0.5);
@@ -1127,6 +1231,20 @@ export function Gift3D({
     }
 
     // (the puppy decides for itself when the letter has been delivered — see `delivered`)
+    // Where this gift is on the screen, so the memory page can open OUT of it instead of
+    // sliding over it (storyboard I: the same element, carried from the world into the page).
+    if (opening && o > 0.5) {
+      r.getWorldPosition(markAt);
+      const half = size * (isDog ? 0.75 : 0.62) * (1 + e * 0.12);
+      markAt.project(state.camera);
+      const w = state.size.width;
+      const hgt = state.size.height;
+      // the gift's own radius in screen px, from a point one radius above it
+      markUp.copy(r.position).setY(r.position.y + half).project(state.camera);
+      const px = Math.max(40, Math.abs(markUp.y - markAt.y) * 0.5 * hgt);
+      publishGiftMark({ x: (markAt.x * 0.5 + 0.5) * w, y: (-markAt.y * 0.5 + 0.5) * hgt, width: px * 2, height: px * 2, tint: gift.tint });
+    }
+
     if (opening && o >= 1 && !notified.current && !isDog) {
       notified.current = true;
       onOpened(gift.id);

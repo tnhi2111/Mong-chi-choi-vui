@@ -191,7 +191,7 @@ try {
     }
     await page.waitForTimeout(700);
     if (i === 0) await snap('gift-opening');
-    await page.locator('.sheet').waitFor({ timeout: 8000 });
+    await page.locator('.sheet').waitFor({ timeout: 15000 }); // each opening is 5–6.5 s now (motion.gift.open)
     await page.waitForTimeout(1300);
     const isLetter = await page.locator('.sheet--letter').count();
     await snap(isLetter ? 'letter-typing' : `memory-${i + 1}`);

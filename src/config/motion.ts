@@ -89,6 +89,26 @@ export const motion = {
   },
 
   /**
+   * I — opening a gift: every one takes its own time, and the memory page opens out of the
+   * thing that came out of it (no flash, no cut). Seconds.
+   *
+   * Why so long: a gift is the one thing in this room she is meant to linger over. Each
+   * number is "how long the object itself takes to let go of what is inside".
+   */
+  gift: {
+    /** The opening, per shape (the App's safety net is read from here too). */
+    open: { box: t(5.4), capsule: t(5.0), star: t(5.2), orb: t(5.6), envelope: t(6.4) },
+    /** A held beat before the thing inside comes out (the breath before it gives). */
+    hold: t(0.5),
+    /** The memory page grows out of the thing on screen (ms — CSS reads it). */
+    pageMs: ms(900),
+    /** Closing runs the same way back, a little slower. */
+    closeMs: ms(1050),
+    /** Reduced motion / no WebGL: one short opening. */
+    quick: t(1.4),
+  },
+
+  /**
    * C — her hand in the room: nothing is a button. Resting near a thing brings the camera
    * to it; a thing has weight when it answers.
    */

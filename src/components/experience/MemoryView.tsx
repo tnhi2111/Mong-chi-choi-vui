@@ -1,4 +1,5 @@
 import { useRef } from 'react';
+import { useGiftOrigin } from '../../hooks/useGiftOrigin';
 import type { Gift } from '../../data/gifts';
 import { assetUrl } from '../../lib/text';
 import { Reveal } from '../ui/Reveal';
@@ -17,15 +18,17 @@ export default function MemoryView({ gift, index, onClose }: Props) {
   const scroller = useRef<HTMLDivElement>(null);
   const number = String(index + 1).padStart(2, '0');
   const meta = [gift.date, gift.location].filter(Boolean).join(' · ');
+  // the page opens out of the thing that came out of the gift (storyboard I)
+  const from = useGiftOrigin();
 
   return (
     <div
       ref={dialog}
-      className="sheet"
+      className={`sheet${from.className}`}
       role="dialog"
       aria-modal="true"
       aria-labelledby="memory-title"
-      style={{ ['--tint' as string]: gift.tint }}
+      style={{ ...from.style, ['--tint' as string]: gift.tint }}
     >
       <div className="sheet__bar">
         <button type="button" className="btn btn--quiet" onClick={onClose} data-autofocus>

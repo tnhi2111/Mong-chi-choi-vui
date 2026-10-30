@@ -639,6 +639,30 @@ in those films. `--log` prints leader / camera / weight per frame.
 - QA helpers (git-ignored): `qa-output/heroes.mjs` (close-ups of every gift, the window and
   the ceiling from inside), `qa-output/boxshot.mjs` (box 01 from four sides).
 
+## Pace, the gate, the room, the gifts (storyboards G, H, I — this pass)
+
+- **`motion.tempo`** (top of `src/config/motion.ts`): one knob; every duration goes through
+  `t()` / `ms()`. 1.0 = the current pace (≈5.5 s heart → words, ≈11 s welcome → whole room,
+  5–6.5 s per gift).
+- `lightSprite.ts` was renamed **`spriteFlight.ts`**: next to `LightSprite.tsx` it differed only
+  in case, so `import './LightSprite'` resolved to the .ts module on Windows and nothing
+  typechecked there.
+- **G (gate)**: no card, no frame (`gateRect.ts` deleted → `src/lib/gateMarks.ts`: the line the
+  words sit on and the rule she types on). The heart opens like a flower (6 petals,
+  `uPetals`/`uPetalTwist`/`uPetalLag` in ParticleHeart; never call a GLSL variable `out`)
+  while the camera arcs 41° and cranes; the sprite writes the words (`writeScript`,
+  `screenStroke`; the DOM reveal is a mask on `@property --ink`), then draws the rule; eight
+  star slots light per digit. Focus lands when the light reaches the words.
+- **H (room)**: `spriteBuilt()` discards what the leader has not passed (soft sine-waved
+  edge); `BuildGate.tsx` holds every standing thing at scale 0 until its angle is reached
+  (`sprite.expectBuild()` once per mount, so nothing is drawn before the tour; gates scale,
+  never `visible=false`, or compileAsync skips them). `qa-output/tmp/tour.mjs` counts drawn
+  things: 1/25 at 10 % of the tour, 3/25 at 30 %.
+- **I (gifts)**: see STORYBOARD I. `openWarp` + `motion.gift.open`, `giftMark` →
+  `useGiftOrigin` (page widens from the object), box 01 = lid lifted off + walls hinged at the
+  base + wine satin lining + rising blank pictures. `window.__shotHold` still freezes a
+  shot (`qa-output/tmp/giftsteps.mjs N`). QA waits for `.sheet` up to 15 s.
+
 ## Design references (`reference/`)
 
 - `reference/VIDEO_ANALYSIS.md` — the owner's reference videos, analysed (3 in the first

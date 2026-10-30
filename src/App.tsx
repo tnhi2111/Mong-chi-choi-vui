@@ -302,7 +302,11 @@ export default function App() {
   useEffect(() => {
     if (!openingId || activeId) return;
     if ((window as unknown as { __shotHold?: number }).__shotHold !== undefined) return; // QA: a held product shot
-    const id = setTimeout(() => void giftOpened(openingId), reducedMotion ? 2500 : 3500);
+    // …after the gift's OWN opening, not a fixed 3.5 s: every one takes its own time now
+    // (storyboard I), and a net that fires early would open the memory mid-performance
+    const shape = gifts.find((g) => g.id === openingId)?.shape ?? 'box';
+    const secs = reducedMotion ? MOTION.gift.quick : (MOTION.gift.open as Record<string, number>)[shape] ?? 5.2;
+    const id = setTimeout(() => void giftOpened(openingId), secs * 1000 + 1200);
     return () => clearTimeout(id);
   }, [openingId, activeId, giftOpened, reducedMotion]);
 

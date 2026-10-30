@@ -69,7 +69,7 @@ try {
       await snap('gift-focus');
     }
     await page.keyboard.press('Enter');
-    await page.locator('.sheet').waitFor({ timeout: 8000 });
+    await page.locator('.sheet').waitFor({ timeout: 15000 }); // each opening is 5–6.5 s now (motion.gift.open)
     await page.waitForTimeout(900);
     const inSheet = await page.evaluate(() => !!document.activeElement?.closest('.sheet'));
     if (!inSheet) problems.push(`focus not moved into the sheet for gift ${i + 1}`);

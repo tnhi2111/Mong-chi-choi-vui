@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useGiftOrigin } from '../../hooks/useGiftOrigin';
 import { birthdayConfig } from '../../config/birthday';
 import { fill } from '../../lib/text';
 import { useDialog } from '../ui/useDialog';
@@ -42,6 +43,9 @@ export default function LoveLetter({ onClose, reducedMotion }: Props) {
     return () => cancelAnimationFrame(raf);
   }, [done, total]);
 
+  // the letter's page opens out of the letter itself (storyboard I)
+  const from = useGiftOrigin();
+
   // slice the running character count across paragraphs
   let budget = shown;
   const visible = paragraphs.map((p) => {
@@ -52,7 +56,14 @@ export default function LoveLetter({ onClose, reducedMotion }: Props) {
   const typingIndex = visible.findIndex((v, i) => v.length < paragraphs[i].length);
 
   return (
-    <div ref={dialog} className="sheet sheet--letter" role="dialog" aria-modal="true" aria-labelledby="letter-greeting">
+    <div
+      ref={dialog}
+      className={`sheet sheet--letter${from.className}`}
+      style={from.style}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="letter-greeting"
+    >
       <div className="sheet__bar">
         <button type="button" className="btn btn--quiet" onClick={onClose} data-autofocus>
           <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
