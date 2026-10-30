@@ -142,6 +142,8 @@ if (want('c')) {
   const s = await open({ unlocked: true, opened: giftIds, finaleSeen: false });
   const { p } = s;
   await until(p, () => !!document.querySelector('.room-ui__cta'));
+  // a reload into the room opens under the CSS iris until the room has compiled: wait it out
+  await until(p, () => document.querySelector('main')?.dataset.veil === 'none', 60000);
   await run(p, 6000);
   await p.evaluate(() => document.querySelector('.room-ui__cta')?.click());
   await film(s, 'c', 6600);

@@ -230,7 +230,10 @@ export class RopeTube {
   }
 
   /** Rebuild from the rope (world positions — draw the mesh with an identity transform). */
-  update(rope: Rope, twist = new THREE.Vector3(0, 1, 0)) {
+  /** `side` (flat bands): the direction the band's width keeps where it can — projected off
+   *  the rope's tangent, so a tail lying on a lid and then hanging down its front stays flat to
+   *  both faces instead of turning on edge where the tangent crosses `twist`. */
+  update(rope: Rope, twist = new THREE.Vector3(0, 1, 0), side?: THREE.Vector3) {
     const pos = this.geometry.attributes.position as THREE.BufferAttribute;
     const nor = this.geometry.attributes.normal as THREE.BufferAttribute;
     const { a, b, t, n, bn } = this.tmp;
@@ -242,7 +245,8 @@ export class RopeTube {
       t.normalize();
       // a frame round the rope that keeps `twist` as its "up" where it can (a satin band
       // lies flat, it does not corkscrew)
-      n.crossVectors(t, twist);
+      if (side && this.flat) n.copy(side).addScaledVector(t, -side.dot(t));
+      else n.crossVectors(t, twist);
       if (n.lengthSq() < 1e-6) n.set(1, 0, 0);
       n.normalize();
       bn.crossVectors(n, t).normalize();

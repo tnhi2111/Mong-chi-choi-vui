@@ -274,9 +274,9 @@ const floorFragment = /* glsl */ `
     // out toward the wall the room falls into darkness
     col *= 1.0 - smoothstep(6.0, 9.0, r) * 0.7;
     col = haze(col, vWorld);
-    // the light sprite: what it has flown past is awake, what it has not waits at half light,
+    // the light sprite: what it has flown past is awake, what it has not waits at 62 % light,
     // and where it passes the surface flares and settles (storyboard D)
-    col = col * mix(0.5, 1.0, spriteBuilt(vWorld)) + spriteGlow(vWorld) * (0.06 + col * 1.4);
+    col = col * mix(0.62, 1.0, spriteBuilt(vWorld)) + spriteGlow(vWorld) * (0.06 + col * 1.4);
     // her hand: a warm pool under it, and beside it the soft shadow of a hand held above
     vec2 hf = handFloor(vWorld);
     col = col * (1.0 - 0.28 * hf.y) * (1.0 + 0.5 * hf.x) + vec3(1.0, 0.72, 0.48) * 0.035 * hf.x;
@@ -370,9 +370,9 @@ const stageFragment = /* glsl */ `
     vec3 col = base * light * 1.25;
     col += vec3(0.86, 0.66, 0.42) * clamp(trim, 0.0, 1.0) * (light * 0.75 + 0.02);
     col = haze(col, vWorld);
-    // the light sprite: what it has flown past is awake, what it has not waits at half light,
+    // the light sprite: what it has flown past is awake, what it has not waits at 62 % light,
     // and where it passes the surface flares and settles (storyboard D)
-    col = col * mix(0.5, 1.0, spriteBuilt(vWorld)) + spriteGlow(vWorld) * (0.06 + col * 1.4);
+    col = col * mix(0.62, 1.0, spriteBuilt(vWorld)) + spriteGlow(vWorld) * (0.06 + col * 1.4);
     gl_FragColor = vec4(col, 1.0);
   }
 `;
@@ -400,9 +400,9 @@ const bandFragment = /* glsl */ `
     }
     vec3 col = vec3(0.2, 0.055, 0.075) * light * 2.0;
     col = haze(col, vWorld);
-    // the light sprite: what it has flown past is awake, what it has not waits at half light,
+    // the light sprite: what it has flown past is awake, what it has not waits at 62 % light,
     // and where it passes the surface flares and settles (storyboard D)
-    col = col * mix(0.5, 1.0, spriteBuilt(vWorld)) + spriteGlow(vWorld) * (0.06 + col * 1.4);
+    col = col * mix(0.62, 1.0, spriteBuilt(vWorld)) + spriteGlow(vWorld) * (0.06 + col * 1.4);
     gl_FragColor = vec4(col, 1.0);
   }
 `;
@@ -510,12 +510,17 @@ const wallFragment = /* glsl */ `
     float frame = step(abs(wx), 1.07) * step(-1.07, wy) * step(wy, archTop + 0.12) * (1.0 - inWin);
     if (inWin > 0.5) {
       // the night: deep blue, a big soft moon, stars
-      vec3 sky = mix(vec3(0.03, 0.04, 0.12), vec3(0.1, 0.13, 0.3), smoothstep(1.0, -0.95, wy));
+      vec3 sky = mix(vec3(0.02, 0.027, 0.08), vec3(0.06, 0.078, 0.19), smoothstep(1.0, -0.95, wy));
       vec2 moon = vec2(0.42, 0.72);
       float md = length(vec2(wx, wy) - moon);
       sky += vec3(0.9, 0.92, 1.0) * smoothstep(0.24, 0.2, md) + vec3(0.3, 0.35, 0.6) * exp(-md * md * 3.0) * 0.6;
+      // stars: one small round point in a few cells of a grid (a whole lit cell read as a
+      // square pixel the moment the camera came close to the pane)
       vec2 sg = floor(vec2(wx, wy) * 22.0);
-      sky += vec3(0.8) * step(0.985, hash2(sg)) * (0.5 + 0.5 * sin(t * 2.0 + hash2(sg) * 40.0));
+      vec2 sp = (sg + 0.25 + 0.5 * vec2(hash2(sg + 7.1), hash2(sg + 3.3))) / 22.0;
+      float sdist = length(vec2(wx, wy) - sp);
+      sky += vec3(0.8, 0.82, 0.9) * step(0.975, hash2(sg)) * (0.55 + 0.45 * sin(t * 2.0 + hash2(sg) * 40.0))
+             * (smoothstep(0.006, 0.0, sdist) + exp(-sdist * sdist * 6000.0) * 0.35);
       // the city, far away: a row of dark buildings, their windows lit here and there,
       // switching on and off now and then — people living their evenings
       float col9 = floor((wx + 1.0) * 9.0);
@@ -568,7 +573,7 @@ const wallFragment = /* glsl */ `
       // and a breath of mist low on the pane where the cold meets the warm air
       sky += vec3(0.22, 0.13, 0.1) * 0.25;
       sky += vec3(1.0, 0.8, 0.65) * smoothstep(0.05, 0.0, abs(wx * 0.7 + wy * 0.5 - 0.3)) * 0.05;
-      sky = mix(sky, vec3(0.32, 0.3, 0.38), smoothstep(-0.3, -0.95, wy) * 0.22);
+      sky = mix(sky, vec3(0.22, 0.2, 0.27), smoothstep(-0.3, -0.95, wy) * 0.2);
       col = sky;
     } else if (frame > 0.5) {
       col = vec3(0.3, 0.17, 0.1) * (light * 1.6 + vec3(0.1, 0.12, 0.2));
@@ -578,12 +583,66 @@ const wallFragment = /* glsl */ `
     // up into the dark
     col *= 1.0 - smoothstep(3.6, ${WALL_H.toFixed(1)}, h) * 0.85;
     col = haze(col, vWorld);
-    // the light sprite: what it has flown past is awake, what it has not waits at half light,
+    // the light sprite: what it has flown past is awake, what it has not waits at 62 % light,
     // and where it passes the surface flares and settles (storyboard D)
-    col = col * mix(0.5, 1.0, spriteBuilt(vWorld)) + spriteGlow(vWorld) * (0.06 + col * 1.4);
+    // (the pane flares far less: the leader flies straight through it, and a lit night sky
+    //  filling the frame was the brightest frame of the room → finale change)
+    col = col * mix(0.62, 1.0, spriteBuilt(vWorld)) + spriteGlow(vWorld) * (0.06 + col * 1.4) * (1.0 - inWin * 0.8);
     gl_FragColor = vec4(col, 1.0);
   }
 `;
+
+/* ── the ceiling: only there while the camera is inside the room ──────────── */
+// Seen from outside (the dolls'-house view) the room has no lid. But when the light sprite
+// leads the camera in at head height, the space above the walls was a black void filling
+// half the frame (60-70 % near-black frames in the tour). A plaster ceiling, washed by the
+// cove uplight round its edge and the lamps' pools, closes the room over her — and fades
+// away again as the camera rises out of it.
+const ceilingFragment = /* glsl */ `
+  ${SPRITE_GLSL}
+  uniform vec4 uLamps[8];
+  uniform float uInside;
+  varying vec3 vWorld;
+  float hashC(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+  void main() {
+    float r = length(vWorld.xz);
+    vec3 col = vec3(0.2, 0.15, 0.14) * (0.94 + 0.06 * hashC(floor(vWorld.xz * 30.0)));
+    vec3 light = vec3(0.2, 0.14, 0.13);
+    // the cove: the uplight along the crown moulding spills onto the ceiling's edge
+    light += vec3(1.0, 0.72, 0.48) * 0.55 * exp(-(${WALL_R.toFixed(1)} - r) * 1.4);
+    // each lamp throws a soft pool straight up
+    for (int i = 0; i < 8; i++) {
+      vec3 lw = vWorld - uLamps[i].xyz;
+      light += vec3(1.0, 0.7, 0.42) * uLamps[i].w * 0.5 * exp(-dot(lw.xz, lw.xz) * 0.45);
+    }
+    // a plaster rose over the middle of the room, a ring of shade round it
+    float rose = smoothstep(0.02, 0.0, abs(r - 0.55)) * 0.5 + smoothstep(0.015, 0.0, abs(r - 0.42)) * 0.3;
+    col += vec3(0.3, 0.22, 0.18) * rose * 0.3;
+    // the cornice line where it meets the wall
+    col *= 1.0 - smoothstep(0.12, 0.0, ${WALL_R.toFixed(1)} - r) * 0.4;
+    col *= light * 1.6;
+    col = col * mix(0.62, 1.0, spriteBuilt(vWorld)) + spriteGlow(vWorld) * (0.04 + col * 1.2);
+    gl_FragColor = vec4(col, uInside);
+  }
+`;
+const CEIL_H = 3.14;
+function Ceiling({ floorY, lamps }: { floorY: number; lamps: THREE.IUniform }) {
+  const u = useMemo(() => ({ ...spriteWake, uLamps: lamps, uInside: { value: 0 } }), [lamps]);
+  const mat = useShader(wallVertex, ceilingFragment, u, { additive: false, side: THREE.DoubleSide });
+  const mesh = useRef<THREE.Mesh>(null);
+  useFrame(({ camera }) => {
+    // inside = within the wall and under the ceiling, faded over half a metre of each
+    const r = Math.hypot(camera.position.x, camera.position.z);
+    const k = Math.min(1, Math.max(0, (WALL_R - 0.25 - r) / 0.5)) * Math.min(1, Math.max(0, (floorY + CEIL_H - 0.2 - camera.position.y) / 0.5));
+    u.uInside.value = k;
+    if (mesh.current) mesh.current.visible = k > 0.002;
+  });
+  return (
+    <mesh ref={mesh} rotation-x={Math.PI / 2} position-y={floorY + CEIL_H} material={mat} renderOrder={-3} visible={false}>
+      <circleGeometry args={[WALL_R, 96]} />
+    </mesh>
+  );
+}
 
 /* ── candles: wax that glows near the flame, flames that flicker ──────────── */
 const waxVertex = /* glsl */ `
@@ -1660,7 +1719,8 @@ function ArchedWindow({ floorY, motion }: { floorY: number; motion: number }) {
     return { frame, bars: mergeGeometries(bars)!, sill, glass, shaft, v, hz };
   }, []);
   useEffect(() => () => Object.values(parts).forEach((g) => g.dispose()), [parts]);
-  const paint = useMemo(() => surface({ color: '#9c8676', roughness: 0.72, clearcoat: 0.05, bumpScale: 0.004 }), []);
+  // a near-neutral walnut grey: the room's rose rim light turned every warm paint into pink
+  const paint = useMemo(() => surface({ color: '#3b3530', roughness: 0.62, clearcoat: 0.12, bumpScale: 0.004 }), []);
   const wood = useMemo(() => surface({ color: '#5a3a26', roughness: 0.45, clearcoat: 0.3, bumpScale: 0.01 }), []);
   useEffect(() => () => {
     paint.dispose();
@@ -2022,6 +2082,7 @@ export function RoomSet({ floorY: stageY, rx, rz, heart, reducedMotion, hoverFx,
       <mesh position-y={floorY + WALL_H / 2} material={wallMat} renderOrder={-5}>
         <cylinderGeometry args={[WALL_R, WALL_R, WALL_H, 96, 1, true]} />
       </mesh>
+      <Ceiling floorY={floorY} lamps={floorU.uLamps} />
       {candles.map((c, i) => (
         <mesh
           key={i}
@@ -2090,6 +2151,7 @@ export function roomWarmShaders(): [string, string, THREE.Side, boolean][] {
     [floorVertex, stageFragment, THREE.FrontSide, true],
     [floorVertex, bandFragment, THREE.FrontSide, true],
     [wallVertex, wallFragment, THREE.BackSide, true],
+    [wallVertex, ceilingFragment, THREE.DoubleSide, false],
     [twinkleVertex, twinkleFragment, THREE.FrontSide, false],
     [cableVertex, cableFragment, THREE.FrontSide, true],
     [glassVertex, glassFragment, THREE.FrontSide, true],

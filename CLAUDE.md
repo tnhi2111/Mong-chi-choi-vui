@@ -622,6 +622,23 @@ each step is exact story time, frames over CDP) — the only honest way to see t
 a GPU (swiftshader renders ~2 fps). CSS (card frame, night wash) still runs on the wall clock
 in those films. `--log` prints leader / camera / weight per frame.
 
+**Follow-up (measured, then fixed):**
+- The tour was 60–73 % near-black: the camera flies at head height and the room had no lid,
+  so the dark above the walls filled half the frame. `Ceiling` (RoomSet): a plaster ceiling
+  at 3.14 m (cove uplight at its edge, lamp pools, a plaster rose) that exists only while the
+  camera is inside the walls and under it (`uInside`, faded over 0.5 m) — the dolls'-house
+  view from outside is unchanged. The `veil` dust keeps a wider hole (1.1).
+- The window: stars were whole lit grid cells (squares up close) → round points; the night
+  sky is darker; the pane takes only 20 % of the sprite's flare (the leader flies through it
+  and the lit pane was the brightest frame of room → finale); the frame is a near-neutral
+  walnut grey (any warm paint turned pink under the rose rim light).
+- Box 01's satin tails: long enough to run over the lid's edge and hang down the front, and
+  `RopeTube.update(rope, twist, side)` keeps a flat band's width across its run (before, it
+  turned on edge where the tangent crossed "up" and read as two sticks from a low angle).
+- The hand pushes gifts ~2.5× harder (a brisk sweep now moves a gift ~4 cm).
+- QA helpers (git-ignored): `qa-output/heroes.mjs` (close-ups of every gift, the window and
+  the ceiling from inside), `qa-output/boxshot.mjs` (box 01 from four sides).
+
 ## Design references (`reference/`)
 
 - `reference/VIDEO_ANALYSIS.md` — the owner's reference videos, analysed (3 in the first

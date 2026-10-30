@@ -235,10 +235,15 @@ function RibbonTails({ material, motion }: { material: THREE.Material; motion: n
       const r = new Rope(new THREE.Vector3(x, 0.082, 0.015), new THREE.Vector3(side * 0.35, -0.05, 1), { points: n, segment: len / (n - 1), gravity: 0, damping: 0.12, iterations: 8 });
       r.pin(0, new THREE.Vector3(x, 0.082, 0.015));
       // the lid (in this space): the ribbon drapes over its top and down its front
-      r.box = new THREE.Box3(new THREE.Vector3(-0.335, -0.07, -0.335), new THREE.Vector3(0.335, 0.072, 0.335));
-      return { rope: r, tube: new RopeTube(n, 0.04, { flat: true, thick: 0.004 }) };
+      // (the box below the lid too: in this space it runs down to y −0.54)
+      r.box = new THREE.Box3(new THREE.Vector3(-0.335, -0.6, -0.335), new THREE.Vector3(0.335, 0.072, 0.335));
+      // the band's width stays across its run (lying on the lid, then hanging down the front)
+      const across = new THREE.Vector3(1, 0, -side * 0.35).normalize();
+      return { rope: r, side: across, tube: new RopeTube(n, 0.04, { flat: true, thick: 0.004 }) };
     };
-    return [make(-0.02, 0.3, -1), make(0.03, 0.25, 1)];
+    // long enough to run over the lid's front edge and hang a little down the front — a tail
+    // that stops on the lid read as two sticks from a low angle
+    return [make(-0.02, 0.46, -1), make(0.03, 0.4, 1)];
   }, []);
   useEffect(() => () => sim.forEach((t) => t.tube.dispose()), [sim]);
   const last = useRef({ p: new THREE.Vector3(), v: new THREE.Vector3(), a: new THREE.Vector3(), init: false });
@@ -272,10 +277,10 @@ function RibbonTails({ material, motion }: { material: THREE.Material; motion: n
         _push.copy(_wp).sub(_hp).applyQuaternion(_q).normalize().multiplyScalar((1 - d / 0.6) * Math.min(roomHand.speed, 4) * roomHand.on * 0.004);
       }
     }
-    for (const { rope, tube } of sim) {
+    for (const { rope, tube, side } of sim) {
       if (near) rope.nudge(rope.get(rope.n - 1, _hp), _push, 0.4);
       rope.step(dt, wind);
-      tube.update(rope, new THREE.Vector3(0, 1, 0));
+      tube.update(rope, undefined, side);
     }
   });
 
@@ -1004,11 +1009,12 @@ export function Gift3D({
         const az = tmp.z - shove.hp.z;
         const l = Math.hypot(ax, az) || 1;
         // a light thing gives more than a heavy one (the same weight that drives its lid)
-        const give = (heavy ? 0.5 : 0.8) * f * dt;
+        // (0.8 gave ~1.5 cm at a brisk sweep: under notice on a phone. ~4–5 cm reads as a touch)
+        const give = (heavy ? 1.25 : 2.0) * f * dt;
         shove.x.v += (ax / l) * give;
         shove.z.v += (az / l) * give;
-        tiltZ.v -= (ax / l) * give * 6;
-        tiltX.v += (az / l) * give * 6;
+        tiltZ.v -= (ax / l) * give * 3.2;
+        tiltX.v += (az / l) * give * 3.2;
         // a real push passes the lean on round the ring, and counts toward a sweep
         if (f > 0.2 && t - shove.lastPush > 0.25) {
           shove.lastPush = t;

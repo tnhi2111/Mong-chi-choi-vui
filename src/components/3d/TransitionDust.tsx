@@ -328,7 +328,7 @@ export function TransitionDust({ phase, color, factor, mode = 'dust', reducedMot
     const closing = r.phase === 'close';
     // led by the light sprite (veil), the dark only gathers at the edges: the corridor of
     // light in the middle is what she travels through, so it must never be covered
-    const shut = mode === 'veil' ? 0.85 : HOLE.shut;
+    const shut = mode === 'veil' ? 1.1 : HOLE.shut; // (0.85 left a 73 %-dark frame as the corridor met the room)
     const hole = closing
       ? THREE.MathUtils.lerp(HOLE.open, shut, easeInOut(Math.min(1, k / 0.92)))
       : THREE.MathUtils.lerp(shut, HOLE.open, easeOut(Math.min(1, k / 0.8)));
