@@ -803,6 +803,18 @@ See STORYBOARD P/Q; numbers in `motion.letter` / `motion.reading`.
 - **Q** (`CondenseMotes.tsx`): the music box's sheet condenses out of its tune's light (see
   STORYBOARD Q); `CARRY.orb` has no flight (`air`), `MUSIC_NOTES` come earlier, `open.orb` 4.4.
 
+## The pink cake and the higher sign (stages R, S)
+
+See STORYBOARD R/S. R: `cakeModel.ts` pinks, soft tiers (`tier()` edge 0.058, dome, puff),
+strawberry glaze, number candles from `birthdayConfig.room.moments.age` (`NUMERALS` strokes,
+pink wax, wicks → `FLAMES` = 6 in the shader), porcelain stand (kind 10); RoomSet: the topper
+is a rose-gold **heart** (`heartPath`; still the exploded-view trigger), `uPress` dent spring
+(`press` ref; pointerdown 0.18, a finger passing 0.035). S: `SIGN_PLACEMENT.drop` raised,
+alcove raised, sign-moment `elev` higher. QA: `node scripts/qa-cake.mjs --gpu [--size=390x844
+--mobile]` (the cake in every flow), `node scripts/qa-sign.mjs --gpu` (rays to the sign).
+Debug: `window.__THREE` (for raycasts in QA), gift root groups are named `gift:<id>`, the
+sign's root has `userData.signPart`.
+
 ## Design references (`reference/`)
 
 - `reference/VIDEO_ANALYSIS.md` — the owner's reference videos, analysed (3 in the first

@@ -1808,7 +1808,7 @@ export function Gift3D({
       {!isDog && <ShotTitle ref={titleCard} title={gift.title} subtitle={gift.subtitle} />}
       {!reducedMotion && <PaperCarrier pose={pose} mode={carry.mode} aspect={aspect} />}
       {!reducedMotion && gift.shape === 'orb' && <CondenseMotes uniforms={condense} />}
-      <group ref={root} position={home}>
+      <group ref={root} position={home} name={`gift:${gift.id}`}>
         <Glow ref={glow} color={gift.tint} size={1.5} opacity={0.14} position={isDog ? [0, 0.55, 0] : undefined} />
         {!isDog && (
           <group ref={pedestal} position={[0, -0.5, 0]} visible={false}>

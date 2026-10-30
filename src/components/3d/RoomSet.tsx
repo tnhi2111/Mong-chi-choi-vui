@@ -76,8 +76,10 @@ export const WALL_R = 6.9;
 /** Where the HAPPY BIRTHDAY installation hangs (shared with RoomWorld's close-up framing). */
 export const SIGN_PLACEMENT = {
   // (the drop is a wish: BirthdaySign's safe area may hang it higher — `safeDrop`)
-  landscape: { radius: 5.95, scale: 0.95, drop: 0.32 },
-  portrait: { radius: 4.55, scale: 0.68, drop: 0.75 },
+  // S: hung 0.25 m higher on longer cables — the music box and the gifts used to stand in
+  // front of its lower lines; its arch still clears the alcove's crown and the ceiling
+  landscape: { radius: 5.95, scale: 0.95, drop: 0.07 },
+  portrait: { radius: 4.55, scale: 0.68, drop: 0.5 },
 }; // a small private room (the camera stands outside it: see CUT)
 const WALL_H = 6.2;
 /** Direction of the window: back-left, so the HAPPY BIRTHDAY installation owns the centre. */
@@ -458,7 +460,8 @@ const wallFragment = /* glsl */ `
     vec3 col = plaster;
     // the feature wall: an arched alcove for the HAPPY BIRTHDAY installation
     float aw = 2.5;
-    float alcTop = 2.35 + sqrt(max(0.0, 1.0 - (sw / aw) * (sw / aw))) * 0.6;
+    // (S: raised with the sign, so it keeps its air under the alcove's arch)
+    float alcTop = 2.45 + sqrt(max(0.0, 1.0 - (sw / aw) * (sw / aw))) * 0.5;
     // (a full-height niche: no rail or wainscot runs behind the lettering, so from no
     //  angle does a horizontal border cross the words)
     float inAlc = step(abs(sw), aw) * step(h, alcTop);
@@ -1055,21 +1058,17 @@ const smokeFragment = /* glsl */ `
  * "26" — a fine rose-gold wire cake topper, each numeral one continuous stroke (as a
  * jeweller would bend it), on two slim picks. Numeral units: 1 = its height.
  */
-function numeralPaths(): THREE.Vector3[][] {
-  const two: THREE.Vector3[] = [];
-  // the bowl of the 2: an arc over the top, then a sweep down to the foot, then the base
-  for (let i = 0; i <= 14; i++) {
-    const a = THREE.MathUtils.lerp(Math.PI * 0.95, -Math.PI * 0.18, i / 14);
-    two.push(new THREE.Vector3(0.3 + Math.cos(a) * 0.27, 0.71 + Math.sin(a) * 0.27, 0));
+function heartPath(): THREE.Vector3[] {
+  // one continuous stroke, as a jeweller bends wire: from the point, round the left lobe,
+  // into the dip, round the right lobe and back to the point (unit height)
+  const pts: THREE.Vector3[] = [];
+  for (let i = 0; i <= 64; i++) {
+    const t = (i / 64) * Math.PI * 2;
+    const x = 16 * Math.pow(Math.sin(t), 3);
+    const y = 13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t);
+    pts.push(new THREE.Vector3(x / 34, (y + 17) / 30, 0));
   }
-  two.push(new THREE.Vector3(0.36, 0.42, 0), new THREE.Vector3(0.16, 0.2, 0), new THREE.Vector3(0.02, 0.02, 0), new THREE.Vector3(0.3, 0.0, 0), new THREE.Vector3(0.64, 0.02, 0));
-  const six: THREE.Vector3[] = [new THREE.Vector3(0.56, 0.96, 0), new THREE.Vector3(0.38, 0.92, 0), new THREE.Vector3(0.18, 0.76, 0), new THREE.Vector3(0.07, 0.5, 0)];
-  // …down into the loop
-  for (let i = 0; i <= 18; i++) {
-    const a = Math.PI + (i / 18) * Math.PI * 2;
-    six.push(new THREE.Vector3(0.33 + Math.cos(a) * 0.26, 0.28 + Math.sin(a) * 0.27, 0));
-  }
-  return [two, six];
+  return pts;
 }
 
 function CakeTopper({ y, outward, explode, onTap }: { y: number; outward: THREE.Vector2; explode: { current: number }; onTap: (e: ThreeEvent<MouseEvent>) => void }) {
@@ -1082,16 +1081,9 @@ function CakeTopper({ y, outward, explode, onTap }: { y: number; outward: THREE.
     g.position.y = e * (EXPLODE.candles + 0.08);
     g.rotation.y = Math.max(0, e) * Math.PI * 2;
   });
-  const parts = useMemo(() => {
-    const [two, six] = numeralPaths();
-    const tube = (pts: THREE.Vector3[], dx: number) => {
-      const g = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, false, 'centripetal'), 96, 0.05, 10, false);
-      g.translate(dx, 0, 0);
-      return g;
-    };
-    return { two: tube(two, -0.7), six: tube(six, 0.06) };
-  }, []);
-  useEffect(() => () => [parts.two, parts.six].forEach((g) => g.dispose()), [parts]);
+  // R2: a heart (the number candles carry her age now)
+  const parts = useMemo(() => ({ heart: new THREE.TubeGeometry(new THREE.CatmullRomCurve3(heartPath(), true, 'centripetal'), 128, 0.045, 10, true) }), []);
+  useEffect(() => () => parts.heart.dispose(), [parts]);
   // rose gold, restrained: it catches the candlelight and the room's lamps, never glows
   const gold = useMemo(() => surface({ color: '#d8a48e', metalness: 0.88, roughness: 0.26, clearcoat: 0.4, clearcoatRoughness: 0.2, bumpScale: 0.02 }), []);
   useEffect(() => () => gold.dispose(), [gold]);
@@ -1108,9 +1100,8 @@ function CakeTopper({ y, outward, explode, onTap }: { y: number; outward: THREE.
         onPointerOver={() => (document.body.style.cursor = 'pointer')}
         onPointerOut={() => (document.body.style.cursor = '')}
       >
-      <group position={[0, 0.12, 0]} scale={H} rotation={[0.12, 0, -0.03]}>
-        <mesh geometry={parts.two} material={gold} />
-        <mesh geometry={parts.six} material={gold} />
+      <group position={[0, 0.14, 0]} scale={H * 0.9} rotation={[0.12, 0, -0.04]}>
+        <mesh geometry={parts.heart} material={gold} />
       </group>
       {[-0.06, 0.06].map((x) => (
         <mesh key={x} position={[x, 0.04, 0]} material={gold}>
@@ -1195,6 +1186,7 @@ function Cake({
       uKey: { value: 0 },
       uRoomDir: { value: new THREE.Vector3(-outward[0], 0, -outward[2]).normalize() },
       uCenter: { value: new THREE.Vector3() },
+      uPress: { value: new THREE.Vector4(0, -99, 0, 0) },
       uExplode: { value: 0 },
     }),
     [cake], // eslint-disable-line react-hooks/exhaustive-deps
@@ -1265,6 +1257,13 @@ function Cake({
   // blowing them out with her hand (storyboard F4): a quick sweep across the flames, or a
   // hand held still just over them for a breath
   const gesture = useRef({ sweep: 0, still: 0, near: new THREE.Vector3() });
+  const press = useRef({ at: new THREE.Vector3(0, -99, 0), d: 0, v: 0, last: 0 });
+  const poke = (e: ThreeEvent<PointerEvent>, depth: number) => {
+    if (e.object !== cakeMesh.current) return;
+    const pr = press.current;
+    pr.at.copy(e.point);
+    pr.v += depth;
+  };
   useFrame((state, rawDt) => {
     const t = state.clock.elapsedTime;
     const dt = Math.min(rawDt, 0.05);
@@ -1304,6 +1303,11 @@ function Cake({
     cakeU.uLit.value = lit * (1 + 0.12 * flare.current);
     cakeU.uWarm.value = Math.max(hover.current, focusAmt.current);
     cakeU.uKey.value = focusAmt.current * MOTION.moment.cakeKey;
+    // R2: the cream under her finger: a soft spring — it gives, then springs back past and settles
+    const pr = press.current;
+    pr.v += (-pr.d * 70 - pr.v * 9) * dt;
+    pr.d += pr.v * dt;
+    cakeU.uPress.value.set(pr.at.x, pr.at.y, pr.at.z, pr.d * motion);
     sparkleU.uTime.value = t;
     sparkleU.uOn.value = Math.max(hover.current * 0.7, focusAmt.current) * (0.4 + 0.6 * lit);
     // an under-damped spring: it opens with a soft overshoot and lands with a small bounce
@@ -1432,7 +1436,20 @@ function Cake({
       >
         {/* the cake itself: tiers, piping, pearls, rosettes, berries, flowers, candles */}
         <group ref={body} position={[0, top, 0]}>
-          <mesh ref={cakeMesh} geometry={cake.geometry} material={cakeMat} userData={{ frame: 'cake' }} />
+          <mesh
+            ref={cakeMesh}
+            geometry={cake.geometry}
+            material={cakeMat}
+            userData={{ frame: 'cake' }}
+            onPointerDown={(e) => poke(e, 0.18)}
+            onPointerMove={(e) => {
+              // her finger passing over the cream presses it a little, where it is
+              const pr = press.current;
+              if (performance.now() - pr.last < 120) return;
+              pr.last = performance.now();
+              poke(e, 0.035);
+            }}
+          />
           <mesh geometry={crumbs} material={cakeMat} />
           <points geometry={sparkles} material={sparkleMat} frustumCulled={false} raycast={() => null} />
           <points geometry={ring} material={ringMat} frustumCulled={false} raycast={() => null} />
@@ -1443,7 +1460,7 @@ function Cake({
           <meshBasicMaterial transparent opacity={0} depthWrite={false} colorWrite={false} />
         </mesh>
       </group>
-      <CakeTopper y={top + CAKE_LIFT + 0.46} outward={out} explode={explode} onTap={takeApart} />
+      <CakeTopper y={top + CAKE_LIFT + 0.5} outward={out} explode={explode} onTap={takeApart} />
       <group ref={wickGroup}>
         <points geometry={flames} material={flameMat} frustumCulled={false} />
         <points geometry={smoke} material={smokeMat} frustumCulled={false} />

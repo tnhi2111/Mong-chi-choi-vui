@@ -307,3 +307,31 @@ edge) and the motes it covers go out. Then it is P exactly: it floats, waits for
 opens its three folds, becomes the page. On the page, each line begins on a note of a gentle
 cadence (6-4-1-4-6) — the reading pace is not forced to keep time. Closing runs the clock
 back: the light flies home into the box.
+
+## R. A pink, cloud-soft cake
+
+- **R1 "the cake is missing"** — measured, not guessed (`scripts/qa-cake.mjs`: resumed, led in,
+  the cake moment touched for real, all gifts open, back from the finale; desktop and phone):
+  the cake mesh is drawn in every one, its shader compiles at every quality tier (only D3D's
+  harmless X4122 warnings), nothing is in front of it in the moment. What reads as "missing"
+  is that from the default view it is small at the back right and, on a phone with all gifts
+  open, the slowly turning room can carry it past the frame's edge. The cake is now bigger and
+  brighter (pink, number candles, heart) so it reads from across the room; the test stays.
+- **R2** — strawberry-cream pinks (#f2aebc lower, #f7c3cd upper), whipped-cream tiers with a
+  full round shoulder, a domed top and a puff at mid-height; shells, piped roses, sugar pearls,
+  small cream flowers, a glossy strawberry glaze in a few streams with round drops, glossy
+  strawberries and raspberries, blueberries, gold leaf; a heart topper of rose-gold wire;
+  **number candles** moulded from her age in the config (pink wax, a wick and a flame each:
+  the shader is lit by 6 flames now); slim candles round the edge; a white porcelain stand on
+  a foot, crumbs, soft contact shadows, a served slice. Cream: wrapped light, a satin sheen,
+  light through its edge, palette-knife marks, a whipped micro-normal only within ~2.6 m.
+  **It gives under her finger**: pressing (or a finger passing over it) dents the cream where
+  it is touched (`uPress`, frosting only) on a spring that springs back past and settles.
+
+## S. The sign hangs higher; nothing stands in front of it
+
+The sign hangs 0.25 m higher (`SIGN_PLACEMENT.drop` 0.07 / 0.5) on its cables, its alcove's
+arch raised with it (2.45 + 0.5); the sign moment's camera looks down from higher
+(`motion.moment.elev.sign` 0.15 / 0.26), so the gifts and the music box fall below the frame.
+`scripts/qa-sign.mjs` casts rays from the camera to a 5 × 5 grid over the lettering in the
+default view and the moment, wide and tall: 25 / 25 seen in all four, no gift in front.

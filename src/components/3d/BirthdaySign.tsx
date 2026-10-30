@@ -812,7 +812,7 @@ export function BirthdaySign({ floorY, radius, scale, drop = 0.32, heart, motion
   const pivot: [number, number, number] = [0, PIVOT_H, -R];
   const hang = safeDrop(scale, drop);
   return (
-    <group position={[0, floorY - hang, 0]}>
+    <group position={[0, floorY - hang, 0]} userData={{ signPart: true }}>
       <group position={pivot} scale={scale * INNER_SCALE}>
         <group position={[-pivot[0], -pivot[1], -pivot[2]]}>
           <mesh geometry={halos} material={shadowMat} renderOrder={-3} />
