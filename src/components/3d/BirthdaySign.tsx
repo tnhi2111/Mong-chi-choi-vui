@@ -23,16 +23,27 @@ import { birthdayConfig } from '../../config/birthday';
  */
 
 const FONT = '"Cormorant Garamond", Georgia, serif';
+const SCRIPT = '"Dancing Script", "Segoe Script", cursive';
 const CELL_W = 200;
-const CELL_H = 240; // room above the capitals for Vietnamese accents (HÙ TÁ)
+// N: tall cells — room above the capitals for Vietnamese accents (HÙ TÁ: a grave and an
+// acute stacked over capitals) and below the script line for its descenders (the y of Baby)
+const CELL_H = 300;
 const FONT_PX = 200;
 const CAP_PX = 128; // Cormorant's capital height at FONT_PX (approx.)
-/** Where the capitals sit in a cell: their centre is the cell's centre. */
+/** Where the capitals sit in a cell: their centre is the cell's centre (the script a little higher). */
 const BASELINE = CELL_H / 2 + CAP_PX / 2;
+const SCRIPT_BASELINE = CELL_H / 2 + 46;
 
-/** Letterform weights of the one family: the display cut, and a lighter one. */
-type Style = 'r' | 'l';
-const FACES: Record<Style, string> = { r: `500 ${FONT_PX}px ${FONT}`, l: `400 ${FONT_PX}px ${FONT}` };
+/**
+ * Letterforms: Cormorant's display cut and a lighter one, and Dancing Script for the tender
+ * line (N: a pair of the site's own families — the upright capitals lead, the hand answers).
+ */
+type Style = 'r' | 'l' | 'h';
+const FACES: Record<Style, string> = { r: `500 ${FONT_PX}px ${FONT}`, l: `400 ${FONT_PX}px ${FONT}`, h: `500 ${FONT_PX * 0.92}px ${SCRIPT}` };
+/** Glyphs that would not fit their cell (QA: `window.__signClip`, must stay empty). */
+export const signClip: string[] = [];
+/** A script is written, not shouted: the tender line is set in title case (its words unchanged). */
+const titleCase = (s: string) => s.toLowerCase().replace(/(^|\s)(\S)/g, (_, a: string, b: string) => a + b.toUpperCase());
 
 /**
  * The installation as ONE composition, in one family (Cormorant Garamond, upright capitals
@@ -45,7 +56,7 @@ const WORDS = birthdayConfig.room.sign;
 export const SIGN_LINES: { text: string; style: Style; h: number; cap: number; track: number; tone: number }[] = [
   { text: WORDS.headline[0], style: 'r', h: 2.43, cap: 0.26, track: 0.2, tone: 0 },
   { text: WORDS.headline[1], style: 'r', h: 1.99, cap: 0.38, track: 0.14, tone: 0 },
-  { text: WORDS.endearment, style: 'l', h: 1.63, cap: 0.19, track: 0.46, tone: 0.35 },
+  { text: titleCase(WORDS.endearment), style: 'h', h: 1.6, cap: 0.22, track: 0.0, tone: 0.35 },
   { text: WORDS.name, style: 'r', h: 1.345, cap: 0.155, track: 0.5, tone: 1 },
 ];
 /**
@@ -68,6 +79,13 @@ export function safeDrop(scale: number, drop: number): number {
 const FRAMED_LINE = 2;
 const LAYERS = 6;
 const DEPTH = 0.07;
+/** N: how long the letters take to light one after another when she comes close (s). */
+const IGNITE_SECS = 1.6;
+const IGNITE_GLSL = /* glsl */ `
+  float ignite(float order, float t) {
+    return smoothstep(order * ${IGNITE_SECS.toFixed(2)}, order * ${IGNITE_SECS.toFixed(2)} + 0.35, t);
+  }
+`;
 
 interface Glyphs {
   mask: THREE.CanvasTexture;
@@ -103,13 +121,19 @@ function drawGlyphs(chars: string[]): Glyphs {
     const style = key[0] as Style;
     const ch = key.slice(1);
     g.font = FACES[style];
-    // the lighter weight gets a little less added weight
-    g.lineWidth = style === 'l' ? 7 : 9;
+    // the lighter weight gets a little less added weight; the script almost none (a pen line)
+    g.lineWidth = style === 'l' ? 7 : style === 'h' ? 3 : 9;
     const x = i * CELL_W + CELL_W / 2;
-    g.fillText(ch, x, BASELINE);
-    g.strokeText(ch, x, BASELINE);
+    const base = style === 'h' ? SCRIPT_BASELINE : BASELINE;
+    g.fillText(ch, x, base);
+    g.strokeText(ch, x, base);
     index.set(key, i);
-    advance.set(key, (g.measureText(ch).width + g.lineWidth) / CAP_PX);
+    const m = g.measureText(ch);
+    // (a script's letters join: they advance by their own width, no added stroke)
+    advance.set(key, (m.width + (style === 'h' ? -6 : g.lineWidth)) / CAP_PX);
+    // N: nothing of a glyph — an accent, a descender, a swash — may fall outside its cell
+    const pad = g.lineWidth / 2 + 2;
+    if (base - m.actualBoundingBoxAscent - pad < 0 || base + m.actualBoundingBoxDescent + pad > CELL_H || m.actualBoundingBoxLeft + pad > CELL_W / 2 || m.actualBoundingBoxRight + pad > CELL_W / 2) signClip.push(key);
   });
   const blurred = (px: number) => {
     const c = make();
@@ -160,6 +184,14 @@ function letterGeometry(glyphs: Glyphs, lines: typeof SIGN_LINES, R: number) {
   const uv: number[] = [];
   const layer: number[] = [];
   const tone: number[] = [];
+  // N: each letter's place in the reading order (0..1) — they light one after another
+  const order: number[] = [];
+  const rpos: number[] = [];
+  const ruv: number[] = [];
+  const rorder: number[] = [];
+  const count = lines.reduce((n, l) => n + l.text.replace(/ /g, '').length, 0);
+  let nth = 0;
+  let letterOrder = 0;
   const halfWidths: number[] = [];
   let lineTone = 0;
   const hpos: number[] = [];
@@ -182,7 +214,8 @@ function letterGeometry(glyphs: Glyphs, lines: typeof SIGN_LINES, R: number) {
       if (lay !== null) {
         layer.push(lay);
         tone.push(lineTone);
-      }
+        order.push(letterOrder);
+      } else if (out === rpos) rorder.push(letterOrder);
     }
   };
   for (const line of lines) {
@@ -201,9 +234,12 @@ function letterGeometry(glyphs: Glyphs, lines: typeof SIGN_LINES, R: number) {
       if (cell === undefined) return;
       const w = (CELL_W / CAP_PX) * line.cap;
       const hh = (CELL_H / CAP_PX) * line.cap;
+      letterOrder = nth++ / Math.max(1, count - 1);
       // layers from the face (0) back
       for (let k = LAYERS - 1; k >= 0; k--) quad(pos, uv, cx, line.h, w, hh, (k / (LAYERS - 1)) * -DEPTH, cell, k / (LAYERS - 1));
       quad(hpos, huv, cx, line.h, w * 1.15, hh * 1.15, -DEPTH - 0.18, cell, null);
+      // N: the third depth — a fine line of light just in front of the face, round its edge
+      quad(rpos, ruv, cx, line.h, w, hh, 0.014, cell, null);
     });
   }
   const letters = new THREE.BufferGeometry();
@@ -211,23 +247,31 @@ function letterGeometry(glyphs: Glyphs, lines: typeof SIGN_LINES, R: number) {
   letters.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
   letters.setAttribute('aLayer', new THREE.Float32BufferAttribute(layer, 1));
   letters.setAttribute('aTone', new THREE.Float32BufferAttribute(tone, 1));
+  letters.setAttribute('aOrder', new THREE.Float32BufferAttribute(order, 1));
   const halos = new THREE.BufferGeometry();
   halos.setAttribute('position', new THREE.Float32BufferAttribute(hpos, 3));
   halos.setAttribute('uv', new THREE.Float32BufferAttribute(huv, 2));
-  return { letters, halos, halfWidths };
+  const rims = new THREE.BufferGeometry();
+  rims.setAttribute('position', new THREE.Float32BufferAttribute(rpos, 3));
+  rims.setAttribute('uv', new THREE.Float32BufferAttribute(ruv, 2));
+  rims.setAttribute('aOrder', new THREE.Float32BufferAttribute(rorder, 1));
+  return { letters, halos, rims, halfWidths };
 }
 
 const letterVertex = /* glsl */ `
   attribute float aLayer;
   attribute float aTone;
+  attribute float aOrder;
   varying vec2 vUv;
   varying float vTone;
   varying float vLayer;
+  varying float vOrder;
   varying vec3 vWorld;
   void main() {
     vUv = uv;
     vLayer = aLayer;
     vTone = aTone;
+    vOrder = aOrder;
     vec4 w = modelMatrix * vec4(position, 1.0);
     vWorld = w.xyz;
     gl_Position = projectionMatrix * viewMatrix * w;
@@ -242,14 +286,20 @@ const letterFragment = /* glsl */ `
   uniform float uHeart;
   uniform float uSweep;     // where the slow band of light is, along the sign (world x)
   uniform float uSweepAmp;  // how bright it is (more when she hovers / looks closely)
+  uniform float uTime;
+  uniform float uIgnite;    // N: seconds since the letters began to light one by one (big = lit)
+  uniform float uCount;     // letters on the sign
   varying vec2 vUv;
   varying float vTone;
   varying float vLayer;
+  varying float vOrder;
   varying vec3 vWorld;
+  ${IGNITE_GLSL}
   void main() {
     float m = texture2D(uMask, vUv).r;
     if (m < 0.5) discard;
     float s = texture2D(uSoft, vUv).r;
+    float on = ignite(vOrder, uIgnite);
     float h = vWorld.y - uFloorY;
     if (vLayer > 0.01) {
       // the returns: brushed rose-gold, darker toward the back
@@ -282,6 +332,15 @@ const letterFragment = /* glsl */ `
     lit += vec3(0.9, 0.32, 0.45) * 0.07 * uHeart * (1.0 - smoothstep(1.2, 2.6, h));
     // and their own gentle warmth, from inside
     lit += vec3(1.0, 0.76, 0.5) * s * s * 0.16 * uGlow;
+    // N: a filament of warm copper along the heart of every stroke, breathing a little,
+    // each letter on its own (a live wire, never a strobe)
+    float core = smoothstep(0.7, 0.95, s);
+    float flick = 0.9 + 0.06 * sin(uTime * 2.3 + vOrder * 41.0) + 0.04 * sin(uTime * 5.1 + vOrder * 17.0);
+    lit += vec3(1.0, 0.62, 0.32) * core * 0.34 * uGlow * flick * on;
+    // unlit, a letter is dark copper; lighting, it catches from scattered sparks
+    float grain = fract(sin(dot(floor(vUv * vec2(uCount * 70.0, 70.0)), vec2(12.9898, 78.233))) * 43758.5453);
+    float catching = step(grain, on * 1.15) * (1.0 - on);
+    lit = mix(lit * 0.32, lit, on) + vec3(1.0, 0.8, 0.5) * catching * 0.9;
     gl_FragColor = vec4(lit, 1.0);
   }
 `;
@@ -292,6 +351,34 @@ const haloFragment = /* glsl */ `
   void main() {
     float a = texture2D(uHalo, vUv).r;
     gl_FragColor = vec4(vec3(1.0, 0.7, 0.42) * a * a * 0.32 * uGlow, 1.0);
+  }
+`;
+/* N: the front depth — a fine line of light round each letter's edge, floating just in front */
+const rimVertex = /* glsl */ `
+  attribute float aOrder;
+  varying vec2 vUv;
+  varying float vOrder;
+  void main() {
+    vUv = uv;
+    vOrder = aOrder;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`;
+const rimFragment = /* glsl */ `
+  uniform sampler2D uSoft;
+  uniform float uGlow;
+  uniform float uTime;
+  uniform float uIgnite;
+  uniform float uSweep;
+  varying vec2 vUv;
+  varying float vOrder;
+  ${IGNITE_GLSL}
+  void main() {
+    float s = texture2D(uSoft, vUv).r;
+    float band = smoothstep(0.22, 0.42, s) * (1.0 - smoothstep(0.48, 0.66, s));
+    float on = ignite(vOrder, uIgnite);
+    float flick = 0.88 + 0.12 * sin(uTime * 1.7 + vOrder * 29.0);
+    gl_FragColor = vec4(vec3(1.0, 0.72, 0.42) * band * 0.22 * uGlow * flick * on, 1.0);
   }
 `;
 /* a soft shadow just behind and below each letter: they stand off the alcove */
@@ -430,11 +517,13 @@ interface Props {
 export function BirthdaySign({ floorY, radius, scale, drop = 0.32, heart, motion, focused = false, onTap }: Props) {
   const chars = useMemo(() => [...new Set(SIGN_LINES.flatMap((l) => [...l.text.replace(/ /g, '')].map((c) => l.style + c)))], []);
   const SAMPLE = SIGN_LINES.map((l) => l.text).join(' ');
-  const [fontReady, setFontReady] = useState(() => (document.fonts ? document.fonts.check(FACES.r, SAMPLE) && document.fonts.check(FACES.l, SAMPLE) : true));
+  const [fontReady, setFontReady] = useState(() =>
+    document.fonts ? document.fonts.check(FACES.r, SAMPLE) && document.fonts.check(FACES.l, SAMPLE) && document.fonts.check(FACES.h, SAMPLE) : true,
+  );
   useEffect(() => {
     if (fontReady || !document.fonts) return;
     let alive = true;
-    Promise.all([document.fonts.load(FACES.r, SAMPLE), document.fonts.load(FACES.l, SAMPLE)]).then(() => alive && setFontReady(true), () => undefined);
+    Promise.all([document.fonts.load(FACES.r, SAMPLE), document.fonts.load(FACES.l, SAMPLE), document.fonts.load(FACES.h, SAMPLE)]).then(() => alive && setFontReady(true), () => undefined);
     return () => {
       alive = false;
     };
@@ -445,7 +534,10 @@ export function BirthdaySign({ floorY, radius, scale, drop = 0.32, heart, motion
   const R = radius;
   // (both are cached between visits — see getSignGlyphs; nothing is disposed on unmount)
   const glyphs = useMemo(() => getSignGlyphs(chars, fontReady), [chars, fontReady]);
-  const { letters, halos, halfWidths } = useMemo(() => getSignLetters(glyphs, R), [glyphs, R]);
+  const { letters, halos, rims, halfWidths } = useMemo(() => getSignLetters(glyphs, R), [glyphs, R]);
+  useEffect(() => {
+    if (new URLSearchParams(location.search).has('debug')) Object.assign(window, { __signClip: signClip });
+  }, []);
 
   // the arch, its cables and bulbs, the hanging heart, posies and ribbons
   const parts = useMemo(() => {
@@ -628,9 +720,13 @@ export function BirthdaySign({ floorY, radius, scale, drop = 0.32, heart, motion
       uHeart: { value: heart },
       uSweep: { value: -9 },
       uSweepAmp: { value: 0.1 },
+      uTime: { value: 0 },
+      uIgnite: { value: 99 },
+      uCount: { value: glyphs.count },
     }),
     [], // eslint-disable-line react-hooks/exhaustive-deps
   );
+  const rimU = useMemo(() => ({ uSoft: letterU.uSoft, uGlow: letterU.uGlow, uTime: letterU.uTime, uIgnite: letterU.uIgnite, uSweep: letterU.uSweep }), [letterU]);
   letterU.uMask.value = glyphs.mask;
   letterU.uSoft.value = glyphs.soft;
   const haloU = useMemo(() => ({ uHalo: { value: glyphs.halo }, uGlow: { value: 1 } }), []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -642,6 +738,7 @@ export function BirthdaySign({ floorY, radius, scale, drop = 0.32, heart, motion
 
   const letterMat = useShader(letterVertex, letterFragment, letterU, { opaque: true });
   const haloMat = useShader(haloVertex, haloFragment, haloU);
+  const rimMat = useShader(rimVertex, rimFragment, rimU);
   const shadowMat = useShader(shadowVertex, shadowFragment, haloU, { additive: false });
   const goldMat = useShader(metalVertex, metalFragment, goldU, { opaque: true });
   const roseGoldMat = useShader(metalVertex, metalFragment, roseGoldU, { opaque: true });
@@ -670,7 +767,15 @@ export function BirthdaySign({ floorY, radius, scale, drop = 0.32, heart, motion
     const period = 11 - 4 * Math.max(h, f);
     letterU.uSweep.value = -3.4 + ((t * motion) % period) / period * 6.8;
     letterU.uSweepAmp.value = 0.1 + 0.3 * h + 0.25 * f;
+    letterU.uTime.value = t * motion;
+    // N: when she comes close to read it, the letters light again one after another, each
+    // catching from sparks (they dim first, a breath — never vanish)
+    if (focused && !wasFocused.current && motion > 0.5) igniteAt.current = t + 0.35;
+    wasFocused.current = focused;
+    letterU.uIgnite.value = igniteAt.current < 0 ? 99 : Math.max(0, t - igniteAt.current);
   });
+  const wasFocused = useRef(false);
+  const igniteAt = useRef(-1);
 
   // two fine gold hairlines holding MY BABY between them — the thread through the lines
   const hairlines = useMemo(() => {
@@ -713,6 +818,7 @@ export function BirthdaySign({ floorY, radius, scale, drop = 0.32, heart, motion
           <mesh geometry={halos} material={shadowMat} renderOrder={-3} />
           <mesh geometry={halos} material={haloMat} renderOrder={-2} />
           <mesh geometry={letters} material={letterMat} userData={{ frame: 'sign' }} />
+          <mesh geometry={rims} material={rimMat} renderOrder={2} />
           <mesh geometry={parts.arch} material={goldMat} userData={{ frame: 'sign' }} />
           <mesh geometry={parts.inner} material={goldMat} />
           <mesh geometry={parts.back} material={goldMat} />

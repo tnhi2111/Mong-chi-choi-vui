@@ -12,7 +12,8 @@ const out = 'qa-output/keyboard';
 mkdirSync(out, { recursive: true });
 const exe = ['/opt/pw-browsers/chromium-1194/chrome-linux/chrome', process.env.CHROME_PATH].find((p) => p && existsSync(p));
 
-const browser = await chromium.launch({ executablePath: exe, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+// (--gpu: the real GPU; without it swiftshader renders ~2 fps and the story's 3D clock crawls)
+const browser = await chromium.launch({ executablePath: exe, args: process.argv.includes('--gpu') ? ['--enable-gpu', '--ignore-gpu-blocklist'] : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
 const problems = [];
 page.on('pageerror', (e) => problems.push(`pageerror: ${e.message}`));

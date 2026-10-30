@@ -749,6 +749,34 @@ in those films. `--log` prints leader / camera / weight per frame.
   the last words of the surprise (constellations), the memory page's title/date/message (ink;
   the music box plays a comb note per line).
 
+## The cake, made like a real one (stage M)
+
+`cakeModel.ts` (still ONE merged mesh + one shader; the exploded view kept): piped
+buttercream roses (a flattened spiral ribbon of cream, not stacked rings), a glossy dark
+chocolate-cherry ganache whose main streams end in round drops, strawberries with seeds,
+raspberries (drupelets) and blueberries, flakes of gold leaf, a white marble cake stand
+(`CAKE_LIFT` 0.085 — RoomSet lifts the "26" topper, the glow and the hit sphere by it),
+crumbs on the stand, and beside it a **slice already served** on a porcelain plate with a
+fork (`buildSlice`: three sponge layers with cream and raspberry between, buttercream skin,
+crumbs) — the only way to show the inside. Shader kinds 7 sponge (two scales of smooth
+noise cut into pores), 8 metal (gold leaf, fork), 9 marble, 10 porcelain; buttercream gets
+wrapped light + a little light through its edge, palette-knife sweeps on the sides and a
+spiral on the tops (`uCenter`); fine detail fades in only within ~3.6 m (`near`). Soft
+contact shadows under the stand and the plate. The "26" stays the rose-gold wire topper
+(no separate wax number candles). Closeups: `qa-output/tmp/signclip.mjs` (cake + sign).
+
+## The sign (stage N)
+
+`BirthdaySign.tsx`: the tender line is set in **Dancing Script** (title case of
+`room.sign.endearment`; words unchanged), the rest stays Cormorant capitals; cells are
+300 px tall (accents above, descenders below) and `drawGlyphs` checks every glyph's
+`actualBoundingBox` against its cell (`signClip`, `?debug` → `window.__signClip`, must be
+`[]`). Three depths: the halo behind, the face (now with a warm copper **filament** along the
+heart of each stroke, breathing per letter), and a fine **rim of light** quad 14 mm in front
+(`rims`, additive) — real parallax as the camera moves. When she comes close (the sign
+moment) the letters dim and **light again one after another** from sparks (`uIgnite`,
+`aOrder`, `IGNITE_SECS` 1.6). The slow band of light still crosses it.
+
 ## Design references (`reference/`)
 
 - `reference/VIDEO_ANALYSIS.md` — the owner's reference videos, analysed (3 in the first
