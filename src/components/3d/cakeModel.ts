@@ -17,7 +17,8 @@ import { getHeartGeometry } from './heartShape';
  * rose bounce, per-material highlights and baked contact darkening where things meet.
  */
 
-export type CakeKind = 0 | 1 | 2 | 3 | 4 | 5 | 6; // frosting, berry, pearl, leaf, wax, glaze, wick
+// frosting, berry, pearl, leaf, wax, ganache, wick, sponge (crumb), gold leaf, marble, porcelain
+export type CakeKind = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
 
 export const CAKE = {
   low: { r: 0.35, h: 0.26 },
@@ -25,6 +26,11 @@ export const CAKE = {
 };
 const UP_BASE = CAKE.low.h;
 const TOP = CAKE.low.h + CAKE.up.h;
+/**
+ * M — the cake stands on a marble cake stand: everything of the cake is this much above the
+ * table top (the stand is part of the cake's mesh; RoomSet lifts the topper by it too).
+ */
+export const CAKE_LIFT = 0.085;
 
 class Parts {
   list: THREE.BufferGeometry[] = [];
@@ -115,17 +121,68 @@ function shells(P: Parts, r: number, y: number, n: number, color: string) {
   }
 }
 
-/** A rosette: a swirl of cream — three shrinking rings and a peak. */
+/**
+ * A piped buttercream rose: one ribbon of cream wound from the heart outward (a petal tip's
+ * spiral), rising in the middle — the way a star nozzle draws it — instead of stacked rings.
+ */
 function rosette(P: Parts, x: number, y: number, z: number, s: number, color: string) {
-  for (let k = 0; k < 3; k++) {
-    const t = new THREE.TorusGeometry(0.024 * s * (1 - k * 0.28), 0.012 * s * (1 - k * 0.2), 6, 14);
-    t.rotateX(Math.PI / 2);
-    t.translate(x, y + 0.008 * s + k * 0.012 * s, z);
-    P.add(t, color, 0, 0.9);
+  const pts: THREE.Vector3[] = [];
+  const turns = 2.4;
+  const n = 46;
+  for (let i = 0; i <= n; i++) {
+    const u = i / n;
+    const a = u * turns * Math.PI * 2 + rnd() * 0.05;
+    const r = (0.004 + 0.026 * Math.pow(u, 0.8)) * s;
+    pts.push(new THREE.Vector3(x + Math.cos(a) * r, y + (0.034 - 0.026 * u) * s + Math.sin(a * 3) * 0.001 * s, z + Math.sin(a) * r));
   }
-  const peak = new THREE.ConeGeometry(0.011 * s, 0.03 * s, 8);
-  peak.translate(x, y + 0.05 * s, z);
-  P.add(peak, color, 0);
+  const g = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 90, 0.0085 * s, 7, false);
+  // a ribbon, not a rope: taller than it is thick, the way the nozzle leaves it
+  const p = g.attributes.position as THREE.BufferAttribute;
+  const cy = y + 0.02 * s;
+  for (let i = 0; i < p.count; i++) p.setY(i, cy + (p.getY(i) - cy) * 1.25);
+  g.computeVertexNormals();
+  P.add(g, color, 0, 0.9);
+}
+
+/** A raspberry: drupelets on a little dome. */
+function raspberry(P: Parts, x: number, y: number, z: number, s: number) {
+  const n = 16;
+  for (let i = 0; i < n; i++) {
+    const v = (i + 0.5) / n;
+    const phi = Math.acos(1 - v * 1.6);
+    const th = i * 2.399;
+    const g = new THREE.SphereGeometry(0.0065 * s, 6, 5);
+    g.translate(x + Math.sin(phi) * Math.cos(th) * 0.016 * s, y + 0.012 * s + Math.cos(phi) * 0.018 * s, z + Math.sin(phi) * Math.sin(th) * 0.016 * s);
+    P.add(g, i % 3 ? '#a3122f' : '#b81838', 1);
+  }
+}
+
+/** A blueberry, with its bloom and a little star of a crown. */
+function blueberry(P: Parts, x: number, y: number, z: number, s: number) {
+  const g = new THREE.SphereGeometry(0.012 * s, 12, 9);
+  g.scale(1, 0.86, 1);
+  g.translate(x, y + 0.011 * s, z);
+  P.add(g, '#3a3f66', 1);
+  const c = new THREE.CylinderGeometry(0.003 * s, 0.0045 * s, 0.003 * s, 5);
+  c.translate(x, y + 0.021 * s, z);
+  P.add(c, '#20203a', 3);
+}
+
+/** A flake of gold leaf: a torn little polygon, tilted where it was laid. */
+function goldLeaf(P: Parts, x: number, y: number, z: number, s: number, tilt: number) {
+  const shape = new THREE.Shape();
+  const k = 7;
+  for (let i = 0; i <= k; i++) {
+    const a = (i / k) * Math.PI * 2;
+    const r = s * (0.6 + rnd() * 0.5);
+    if (i === 0) shape.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+    else shape.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+  }
+  const g = new THREE.ShapeGeometry(shape);
+  g.rotateX(-Math.PI / 2 + tilt);
+  g.rotateY(rnd() * 6);
+  g.translate(x, y, z);
+  P.add(g, '#e8c46a', 8);
 }
 
 /** A strawberry: a heart-ish berry, a little calyx of leaves on top. */
@@ -187,12 +244,25 @@ export function buildCake(): CakeData {
       p.setXYZ(i, x, y - down + TOP - 0.018 + 0.004, z);
     }
     g.computeVertexNormals();
-    P.add(g, '#8e1a3a', 5);
-    // the glaze reaches just over the top edge: a ring, the top itself stays cream
+    // M: a glossy dark-chocolate ganache (a hint of cherry in it), running down in streams
+    P.add(g, '#3c1512', 5);
+    // each stream ends in a round drop, as poured ganache does
+    for (let i = 0; i < 144; i++) {
+      const a = (i / 144) * Math.PI * 2;
+      const d = (q: number) => Math.pow(Math.max(0, Math.sin(q * 9 + Math.sin(q * 4) * 1.5)), 3) * 0.055 + Math.pow(Math.max(0, Math.sin(q * 23 + 1)), 6) * 0.022;
+      const here = d(a);
+      // (only the main streams: the small ones are too fine for the mesh to reach their drop)
+      if (here < 0.03 || here < d(a - 0.02) || here < d(a + 0.02)) continue;
+      const b = new THREE.SphereGeometry(0.0075 + here * 0.05, 10, 8);
+      b.scale(1, 1.25, 0.8);
+      b.translate(Math.cos(a) * (CAKE.up.r + 0.006), TOP - 0.018 + 0.004 - 0.018 - here * 0.92 + 0.004, Math.sin(a) * (CAKE.up.r + 0.006));
+      P.add(b, '#3c1512', 5);
+    }
+    // the ganache reaches just over the top edge: a ring, the top itself stays cream
     const cap = new THREE.RingGeometry(CAKE.up.r - 0.03, CAKE.up.r + 0.004, 72, 1);
     cap.rotateX(-Math.PI / 2);
     cap.translate(0, TOP + 0.0085, 0);
-    P.add(cap, '#9c1f42', 5);
+    P.add(cap, '#45191a', 5);
   }
   // piped shell borders at the foot of each tier
   shells(P, CAKE.up.r + 0.004, UP_BASE + 0.016, 28, cream);
@@ -223,6 +293,27 @@ export function buildCake(): CakeData {
   strawberry(P, 0.1, TOP + 0.01, -0.09, 1.15, 0.4, 0.35);
   strawberry(P, 0.15, TOP + 0.01, -0.04, 0.9, 1.6, -0.3);
   strawberry(P, -0.13, TOP + 0.01, -0.1, 1.0, 2.6, 0.2);
+  raspberry(P, 0.03, TOP + 0.01, -0.12, 1.1);
+  raspberry(P, -0.07, TOP + 0.01, -0.13, 0.9);
+  blueberry(P, 0.06, TOP + 0.01, -0.07, 1);
+  blueberry(P, -0.03, TOP + 0.01, -0.06, 0.9);
+  blueberry(P, 0.17, TOP + 0.01, -0.0, 1.1);
+  // a few flakes of gold leaf, laid by hand on the ganache rim and on the cream
+  (
+    [
+      [0.2, TOP + 0.011, 0.07, 0.012, 0.2],
+      [-0.18, TOP + 0.011, 0.11, 0.009, -0.3],
+      [-0.05, TOP + 0.011, 0.16, 0.01, 0.4],
+      [0.1, TOP + 0.011, -0.17, 0.008, -0.2],
+    ] as const
+  ).forEach(([x, y, z, s, t]) => goldLeaf(P, x, y, z, s, t));
+  P.layer = 0;
+  // berries on the lower tier's shoulder too, between the roses
+  raspberry(P, Math.cos(2.5) * 0.3, UP_BASE + 0.006, Math.sin(2.5) * 0.3, 1);
+  blueberry(P, Math.cos(4.3) * 0.31, UP_BASE + 0.006, Math.sin(4.3) * 0.31, 1);
+  blueberry(P, Math.cos(0.15) * 0.3, UP_BASE + 0.006, Math.sin(0.15) * 0.3, 0.9);
+  goldLeaf(P, Math.cos(3.1) * 0.33, UP_BASE + 0.012, Math.sin(3.1) * 0.33, 0.01, 0.6);
+  P.layer = 2;
   // two sugar flowers on the upper tier's side, and two tiny hearts beside them
   P.layer = 1;
   const flower = (a: number, y: number, s: number, col: string) => {
@@ -279,7 +370,124 @@ export function buildCake(): CakeData {
     P.add(wick, '#1d140f', 6);
     flames.push([x, base + h + 0.03, z]);
   });
-  return { geometry: P.merge(), flames };
+  // M: a marble cake stand under it all (it stays put in the exploded view: layer 0)
+  P.layer = 0;
+  {
+    const L = CAKE_LIFT;
+    const prof = [
+      [0.0001, -L],
+      [0.17, -L],
+      [0.175, -L + 0.006],
+      [0.165, -L + 0.016],
+      [0.07, -L + 0.026],
+      [0.045, -L + 0.034],
+      [0.042, -0.03],
+      [0.06, -0.022],
+      [0.39, -0.018],
+      [0.405, -0.012],
+      [0.405, -0.004],
+      [0.39, 0.0],
+      [0.0001, 0.0],
+    ].map(([r, y]) => new THREE.Vector2(r, y));
+    const stand = new THREE.LatheGeometry(prof, 72);
+    stand.computeVertexNormals();
+    P.add(stand, '#efeae4', 9, 1);
+  }
+  const geometry = P.merge();
+  geometry.translate(0, CAKE_LIFT, 0);
+  return { geometry, flames: flames.map(([x, y, z]) => [x, y + CAKE_LIFT, z] as [number, number, number]) };
+}
+
+/**
+ * M — a slice already cut and served on a little porcelain plate beside the cake: the only
+ * way to see what a cake is made of. Three layers of sponge (crumb, not a flat colour), cream
+ * and raspberry between them, buttercream outside, ganache on its back edge, crumbs on the
+ * plate. Plate-local units (its foot at y = 0); drawn with the cake's own material.
+ */
+export function buildSlice(): THREE.BufferGeometry {
+  seed = 29;
+  const P = new Parts();
+  const R = 0.13;
+  const A = 0.55;
+  const sector = (r0: number) => {
+    const s = new THREE.Shape();
+    s.moveTo(0, 0);
+    s.absarc(0, 0, r0, -A / 2, A / 2, false);
+    s.lineTo(0, 0);
+    return s;
+  };
+  const layer = (y0: number, h: number, color: string, kind: CakeKind, r = R) => {
+    const g = new THREE.ExtrudeGeometry(sector(r), { depth: h, bevelEnabled: false, curveSegments: 16 });
+    g.rotateX(-Math.PI / 2);
+    // (centred on the plate: the slice's middle, not its point, over the plate's middle)
+    g.translate(-0.065, y0, 0);
+    P.add(g, color, kind);
+  };
+  // a porcelain dessert plate
+  const plate = new THREE.LatheGeometry(
+    [
+      [0.0001, 0],
+      [0.06, 0],
+      [0.064, 0.004],
+      [0.085, 0.006],
+      [0.11, 0.014],
+      [0.115, 0.018],
+      [0.112, 0.02],
+      [0.085, 0.011],
+      [0.0001, 0.009],
+    ].map(([r, y]) => new THREE.Vector2(r, y)),
+    56,
+  );
+  P.add(plate, '#f3eee8', 10);
+  // the slice stands as it was cut
+  const base = 0.01;
+  const sp = '#e9c48c';
+  layer(base, 0.042, sp, 7);
+  layer(base + 0.042, 0.006, '#fbe6e2', 0);
+  layer(base + 0.048, 0.004, '#a51c36', 5);
+  layer(base + 0.052, 0.04, sp, 7);
+  layer(base + 0.092, 0.006, '#fbe6e2', 0);
+  layer(base + 0.098, 0.004, '#a51c36', 5);
+  layer(base + 0.102, 0.036, sp, 7);
+  // the buttercream outside it: a skin on the curved back and on the top
+  layer(base + 0.138, 0.012, '#f6c2ca', 0, R + 0.004);
+  {
+    const skin = new THREE.CylinderGeometry(R + 0.006, R + 0.006, 0.15, 20, 1, true, Math.PI / 2 - A / 2, A);
+    skin.translate(-0.065, base + 0.075, 0);
+    P.add(skin, '#f6c2ca', 0);
+  }
+  // a few crumbs on the plate
+  for (let i = 0; i < 14; i++) {
+    const g = new THREE.DodecahedronGeometry(0.0025 + rnd() * 0.003, 0);
+    g.scale(1, 0.7, 1);
+    const a = rnd() * Math.PI * 2;
+    const r = 0.03 + rnd() * 0.06;
+    g.translate(Math.cos(a) * r + 0.02, 0.012, Math.sin(a) * r);
+    P.add(g, sp, 7);
+  }
+  // a fork resting on the plate
+  {
+    const f = new THREE.BoxGeometry(0.11, 0.0025, 0.009);
+    f.rotateY(0.9);
+    f.translate(-0.03, 0.016, 0.05);
+    P.add(f, '#d9d4cc', 8);
+  }
+  return P.merge();
+}
+
+/** Crumbs on the stand's plate, round the cake's foot (cake-local, above CAKE_LIFT). */
+export function buildCrumbs(): THREE.BufferGeometry {
+  seed = 41;
+  const P = new Parts();
+  for (let i = 0; i < 18; i++) {
+    const g = new THREE.DodecahedronGeometry(0.002 + rnd() * 0.0025, 0);
+    g.scale(1, 0.6, 1);
+    const a = rnd() * Math.PI * 2;
+    const r = CAKE.low.r + 0.015 + rnd() * 0.02;
+    g.translate(Math.cos(a) * r, CAKE_LIFT + 0.002, Math.sin(a) * r);
+    P.add(g, '#e9c48c', 7);
+  }
+  return P.merge();
 }
 
 /**
@@ -319,7 +527,7 @@ export const cakeVertex = /* glsl */ `
     vColor = aColor;
     vKind = aKind;
     vAO = aAO;
-    vY = position.y;  // (rest height: the baked shading keeps to the part, wherever it is)
+    vY = position.y - ${CAKE_LIFT.toFixed(3)};  // (rest height above the stand: the baked shading keeps to the part)
     gl_Position = projectionMatrix * viewMatrix * w;
   }
 `;
@@ -331,6 +539,7 @@ export const cakeFragment = /* glsl */ `
   uniform float uWarm;         // her hand near / leaning in: a touch warmer
   uniform float uKey;          // the moment: a soft warm key from where she stands
   uniform vec3 uRoomDir;       // toward the middle of the room (rose bounce from the heart)
+  uniform vec3 uCenter;        // the cake's axis, in the world (the tops' spiral turns round it)
   varying vec3 vWorld;
   varying vec3 vN;
   varying vec3 vColor;
@@ -338,13 +547,24 @@ export const cakeFragment = /* glsl */ `
   varying float vAO;
   varying float vY;
   float flick(float t, float s) { return 0.82 + 0.1 * sin(t * 7.3 + s * 13.0) + 0.06 * sin(t * 13.1 + s * 7.0); }
+  float h3(vec3 p) { return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
+  float n3(vec3 p) {
+    vec3 i = floor(p);
+    vec3 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(mix(h3(i), h3(i + vec3(1, 0, 0)), f.x), mix(h3(i + vec3(0, 1, 0)), h3(i + vec3(1, 1, 0)), f.x), f.y),
+               mix(mix(h3(i + vec3(0, 0, 1)), h3(i + vec3(1, 0, 1)), f.x), mix(h3(i + vec3(0, 1, 1)), h3(i + 1.0), f.x), f.y), f.z);
+  }
   void main() {
     vec3 n = normalize(vN);
     vec3 V = normalize(cameraPosition - vWorld);
     float k = vKind;
     vec3 base = vColor;
-    // the room's soft light, from above; a rose bounce from the heart's side
-    vec3 light = vec3(0.56, 0.46, 0.45) + vec3(0.26, 0.22, 0.2) * max(n.y, 0.0);
+    // fine detail only when she is close (it would shimmer from across the room)
+    float near = smoothstep(3.6, 1.1, length(cameraPosition - vWorld));
+    // the room's soft light from above, WRAPPED round the cream (light goes a little way into
+    // buttercream, so its turned-away side is soft, never dead)
+    vec3 light = vec3(0.56, 0.46, 0.45) + vec3(0.26, 0.22, 0.2) * clamp(n.y * 0.6 + 0.4, 0.0, 1.0);
     light += vec3(0.5, 0.2, 0.3) * 0.18 * max(dot(n, uRoomDir), 0.0);
     // (wrapped, so the buttercream's turned-away side still glows a little)
     light += vec3(1.0, 0.78, 0.6) * uKey * (0.35 + 0.65 * max(dot(n, V) * 0.6 + 0.4, 0.0));
@@ -363,18 +583,61 @@ export const cakeFragment = /* glsl */ `
     float ao = vAO;
     ao *= mix(0.62, 1.0, smoothstep(0.0, 0.045, vY));
     ao *= mix(0.75, 1.0, smoothstep(0.26, 0.29, vY) + step(vY, 0.255) * 1.0);
-    // buttercream: soft palette-knife lines round the sides
-    if (k < 0.5) base *= 0.96 + 0.04 * sin(vY * 380.0 + sin(atan(vWorld.z, vWorld.x) * 9.0) * 2.0);
+    // (the stand and the plate: no tier-foot darkening — only a soft shade right at the cake's foot)
+    if (k > 8.5) ao = vAO * mix(0.72, 1.0, smoothstep(0.34, 0.4, length(vWorld.xz - uCenter.xz) / 0.82));
+    // buttercream: the palette knife's marks — swept bands round the sides, a slow spiral on
+    // the tops where it was turned on the stand; a faint warmth where light passes through
+    if (k < 0.5) {
+      float side = 1.0 - smoothstep(0.55, 0.9, abs(n.y));
+      vec2 q = vWorld.xz - uCenter.xz;
+      float sweep = sin(vY * 380.0 + sin(atan(q.y, q.x) * 9.0) * 2.0);
+      float spiral = sin(length(q) * 260.0 + atan(q.y, q.x) * 2.0);
+      base *= 1.0 + mix(0.04 * spiral * smoothstep(0.85, 1.0, n.y), 0.045 * sweep, side) * (0.4 + 0.6 * near);
+    }
+    // sponge: open crumb — small dark pores, golden crust-ish warmth
+    if (k > 6.5 && k < 7.5) {
+      // (round pores of different sizes: two scales of smooth noise, cut into holes)
+      float fine = n3(vWorld * 520.0);
+      float coarse = n3(vWorld * 190.0 + 7.0);
+      float pores = max(smoothstep(0.74, 0.86, fine), smoothstep(0.8, 0.9, coarse));
+      base *= mix(1.0, 0.6, pores * near) * (0.95 + 0.07 * n3(vWorld * 60.0));
+    }
+    // strawberries: their little seeds
+    if (k > 0.5 && k < 1.5) {
+      vec3 sp = vWorld * 900.0;
+      float seed = step(0.93, fract(sin(dot(floor(sp), vec3(7.13, 157.1, 113.7))) * 43758.5453));
+      base = mix(base, vec3(0.93, 0.78, 0.35), seed * 0.6 * near * step(0.5, base.r - base.b));
+    }
+    // marble: grey veins through white
+    if (k > 8.5 && k < 9.5) {
+      // (fine and pale: a white stone with a few soft grey threads, not a crackle)
+      float v = sin(vWorld.x * 64.0 + sin(vWorld.z * 23.0 + vWorld.x * 9.0) * 2.2);
+      base *= 1.0 - 0.1 * smoothstep(0.985, 1.0, abs(v)) * (0.4 + 0.6 * near);
+    }
     vec3 col = base * light * clamp(ao, 0.0, 1.0);
     float rim = pow(1.0 - max(dot(n, V), 0.0), 3.0);
-    if (k < 0.5) col += spec * 0.06 + base * rim * 0.12;                                  // buttercream: a satin sheen
+    if (k < 0.5) col += spec * 0.06 + base * rim * 0.12 + vec3(1.0, 0.55, 0.5) * base * rim * 0.08; // buttercream: satin sheen + light through its edge
     else if (k < 1.5) col += spec * 0.5 + vec3(1.0, 0.85, 0.8) * pow(max(dot(reflect(-V, n), normalize(vec3(-0.3, 0.8, 0.4))), 0.0), 40.0) * 0.25; // berries: glossy
     else if (k < 2.5) col += spec * 0.35 + vec3(1.0) * rim * 0.25;                          // sugar pearls
     else if (k < 4.5 && k > 3.5) {
       // wax: lit from within near the flame
       col += vec3(1.0, 0.62, 0.32) * uLit * smoothstep(0.55, 0.62, vY) * 0.35;
-    } else if (k < 5.5 && k > 4.5) col += spec * 0.6 + vec3(0.9, 0.5, 0.55) * rim * 0.15; // glaze: glossy
-    else if (k > 5.5) col = vec3(0.06, 0.04, 0.03) + vec3(1.0, 0.45, 0.15) * 0.3 * uLit; // the wick, glowing at its tip
+    } else if (k < 5.5 && k > 4.5) {
+      // ganache: deep, glassy — sharp highlights of the flames and the room, a cool rim
+      vec3 R = reflect(-V, n);
+      col += spec * 0.9 + vec3(1.0, 0.86, 0.78) * pow(max(dot(R, normalize(vec3(-0.3, 0.85, 0.4))), 0.0), 60.0) * 0.5 + vec3(0.7, 0.45, 0.5) * rim * 0.25;
+    } else if (k > 5.5 && k < 6.5) col = vec3(0.06, 0.04, 0.03) + vec3(1.0, 0.45, 0.15) * 0.3 * uLit; // the wick, glowing at its tip
+    else if (k > 7.5 && k < 8.5) {
+      // gold leaf / the fork: metal — its colour IS its reflection
+      vec3 R = reflect(-V, n);
+      float env = 0.35 + 0.65 * smoothstep(-0.2, 0.9, R.y);
+      col = base * (0.25 + env * 0.55) + spec * 1.4 * base + base * pow(max(dot(R, normalize(vec3(-0.3, 0.85, 0.4))), 0.0), 30.0) * 0.9;
+    } else if (k > 8.5) {
+      // marble and porcelain: polished, and white — they keep their white under warm light
+      col = max(col, base * vec3(0.8, 0.79, 0.78) * ao);
+      vec3 R = reflect(-V, n);
+      col += spec * 0.5 + vec3(1.0, 0.95, 0.9) * pow(max(dot(R, normalize(vec3(-0.3, 0.85, 0.4))), 0.0), 80.0) * 0.35 + base * rim * 0.06;
+    }
     gl_FragColor = vec4(col, 1.0);
   }
 `;

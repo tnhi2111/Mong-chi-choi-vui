@@ -15,7 +15,8 @@ import { getHeartGeometry } from './heartShape';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { RoomProps, roomLamps, roomRugs, furnitureBlobs, cakePosition, LAYOUT } from './RoomProps';
 import { surface } from './Gift3D';
-import { getCake, cakeVertex, cakeFragment, sparkleGeometry, sparkleVertex, sparkleFragment, ringGeometry, ringVertex, ringFragment, EXPLODE } from './cakeModel';
+import { getShadowTexture } from './glowTexture';
+import { getCake, cakeVertex, cakeFragment, sparkleGeometry, sparkleVertex, sparkleFragment, ringGeometry, ringVertex, ringFragment, EXPLODE, CAKE_LIFT, buildSlice, buildCrumbs } from './cakeModel';
 import { Glow } from './Glow';
 import { BirthdaySign, metalVertex, metalFragment, satinVertex, satinFragment, mergeAll } from './BirthdaySign';
 
@@ -1175,6 +1176,15 @@ function Cake({
   // the cake model (built once); its flames are where its candles' wicks are
   const cake = useMemo(getCake, []);
   useEffect(() => () => cake.geometry.dispose(), [cake]);
+  const slice = useMemo(buildSlice, []);
+  const crumbs = useMemo(buildCrumbs, []);
+  useEffect(
+    () => () => {
+      slice.dispose();
+      crumbs.dispose();
+    },
+    [slice, crumbs],
+  );
   const candleTops = useMemo(() => cake.flames.map(([x, y, z]) => [x, top + y - 0.03, z] as [number, number, number]), [cake, top]);
   const cakeU = useMemo(
     () => ({
@@ -1184,6 +1194,7 @@ function Cake({
       uWarm: { value: 0 },
       uKey: { value: 0 },
       uRoomDir: { value: new THREE.Vector3(-outward[0], 0, -outward[2]).normalize() },
+      uCenter: { value: new THREE.Vector3() },
       uExplode: { value: 0 },
     }),
     [cake], // eslint-disable-line react-hooks/exhaustive-deps
@@ -1312,6 +1323,7 @@ function Cake({
     const m = cakeMesh.current;
     if (m) {
       m.updateWorldMatrix(true, false);
+      cakeU.uCenter.value.setFromMatrixPosition(m.matrixWorld);
       cake.flames.forEach((f, i) => {
         // (the flames ride with their candles)
         flameAt.set(f[0], f[1], f[2]).applyAxisAngle(THREE.Object3D.DEFAULT_UP, candleTurn);
@@ -1392,7 +1404,20 @@ function Cake({
         <circleGeometry args={[0.56, 40]} />
       </mesh>
       {/* the cake: two tiers, a cream rim, berries on top, candles */}
-      <Glow ref={glow} color="#ffc98f" size={1.3} opacity={0} position={[0, top + 0.62, 0]} />
+      {/* M: soft contact shadows — under the stand's foot, and under the little plate */}
+      <mesh position={[0, TABLE_H + 0.017, 0]} rotation-x={-Math.PI / 2} renderOrder={1}>
+        <planeGeometry args={[0.62, 0.62]} />
+        <meshBasicMaterial map={getShadowTexture()} color="#000000" transparent opacity={0.45} depthWrite={false} />
+      </mesh>
+      <group position={[-out.x * 0.43 + along.x * 0.16, TABLE_H + 0.016, -out.y * 0.43 + along.y * 0.16]} rotation-y={Math.atan2(-along.y, along.x) + 0.7}>
+        <mesh position={[0, 0.001, 0]} rotation-x={-Math.PI / 2} renderOrder={1}>
+          <planeGeometry args={[0.3, 0.3]} />
+          <meshBasicMaterial map={getShadowTexture()} color="#000000" transparent opacity={0.4} depthWrite={false} />
+        </mesh>
+        {/* M: a slice, already cut and served — the cake's inside: sponge, cream, raspberry */}
+        <mesh geometry={slice} material={cakeMat} />
+      </group>
+      <Glow ref={glow} color="#ffc98f" size={1.3} opacity={0} position={[0, top + CAKE_LIFT + 0.62, 0]} />
       <group
         userData={{ moment: true }}
         onClick={touch}
@@ -1408,16 +1433,17 @@ function Cake({
         {/* the cake itself: tiers, piping, pearls, rosettes, berries, flowers, candles */}
         <group ref={body} position={[0, top, 0]}>
           <mesh ref={cakeMesh} geometry={cake.geometry} material={cakeMat} userData={{ frame: 'cake' }} />
+          <mesh geometry={crumbs} material={cakeMat} />
           <points geometry={sparkles} material={sparkleMat} frustumCulled={false} raycast={() => null} />
           <points geometry={ring} material={ringMat} frustumCulled={false} raycast={() => null} />
         </group>
         {/* a generous invisible target, so the whole cake answers a touch */}
-        <mesh position={[0, top + 0.3, 0]}>
+        <mesh position={[0, top + CAKE_LIFT + 0.3, 0]}>
           <sphereGeometry args={[0.5, 10, 8]} />
           <meshBasicMaterial transparent opacity={0} depthWrite={false} colorWrite={false} />
         </mesh>
       </group>
-      <CakeTopper y={top + 0.46} outward={out} explode={explode} onTap={takeApart} />
+      <CakeTopper y={top + CAKE_LIFT + 0.46} outward={out} explode={explode} onTap={takeApart} />
       <group ref={wickGroup}>
         <points geometry={flames} material={flameMat} frustumCulled={false} />
         <points geometry={smoke} material={smokeMat} frustumCulled={false} />
