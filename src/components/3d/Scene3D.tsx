@@ -71,7 +71,7 @@ export default function Scene3D(props: SceneProps) {
         gl.toneMappingExposure = 1.0;
         // QA hook: lets the Playwright scripts read renderer stats
         if (import.meta.env.DEV || new URLSearchParams(location.search).has('debug')) {
-          Object.assign(window, { __gl: gl, __scene: scene, __camera: camera });
+          Object.assign(window, { __gl: gl, __scene: scene, __camera: camera, __THREE: THREE });
         }
       }}
       aria-hidden="true"

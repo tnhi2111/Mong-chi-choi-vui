@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { getHeartGeometry } from './heartShape';
+import { birthdayConfig } from '../../config/birthday';
 
 /*
  * The birthday cake, made like a real one (cake-local units; its table top is at y = 0):
@@ -77,7 +78,9 @@ const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
 
 /** A tier: a lathe with soft edges and a domed top, its sides gently uneven. */
 function tier(r: number, h: number, base: number): THREE.BufferGeometry {
-  const e = 0.03; // the rounded edge
+  // R2: whipped cream, not fondant — a full round shoulder, a soft dome, a little puff out
+  // at mid-height, like a cloud
+  const e = 0.058; // the rounded edge
   const pts: THREE.Vector2[] = [new THREE.Vector2(0.0001, 0), new THREE.Vector2(r - 0.008, 0)];
   for (let i = 0; i <= 4; i++) {
     const a = -Math.PI / 2 + (i / 4) * (Math.PI / 2);
@@ -90,7 +93,7 @@ function tier(r: number, h: number, base: number): THREE.BufferGeometry {
   }
   for (let i = 1; i <= 5; i++) {
     const u = i / 5;
-    pts.push(new THREE.Vector2((r - e) * (1 - u) + 0.0001, h + Math.sin(u * Math.PI * 0.5) * 0.008));
+    pts.push(new THREE.Vector2((r - e) * (1 - u) + 0.0001, h + Math.sin(u * Math.PI * 0.5) * 0.022));
   }
   const g = new THREE.LatheGeometry(pts, 72);
   const p = g.attributes.position as THREE.BufferAttribute;
@@ -100,7 +103,8 @@ function tier(r: number, h: number, base: number): THREE.BufferGeometry {
     const z = p.getZ(i);
     const a = Math.atan2(z, x);
     // smoothed by hand: never a perfect cylinder
-    const wob = 1 + 0.008 * Math.sin(a * 3 + base * 10) + 0.004 * Math.sin(a * 7 + 1.3) + 0.003 * Math.sin(y * 40 + a * 2);
+    const puff = 1 + 0.03 * Math.sin(Math.PI * Math.min(1, Math.max(0, y / h)));
+    const wob = puff * (1 + 0.01 * Math.sin(a * 3 + base * 10) + 0.006 * Math.sin(a * 7 + 1.3) + 0.004 * Math.sin(y * 40 + a * 2));
     p.setXYZ(i, x * wob, y + base, z * wob);
   }
   g.computeVertexNormals();
@@ -206,6 +210,30 @@ function strawberry(P: Parts, x: number, y: number, z: number, s: number, ry: nu
   P.add(leaf, '#5c7a3a', 3);
 }
 
+/** R2 — her age, for the number candles (from the config; never invented here). */
+const CAKE_AGE = birthdayConfig.room.moments.age;
+/** One stroke per digit (unit height, x from 0), as a number candle is moulded. */
+const NUMERALS: Record<string, [number, number][]> = (() => {
+  const arc = (cx: number, cy: number, r: number, a0: number, a1: number, n = 14): [number, number][] =>
+    Array.from({ length: n + 1 }, (_, i) => {
+      const a = a0 + ((a1 - a0) * i) / n;
+      return [cx + Math.cos(a) * r, cy + Math.sin(a) * r];
+    });
+  const ry = (pts: [number, number][], k = 1): [number, number][] => pts.map(([x, y]) => [x * k, y]);
+  return {
+    '0': arc(0.32, 0.5, 0.4, 0, Math.PI * 2, 24).map(([x, y]) => [0.32 + (x - 0.32) * 0.75, y]),
+    '1': [[0.15, 0.78], [0.38, 0.98], [0.38, 0.0]],
+    '2': [...arc(0.32, 0.7, 0.28, Math.PI * 0.95, -Math.PI * 0.2), [0.42, 0.4], [0.06, 0.02], [0.64, 0.02]],
+    '3': [...arc(0.3, 0.74, 0.24, Math.PI * 0.85, -Math.PI * 0.5, 12), ...arc(0.3, 0.26, 0.26, Math.PI * 0.5, -Math.PI * 0.85, 12)],
+    '4': [[0.5, 0.0], [0.5, 0.98], [0.02, 0.3], [0.66, 0.3]],
+    '5': [[0.6, 0.98], [0.14, 0.98], [0.1, 0.56], ...arc(0.32, 0.32, 0.3, Math.PI * 0.75, -Math.PI * 0.85, 14)],
+    '6': [[0.56, 0.96], [0.36, 0.9], [0.16, 0.7], [0.06, 0.42], ...arc(0.33, 0.28, 0.27, Math.PI, Math.PI * 3, 18)],
+    '7': [[0.02, 0.98], [0.64, 0.98], [0.26, 0.0]],
+    '8': [...arc(0.32, 0.74, 0.22, -Math.PI / 2, Math.PI * 1.5, 14), ...arc(0.32, 0.26, 0.26, Math.PI / 2, Math.PI * 2.5, 16)],
+    '9': ry([...arc(0.32, 0.7, 0.27, 0, Math.PI * 2, 18), [0.58, 0.5], [0.46, 0.2], [0.2, 0.02]]),
+  };
+})();
+
 export interface CakeData {
   geometry: THREE.BufferGeometry;
   /** where each candle's flame sits (cake-local) */
@@ -221,9 +249,10 @@ export function getCake(): CakeData {
 export function buildCake(): CakeData {
   seed = 11;
   const P = new Parts();
-  const blush = '#f9d0d6';
-  const blushLow = '#f6c2ca';
-  const cream = '#fbe8e6';
+  // R2: strawberries folded into cream — two pinks, the upper one paler, warm, never candy
+  const blush = '#f7c3cd';
+  const blushLow = '#f2aebc';
+  const cream = '#fff1f1';
   // the tiers
   P.add(tier(CAKE.low.r, CAKE.low.h, 0), blushLow, 0);
   P.layer = 1;
@@ -239,30 +268,30 @@ export function buildCake(): CakeData {
       const a = Math.atan2(z, x);
       // drips of different lengths: only the lower edge is pulled down
       // a thin rim of glaze, with drips of different lengths running down the side
-      const drip = Math.pow(Math.max(0, Math.sin(a * 9 + Math.sin(a * 4) * 1.5)), 3) * 0.055 + Math.pow(Math.max(0, Math.sin(a * 23 + 1)), 6) * 0.022;
+      const drip = Math.pow(Math.max(0, Math.sin(a * 6 + Math.sin(a * 3) * 1.4)), 5) * 0.06 + Math.pow(Math.max(0, Math.sin(a * 17 + 1)), 8) * 0.018;
       const down = y < 0 ? drip : 0;
       p.setXYZ(i, x, y - down + TOP - 0.018 + 0.004, z);
     }
     g.computeVertexNormals();
-    // M: a glossy dark-chocolate ganache (a hint of cherry in it), running down in streams
-    P.add(g, '#3c1512', 5);
+    // R2: a glossy strawberry glaze, running down in a few streams
+    P.add(g, '#e9869a', 5);
     // each stream ends in a round drop, as poured ganache does
     for (let i = 0; i < 144; i++) {
       const a = (i / 144) * Math.PI * 2;
-      const d = (q: number) => Math.pow(Math.max(0, Math.sin(q * 9 + Math.sin(q * 4) * 1.5)), 3) * 0.055 + Math.pow(Math.max(0, Math.sin(q * 23 + 1)), 6) * 0.022;
+      const d = (q: number) => Math.pow(Math.max(0, Math.sin(q * 6 + Math.sin(q * 3) * 1.4)), 5) * 0.06 + Math.pow(Math.max(0, Math.sin(q * 17 + 1)), 8) * 0.018;
       const here = d(a);
       // (only the main streams: the small ones are too fine for the mesh to reach their drop)
       if (here < 0.03 || here < d(a - 0.02) || here < d(a + 0.02)) continue;
       const b = new THREE.SphereGeometry(0.0075 + here * 0.05, 10, 8);
       b.scale(1, 1.25, 0.8);
       b.translate(Math.cos(a) * (CAKE.up.r + 0.006), TOP - 0.018 + 0.004 - 0.018 - here * 0.92 + 0.004, Math.sin(a) * (CAKE.up.r + 0.006));
-      P.add(b, '#3c1512', 5);
+      P.add(b, '#e9869a', 5);
     }
     // the ganache reaches just over the top edge: a ring, the top itself stays cream
     const cap = new THREE.RingGeometry(CAKE.up.r - 0.03, CAKE.up.r + 0.004, 72, 1);
     cap.rotateX(-Math.PI / 2);
     cap.translate(0, TOP + 0.0085, 0);
-    P.add(cap, '#45191a', 5);
+    P.add(cap, '#ec92a4', 5);
   }
   // piped shell borders at the foot of each tier
   shells(P, CAKE.up.r + 0.004, UP_BASE + 0.016, 28, cream);
@@ -350,10 +379,10 @@ export function buildCake(): CakeData {
   const flames: [number, number, number][] = [];
   (
     [
-      [-0.12, -0.02, 0.15, '#f7efe4'],
-      [-0.04, 0.06, 0.12, '#f4d6d8'],
-      [0.05, 0.03, 0.135, '#f7efe4'],
-      [0.13, 0.07, 0.11, '#f4d6d8'],
+      [-0.15, 0.04, 0.12, '#f7efe4'],
+      [-0.08, 0.13, 0.1, '#f4d6d8'],
+      [0.09, 0.13, 0.11, '#f7efe4'],
+      [0.16, 0.03, 0.1, '#f4d6d8'],
     ] as const
   ).forEach(([x, z, h, col], i) => {
     const base = TOP + 0.006;
@@ -370,7 +399,27 @@ export function buildCake(): CakeData {
     P.add(wick, '#1d140f', 6);
     flames.push([x, base + h + 0.03, z]);
   });
-  // M: a marble cake stand under it all (it stays put in the exploded view: layer 0)
+  // R2: the number candles — her age from the config, in pink wax, each with its wick
+  {
+    const digits = String(CAKE_AGE).split('');
+    const H = 0.13;
+    const gap = 0.095;
+    digits.forEach((d, i) => {
+      const path = NUMERALS[d];
+      if (!path) return;
+      const x0 = (i - (digits.length - 1) / 2) * gap - H * 0.32;
+      const pts = path.map(([px, py]) => new THREE.Vector3(x0 + px * H, TOP + 0.012 + py * H, 0.0));
+      const tube = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, false, 'centripetal'), 96, 0.014, 10, false);
+      P.add(tube, '#e9869f', 4);
+      // its wick where a wax number has it: at the top of the figure
+      const top = pts.reduce((a, b) => (b.y > a.y ? b : a));
+      const wick = new THREE.CylinderGeometry(0.0018, 0.0018, 0.014, 5);
+      wick.translate(top.x, top.y + 0.016, top.z);
+      P.add(wick, '#1d140f', 6);
+      flames.push([top.x, top.y + 0.04, top.z]);
+    });
+  }
+  // R2: a white porcelain cake stand on a foot (it stays put in the exploded view: layer 0)
   P.layer = 0;
   {
     const L = CAKE_LIFT;
@@ -391,7 +440,7 @@ export function buildCake(): CakeData {
     ].map(([r, y]) => new THREE.Vector2(r, y));
     const stand = new THREE.LatheGeometry(prof, 72);
     stand.computeVertexNormals();
-    P.add(stand, '#efeae4', 9, 1);
+    P.add(stand, '#f6f2ee', 10, 1);
   }
   const geometry = P.merge();
   geometry.translate(0, CAKE_LIFT, 0);
@@ -498,8 +547,12 @@ export function buildCrumbs(): THREE.BufferGeometry {
  */
 export const EXPLODE = { upper: 0.17, top: 0.25, candles: 0.33, turnUpper: 0.55, turnCandles: -0.45 };
 
+/** the flames the cake's shader is lit by (4 slim candles + up to 2 number candles) */
+export const FLAMES = 6;
+
 export const cakeVertex = /* glsl */ `
   uniform float uExplode;
+  uniform vec4 uPress;   // R2: where her finger presses the cream (world) and how deep (m)
   attribute float aLayer;
   attribute vec3 aColor;
   attribute float aKind;
@@ -522,8 +575,12 @@ export const cakeVertex = /* glsl */ `
     nn.xz = turn(nn.xz, ang);
     p.y += lift * uExplode;
     vec4 w = modelMatrix * vec4(p, 1.0);
-    vWorld = w.xyz;
     vN = normalize(mat3(modelMatrix) * nn);
+    // R2: the cream gives under her finger and springs back (a soft dent, frosting only)
+    float dp = distance(w.xyz, uPress.xyz);
+    float give = step(aKind, 0.5) * uPress.w * pow(max(0.0, 1.0 - dp / 0.09), 2.0);
+    w.xyz -= vN * give;
+    vWorld = w.xyz;
     vColor = aColor;
     vKind = aKind;
     vAO = aAO;
@@ -533,7 +590,7 @@ export const cakeVertex = /* glsl */ `
 `;
 
 export const cakeFragment = /* glsl */ `
-  uniform vec3 uFlames[4];     // the candle flames, in the world
+  uniform vec3 uFlames[${FLAMES}];     // the candle flames, in the world
   uniform float uLit;          // 0 when they're blown out
   uniform float uTime;
   uniform float uWarm;         // her hand near / leaning in: a touch warmer
@@ -559,6 +616,14 @@ export const cakeFragment = /* glsl */ `
     vec3 n = normalize(vN);
     vec3 V = normalize(cameraPosition - vWorld);
     float k = vKind;
+    // R2: up close, the cream has a fine whipped relief (a micro-normal from noise)
+    float nearMicro = smoothstep(2.6, 0.9, length(cameraPosition - vWorld));
+    if (k < 0.5 && nearMicro > 0.0) {
+      vec3 q = vWorld * 260.0;
+      float c0 = n3(q);
+      vec3 g = vec3(n3(q + vec3(0.6, 0.0, 0.0)) - c0, n3(q + vec3(0.0, 0.6, 0.0)) - c0, n3(q + vec3(0.0, 0.0, 0.6)) - c0);
+      n = normalize(n - g * 0.9 * nearMicro);
+    }
     vec3 base = vColor;
     // fine detail only when she is close (it would shimmer from across the room)
     float near = smoothstep(3.6, 1.1, length(cameraPosition - vWorld));
@@ -570,7 +635,7 @@ export const cakeFragment = /* glsl */ `
     light += vec3(1.0, 0.78, 0.6) * uKey * (0.35 + 0.65 * max(dot(n, V) * 0.6 + 0.4, 0.0));
     // the flames warm what's near them (the top, the candles, the upper tier most)
     vec3 spec = vec3(0.0);
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < ${FLAMES}; i++) {
       vec3 L = uFlames[i] - vWorld;
       float d2 = dot(L, L);
       vec3 Ld = normalize(L);
@@ -614,6 +679,9 @@ export const cakeFragment = /* glsl */ `
       float v = sin(vWorld.x * 64.0 + sin(vWorld.z * 23.0 + vWorld.x * 9.0) * 2.2);
       base *= 1.0 - 0.1 * smoothstep(0.985, 1.0, abs(v)) * (0.4 + 0.6 * near);
     }
+    // (wax and the thin things on top sit right by the flames: their light is held below a
+    //  ceiling, or the number candles burn white)
+    if (k > 3.5 && k < 4.5) light = min(light, vec3(1.25, 1.1, 1.0));
     vec3 col = base * light * clamp(ao, 0.0, 1.0);
     float rim = pow(1.0 - max(dot(n, V), 0.0), 3.0);
     if (k < 0.5) col += spec * 0.06 + base * rim * 0.12 + vec3(1.0, 0.55, 0.5) * base * rim * 0.08; // buttercream: satin sheen + light through its edge
