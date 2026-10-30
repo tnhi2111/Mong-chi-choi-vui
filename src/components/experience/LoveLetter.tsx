@@ -5,6 +5,7 @@ import { motion } from '../../config/motion';
 import { birthdayConfig } from '../../config/birthday';
 import { fill } from '../../lib/text';
 import { useDialog } from '../ui/useDialog';
+import { LightSeq, LightText } from '../ui/LightText';
 
 interface Props {
   onClose: () => void;
@@ -13,53 +14,32 @@ interface Props {
   closing?: boolean;
 }
 
-const CHARS_PER_SECOND = 52;
-
-/** The letter: paper, handwriting-ish, words arriving at a readable pace (skippable). */
+/**
+ * The letter: paper, words arriving at a reading pace (P3) — each line as long as it takes
+ * to read, the paragraphs one after another — in gilt ink. A touch on a line still arriving
+ * brings it in quicker; "Show all" brings everything at once. The words are real text.
+ */
 export default function LoveLetter({ onClose, reducedMotion, closing = false }: Props) {
   const cfg = birthdayConfig.letter;
   const dialog = useDialog<HTMLDivElement>(onClose);
   const paragraphs = useMemo(() => cfg.paragraphs.map(fill), [cfg.paragraphs]);
-  const total = useMemo(() => paragraphs.reduce((n, p) => n + p.length, 0), [paragraphs]);
-  const [shown, setShown] = useState(reducedMotion ? total : 0);
-  const done = shown >= total;
-
-  useEffect(() => {
-    if (done) return;
-    let raf = 0;
-    let last = performance.now();
-    const startDelay = 900;
-    const begin = last + startDelay;
-    let acc = 0;
-    const tick = (now: number) => {
-      if (now >= begin) {
-        acc += ((now - last) / 1000) * CHARS_PER_SECOND;
-        const whole = Math.floor(acc);
-        if (whole > 0) {
-          acc -= whole;
-          setShown((s) => Math.min(total, s + whole));
-        }
-      }
-      last = now;
-      raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [done, total]);
 
   // the letter's page opens out of the letter itself (storyboard I)
   const from = useGiftOrigin();
   // K: the letter page IS the letter that flew out of the envelope
   const leaf = useLeaf(closing, reducedMotion);
 
-  // slice the running character count across paragraphs
-  let budget = shown;
-  const visible = paragraphs.map((p) => {
-    const take = Math.max(0, Math.min(p.length, budget));
-    budget -= p.length;
-    return p.slice(0, take);
-  });
-  const typingIndex = visible.findIndex((v, i) => v.length < paragraphs[i].length);
+  // greeting, the paragraphs, the closing and the name: one after another
+  const seq = useMemo(() => {
+    const s = new LightSeq();
+    s.count = paragraphs.length + 3;
+    return s;
+  }, [paragraphs.length]);
+  const [done, setDone] = useState(reducedMotion);
+  useEffect(() => {
+    seq.onDone = () => setDone(true);
+    if (seq.done) setDone(true);
+  }, [seq]);
 
   return (
     <div
@@ -78,7 +58,7 @@ export default function LoveLetter({ onClose, reducedMotion, closing = false }: 
           Back
         </button>
         {!done && (
-          <button type="button" className="btn btn--quiet" onClick={() => setShown(total)}>
+          <button type="button" className="btn btn--quiet" onClick={() => seq.skip()}>
             Show all
           </button>
         )}
@@ -87,31 +67,17 @@ export default function LoveLetter({ onClose, reducedMotion, closing = false }: 
       <div ref={leaf.ref} className={leaf.className} style={leaf.style} data-fold={leaf.fold}>
       <div className="sheet__scroll leaf__scroll">
         <article className="letter leaf__ink">
-          <p id="letter-greeting" className="letter__greeting">
-            {fill(cfg.greeting)}
-          </p>
+          <LightText as="p" id="letter-greeting" className="letter__greeting" text={fill(cfg.greeting)} variant="ink" pace="reading" ready={leaf.inked} seq={seq} seqIndex={0} />
 
-          {/* screen readers get the whole letter at once */}
-          <div className="sr-only">
+          <div className="letter__body">
             {paragraphs.map((p, i) => (
-              <p key={i}>{p}</p>
+              <LightText key={i} className="letter__p" text={p} variant="ink" pace="reading" ready={leaf.inked} seq={seq} seqIndex={i + 1} />
             ))}
           </div>
 
-          <div className="letter__body" aria-hidden="true">
-            {paragraphs.map((p, i) => (
-              <p key={i} className="letter__p">
-                <span>{visible[i]}</span>
-                {i === typingIndex && <span className="letter__caret" />}
-                {/* reserve the paragraph's final height so the page doesn't jump */}
-                <span className="letter__ghost">{p.slice(visible[i].length)}</span>
-              </p>
-            ))}
-          </div>
-
-          <footer className={`letter__sign${done ? ' is-on' : ''}`}>
-            <p>{fill(cfg.closing)}</p>
-            <p className="letter__name">{fill(cfg.signature)}</p>
+          <footer className="letter__sign is-on">
+            <LightText text={fill(cfg.closing)} variant="ink" pace="reading" ready={leaf.inked} seq={seq} seqIndex={paragraphs.length + 1} />
+            <LightText className="letter__name" text={fill(cfg.signature)} variant="ink" pace="reading" ready={leaf.inked} seq={seq} seqIndex={paragraphs.length + 2} />
           </footer>
         </article>
 

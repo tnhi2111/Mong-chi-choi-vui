@@ -36,6 +36,54 @@ interface Props {
   ready?: boolean;
   /** called once per word as it lands (e.g. a note of the music box) */
   onWord?: (i: number) => void;
+  /**
+   * P3 — `reading`: each visual line takes clamp(base + chars × perChar, min, max) s, lines
+   * `gap` apart (motion.reading); `words`: a beat per word (the default).
+   */
+  pace?: 'words' | 'reading';
+  /** P3 — paragraphs in turn: this one starts when the one before it (in `seq`) has ended */
+  seq?: LightSeq;
+  seqIndex?: number;
+}
+
+/**
+ * P3 — a page's paragraphs, one after another: each LightText in it starts when the one
+ * before has finished (plus `reading.para` of rest), whatever its length turns out to be on
+ * this screen. `skip()` brings every one in at once (the letter's "Show all").
+ */
+export class LightSeq {
+  private ends = new Map<number, number>();
+  private waiting = new Map<number, ((t: number) => void)[]>();
+  private skipped = new Set<() => void>();
+  done = false;
+  onDone?: () => void;
+  count = 0;
+  /** when paragraph `i` may start (performance.now() ms) */
+  startAt(i: number): Promise<number> {
+    if (i === 0) return Promise.resolve(performance.now());
+    const e = this.ends.get(i - 1);
+    if (e !== undefined) return Promise.resolve(e);
+    return new Promise((res) => this.waiting.set(i - 1, [...(this.waiting.get(i - 1) ?? []), res]));
+  }
+  finish(i: number, at: number) {
+    this.ends.set(i, at);
+    this.waiting.get(i)?.forEach((r) => r(at));
+    this.waiting.delete(i);
+    if (i === this.count - 1) {
+      const left = Math.max(0, at - performance.now());
+      window.setTimeout(() => {
+        this.done = true;
+        this.onDone?.();
+      }, left);
+    }
+  }
+  onSkip(fn: () => void) {
+    this.skipped.add(fn);
+    return () => this.skipped.delete(fn);
+  }
+  skip() {
+    this.skipped.forEach((f) => f());
+  }
 }
 
 type Mote = {
@@ -44,7 +92,8 @@ type Mote = {
 };
 type Line = { a: [number, number]; b: [number, number]; t0: number; dur: number; fade: number };
 type Pen = { path: { x: number; y: number; t: number }[]; end: number };
-const groups = new Set<{ motes: Mote[]; lines: Line[]; pens: Pen[]; until: number; ink?: boolean }>();
+type Group = { motes: Mote[]; lines: Line[]; pens: Pen[]; until: number; ink?: boolean; ff?: number; speed?: number };
+const groups = new Set<Group>();
 let wake: (() => void) | null = null;
 
 const reduced = () => typeof document !== 'undefined' && document.documentElement.hasAttribute('data-reduce');
@@ -104,7 +153,7 @@ function stars(pts: [number, number][], n: number): [number, number][] {
   return out.sort((a, b) => a[0] - b[0]);
 }
 
-export function LightText({ text, as = 'p', className = '', id, style, delay = 0, variant = 'condense', leaving = false, ready = true, onWord }: Props) {
+export function LightText({ text, as = 'p', className = '', id, style, delay = 0, variant = 'condense', leaving = false, ready = true, onWord, pace = 'words', seq, seqIndex = 0 }: Props) {
   const root = useRef<HTMLElement>(null);
   const started = useRef(false);
   const words = text.split(/(\s+)/);
@@ -128,9 +177,30 @@ export function LightText({ text, as = 'p', className = '', id, style, delay = 0
       if (reduced()) {
         spans.forEach((s) => (s.style.animationDelay = '0ms'));
         el.classList.add('is-run', 'is-plain');
+        seq?.finish(seqIndex, performance.now());
         return;
       }
       const now = performance.now();
+      // when each word begins (ms from now): a beat per word, or (P3) at reading pace
+      const starts: number[] = spans.map((_, i) => i * L.stagger * 1000);
+      if (pace === 'reading') {
+        const R = motion.reading;
+        let cursor = 0;
+        let i = 0;
+        while (i < spans.length) {
+          const top = spans[i].getBoundingClientRect().top;
+          const line: number[] = [];
+          while (i < spans.length && Math.abs(spans[i].getBoundingClientRect().top - top) < 4) line.push(i++);
+          const chars = line.reduce((n, j) => n + (spans[j].textContent?.length ?? 0) + 1, 0);
+          const dur = Math.min(R.max, Math.max(R.min, R.base + chars * R.perChar)) * 1000;
+          let before = 0;
+          for (const j of line) {
+            starts[j] = cursor + (before / chars) * dur;
+            before += (spans[j].textContent?.length ?? 0) + 1;
+          }
+          cursor += dur + R.gap * 1000;
+        }
+      }
       const motes: Mote[] = [];
       const lines: Line[] = [];
       const pen: Pen = { path: [], end: 0 };
@@ -140,15 +210,17 @@ export function LightText({ text, as = 'p', className = '', id, style, delay = 0
       const step = Math.max(1.6, fs / (variant === 'bloom' ? 11 : 14));
       const budget = Math.round(L.maxMotes * (window.innerWidth < 600 ? 0.6 : 1));
       const sampled = spans.map((s, i) => ({ s, i, pts: sampleWord(s, s.textContent ?? '', step) }));
+      const lands: number[] = [];
       const total = sampled.reduce((n, w) => n + w.pts.length, 0) || 1;
       const keep = Math.min(1, budget / total);
       let prevStar: [number, number] | null = null;
       sampled.forEach(({ s, i, pts }) => {
         const r = s.getBoundingClientRect();
         // when this word lands (ms from now)
-        const start = i * L.stagger * 1000;
+        const start = starts[i];
         const flight = (variant === 'condense' ? L.flight : variant === 'ink' ? L.flight * 0.45 : variant === 'constellation' ? L.flight * 1.2 : 0.15) * 1000;
         const land = start + flight;
+        lands[i] = land;
         s.style.animationDelay = `${Math.round(land - (variant === 'constellation' ? 120 : 60))}ms`;
         pen.path.push({ x: r.left - 2, y: r.top + r.height * 0.62, t: now + start + flight * 0.55 });
         pen.path.push({ x: r.right + 2, y: r.top + r.height * 0.62, t: now + land + L.stagger * 600 });
@@ -199,14 +271,43 @@ export function LightText({ text, as = 'p', className = '', id, style, delay = 0
       pen.end = (pen.path[pen.path.length - 1]?.t ?? now) + 200;
       const until = Math.max(pen.end, ...motes.map((m) => m.t0 + m.dur + m.hold + m.fade), ...lines.map((l) => l.t0 + l.dur + l.fade + 1200)) + 50;
       // (on paper the light is gilt ink: drawn over the paper, not added to it — light on cream vanishes)
-      groups.add({ motes, lines, pens: variant === 'bloom' ? [] : [pen], until, ink: variant === 'ink' });
+      const group = { motes, lines, pens: variant === 'bloom' ? [] : [pen], until, ink: variant === 'ink' } as Group;
+      groups.add(group);
       el.classList.add('is-run');
       wake?.();
+      const lastLand = Math.max(0, ...lands);
+      seq?.finish(seqIndex, now + lastLand + motion.reading.para * 1000);
+      // P3: a touch on words still arriving brings them in quicker (never a cut)
+      const fastForward = (f: number) => {
+        if (group.ff !== undefined) return;
+        const t = performance.now();
+        const elapsed = t - now;
+        if (elapsed > lastLand) return;
+        group.ff = t;
+        group.speed = f;
+        group.until = t + (group.until - t) / f;
+        spans.forEach((s, j) => {
+          const land = lands[j];
+          if (land === undefined || land <= elapsed) return;
+          s.style.animationDelay = `${Math.round(elapsed + (land - elapsed) / f - 60)}ms`;
+        });
+      };
+      ffRef.current = fastForward;
+      if (seq) unskip.push(seq.onSkip(() => fastForward(40)));
     };
-    const t = window.setTimeout(() => void (document.fonts?.ready ?? Promise.resolve()).then(go), delay * 1000);
-    timers.push(t);
-    return () => timers.forEach(clearTimeout);
-  }, [ready, delay, variant]);
+    const unskip: (() => void)[] = [];
+    const begin = (at: number) => {
+      const t = window.setTimeout(() => void (document.fonts?.ready ?? Promise.resolve()).then(go), Math.max(0, at - performance.now()) + delay * 1000);
+      timers.push(t);
+    };
+    if (seq) void seq.startAt(seqIndex).then(begin);
+    else begin(performance.now());
+    return () => {
+      timers.forEach(clearTimeout);
+      unskip.forEach((f) => f());
+    };
+  }, [ready, delay, variant]); // eslint-disable-line react-hooks/exhaustive-deps
+  const ffRef = useRef<((f: number) => void) | null>(null);
 
   // leaving: the words scatter back into stars
   useEffect(() => {
@@ -230,7 +331,7 @@ export function LightText({ text, as = 'p', className = '', id, style, delay = 0
 
   return createElement(
     as,
-    { ref: root, id, style, className: `lt lt--${variant} ${className}` },
+    { ref: root, id, style, className: `lt lt--${variant} ${className}`, onClick: () => ffRef.current?.(motion.reading.fastForward) },
     words.map((w, i) => (/^\s+$/.test(w) ? w : w ? <span key={i} className="lt__w">{w}</span> : null)),
   );
 }
@@ -271,11 +372,14 @@ export function LightTextLayer() {
     di.fillRect(0, 0, 32, 32);
     let raf = 0;
     let running = false;
-    const frame = (now: number) => {
+    const frame = (t: number) => {
+      let now = t;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, c.width, c.height);
+      const real = now;
       for (const gr of groups) {
-        if (now > gr.until) {
+        now = gr.ff !== undefined ? gr.ff + (real - gr.ff) * (gr.speed ?? 1) : real;
+        if (real > gr.until) {
           groups.delete(gr);
           continue;
         }

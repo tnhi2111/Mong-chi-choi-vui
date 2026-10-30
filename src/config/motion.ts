@@ -99,7 +99,7 @@ export const motion = {
     /** The opening, per shape (the App's safety net is read from here too). */
     // (K3: the owner found the box slow. Press → the page standing straight is now ≈ 3.5–4.5 s:
     //  the opening, then `carry.pageMs` while the page straightens out of the sheet.)
-    open: { box: t(3.0), capsule: t(3.0), star: t(3.1), orb: t(3.3), envelope: t(5.4) },
+    open: { box: t(3.0), capsule: t(3.0), star: t(3.1), orb: t(4.4), envelope: t(5.4) },
     /** A held beat before the thing inside comes out (the breath before it gives). */
     hold: t(0.5),
     /** The memory page grows out of the thing on screen (ms — CSS reads it). */
@@ -117,6 +117,38 @@ export const motion = {
     /** Reduced motion / no WebGL: one short opening. */
     quick: t(1.4),
   },
+
+  /**
+   * P — the letter is a magic sheet: it flies out of the gift, then FLOATS in front of her and
+   * waits to be touched; only her touch (or Enter / Space) opens it — slowly, like a spell.
+   * Why: the owner found the letter and its words came out too fast. The gift's own
+   * mechanism stays quick; only the paper slows down. Seconds / fractions.
+   */
+  letter: {
+    /** where it waits: distance in front of the lens (m), size (× the page's height) */
+    hoverDist: 1.75,
+    hoverSize: 0.34,
+    /** …and lifted by this share of the frame's height above the page's centre (the music
+     *  box's sheet is made in the air above the box: it floats higher, clear of it) */
+    hoverRise: 0.06,
+    hoverRiseAir: 0.2,
+    /** its float while it waits: a slow bob (Hz, × its height), a sway (degrees) */
+    bobHz: 0.6,
+    bobAmp: 0.025,
+    swayDeg: 2,
+    /** nobody touches it: it opens by itself after this long (s) — she is never stuck */
+    autoOpen: 10,
+    /** the opening: how long, and how far apart the two creases begin (s) */
+    open: 2.7,
+    creaseLag: 0.25,
+    /** each crease's own opening time (s, eased in and out, with a long tail) */
+    crease: 1.55,
+  },
+  /**
+   * P3 — reading pace for the words on a page: a line takes clamp(base + chars × perChar,
+   * min, max) seconds; lines at least `gap` apart; a new paragraph rests `para` more.
+   */
+  reading: { base: 0.6, perChar: 0.025, min: 0.8, max: 2.2, gap: 0.35, para: 0.6, inView: 0.25, fastForward: 6 },
 
   /**
    * L — words that arrive as light (`LightText`). Why: a line that fades in is information; a

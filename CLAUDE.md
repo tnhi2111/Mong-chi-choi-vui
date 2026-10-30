@@ -777,6 +777,32 @@ heart of each stroke, breathing per letter), and a fine **rim of light** quad 14
 moment) the letters dim and **light again one after another** from sparks (`uIgnite`,
 `aOrder`, `IGNITE_SECS` 1.6). The slow band of light still crosses it.
 
+## The letter floats, and opens only at her touch (stages P, Q)
+
+See STORYBOARD P/Q; numbers in `motion.letter` / `motion.reading`.
+- **Gift3D letter phases** (`letter` ref): the flight (progress `CARRY.fly`, still folded) →
+  `wait` (floats at `hoverDist`/`hoverSize`/`hoverRise`; bob, sway, wind, gilt rim breathing,
+  motes; `carrier.waiting`) → `open` on `carrier.requestOpen` or after `autoOpen` 10 s (2.7 s,
+  creases `fold`/`foldB` a `creaseLag` apart, bow + bounce, falling motes; rim/wind/edge gone
+  by 85 %) → `onOpened` → K's handoff. Real seconds (not `pace.rate`); the gift's scene ends
+  when it starts to wait. Closing: the letter refolds first, then the gift's clock runs back.
+  Only the opening gift writes `carrier.waiting` (the other four used to overwrite it).
+- **`LetterPrompt`** (App, while a gift is opening): an invisible button laid over the
+  floating sheet's quad — click / tap / Enter / Space, `aria-label`, focused when it waits.
+  QA scripts click it with `{ force: true }` (it moves) — `?debug` `window.__letterHold`
+  keeps it waiting.
+- **`PaperCarrier`** now: 24×48 grid, two creases, `wind`, `curl`, `edge` thickness, a GILT
+  edge (the colour turns gold — light cannot be added to near-white paper) with a bead of gold
+  running round it, orbiting/falling motes, and (Q) `reveal`. A separate halo quad behind the
+  sheet darkened the room in a rectangle and was removed.
+- **Reading pace** (`LightText pace="reading"`, `LightSeq`): lines measured on screen, each
+  clamp(0.6 + chars × 0.025, 0.8, 2.2) s, ≥ 0.35 s apart, +0.6 s per paragraph; a click on a
+  line still arriving fast-forwards it ×6; `seq.skip()` = the letter's "Show all". The letter
+  page (`LoveLetter`) no longer types; memory pages sequence title/date/message; `Reveal`
+  threshold 0.25. QA: `qa-output/tmp/pace.mjs`.
+- **Q** (`CondenseMotes.tsx`): the music box's sheet condenses out of its tune's light (see
+  STORYBOARD Q); `CARRY.orb` has no flight (`air`), `MUSIC_NOTES` come earlier, `open.orb` 4.4.
+
 ## Design references (`reference/`)
 
 - `reference/VIDEO_ANALYSIS.md` — the owner's reference videos, analysed (3 in the first

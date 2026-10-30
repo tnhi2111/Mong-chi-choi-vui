@@ -1965,3 +1965,25 @@ html[data-reduce] .leaf {
 .count-up.is-tick {
   text-shadow: 0 0 14px rgba(255, 214, 170, 0.85);
 }
+
+/* P: the floating letter's handle — invisible; a soft ring only for the keyboard */
+.letter-prompt {
+  position: fixed;
+  z-index: 25;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  border-radius: 10px;
+  cursor: pointer;
+  visibility: hidden;
+  -webkit-tap-highlight-color: transparent;
+}
+.letter-prompt[data-on='true'] {
+  visibility: visible;
+}
+.letter-prompt:focus {
+  outline: none;
+}
+.letter-prompt:focus-visible {
+  box-shadow: 0 0 0 1px rgba(244, 214, 160, 0.55), 0 0 26px rgba(244, 200, 140, 0.25);
+}

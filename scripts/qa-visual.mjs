@@ -195,7 +195,13 @@ try {
   await snap('gift-opening-1');
   await page.waitForTimeout(450);
   await snap('gift-opening-2');
-  await page.locator('.sheet').waitFor({ timeout: 15000 }); // each opening is 5–6.5 s now (motion.gift.open)
+  // P: the letter floats and waits to be touched — touch it (as she would), then the page
+  for (let t = 0; t < 120 && !(await page.locator('.sheet').count()); t++) {
+    const prompt = page.locator('.letter-prompt[data-on="true"]');
+    if (await prompt.count()) await prompt.click({ force: true }).catch(() => {});
+    await page.waitForTimeout(250);
+  }
+  await page.locator('.sheet').waitFor({ timeout: 15000 });
   await page.waitForTimeout(1200);
   await snap('memory');
 } catch (e) {

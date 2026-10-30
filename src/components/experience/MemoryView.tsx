@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useGiftOrigin } from '../../hooks/useGiftOrigin';
 import { useLeaf } from '../../hooks/useLeaf';
 import { motion } from '../../config/motion';
@@ -7,7 +7,7 @@ import { assetUrl } from '../../lib/text';
 import { Reveal } from '../ui/Reveal';
 import { useDialog } from '../ui/useDialog';
 import { Timeline } from './Timeline';
-import { LightText } from '../ui/LightText';
+import { LightSeq, LightText } from '../ui/LightText';
 import { sound } from '../../lib/audio';
 
 interface Props {
@@ -29,13 +29,31 @@ export default function MemoryView({ gift, index, onClose, closing = false, redu
   const from = useGiftOrigin();
   // K: the page's paper IS the sheet that flew out of the gift (it takes over from it)
   const leaf = useLeaf(closing, reducedMotion);
-  // L: the music box's page is written in time with its tune — a note for each line
-  const beat = gift.shape === 'orb' ? 0.42 : 0.3;
+  // P3: the title, its date and the message, one after another at a reading pace
+  const lines = [gift.title, meta, gift.message].filter(Boolean) as string[];
+  const seq = useMemo(() => {
+    const s = new LightSeq();
+    s.count = lines.length;
+    return s;
+  }, [lines.length]);
+  const at = (t: string | undefined) => (t ? lines.indexOf(t) : -1);
+  // Q: the music box's page is written on the last notes of its tune — each line begins on
+  // a note (a gentle cadence; the reading pace is not forced to keep time)
   useEffect(() => {
     if (!leaf.inked || gift.shape !== 'orb' || reducedMotion) return;
-    const ids = [4, 6, 8].map((p, i) => window.setTimeout(() => sound.comb(p), (0.05 + i * beat) * 1000));
-    return () => ids.forEach(clearTimeout);
-  }, [leaf.inked, gift.shape, beat, reducedMotion]);
+    const cadence = [6, 4, 1, 4, 6];
+    const ids: number[] = [];
+    let alive = true;
+    lines.forEach((_, i) =>
+      void seq.startAt(i).then((at) => {
+        if (alive) ids.push(window.setTimeout(() => sound.comb(cadence[i % cadence.length]), Math.max(0, at - performance.now()) + 40));
+      }),
+    );
+    return () => {
+      alive = false;
+      ids.forEach(clearTimeout);
+    };
+  }, [leaf.inked, gift.shape, reducedMotion, seq]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div
@@ -74,8 +92,8 @@ export default function MemoryView({ gift, index, onClose, closing = false, redu
               {number}
               {gift.subtitle ? ` — ${gift.subtitle}` : ''}
             </p>
-            <LightText as="h2" id="memory-title" className="display" text={gift.title} variant="ink" ready={leaf.inked} delay={0.05} />
-            {meta && <LightText className="memory__meta" text={meta} variant="ink" ready={leaf.inked} delay={0.05 + beat} />}
+            <LightText as="h2" id="memory-title" className="display" text={gift.title} variant="ink" pace="reading" ready={leaf.inked} seq={seq} seqIndex={at(gift.title)} />
+            {meta && <LightText className="memory__meta" text={meta} variant="ink" pace="reading" ready={leaf.inked} seq={seq} seqIndex={at(meta)} />}
           </header>
 
           {gift.coverImage && (
@@ -85,7 +103,7 @@ export default function MemoryView({ gift, index, onClose, closing = false, redu
           )}
 
           {gift.message && (
-            <LightText className="memory__message whisper" text={gift.message} variant="ink" ready={leaf.inked} delay={0.05 + beat * 2} />
+            <LightText className="memory__message whisper" text={gift.message} variant="ink" pace="reading" ready={leaf.inked} seq={seq} seqIndex={at(gift.message)} />
           )}
 
           {gift.timeline && gift.timeline.length > 0 && (

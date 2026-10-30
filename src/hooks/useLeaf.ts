@@ -46,9 +46,9 @@ export function useLeaf(closing: boolean, reducedMotion: boolean) {
     const dur = motion.gift.pageMs;
     const step = (now: number) => {
       const k = Math.min(1, (now - t0) / dur);
-      // it carries on at the sheet's own speed and settles (ease-out, gentler at the start
-      // than a cubic, so there is no kick at the handoff)
-      const e = 1 - (1 - k) * (1 - k);
+      // (P: the sheet has come to rest, open, before the handoff — so the page starts from
+      // still and settles: eased in and out, never a kick)
+      const e = k * k * k * (k * (k * 6 - 15) + 10);
       el.style.transform = quadMatrix(r.width, r.height, lerpQuad(from, to, e), r.left, r.top);
       if (k < 1) raf.current = requestAnimationFrame(step);
       else {

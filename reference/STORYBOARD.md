@@ -274,3 +274,36 @@ The other four (second pass), each into the same widening page, each with its so
 same warp (×1.8) — pages, lid, cork go back, then it sinks onto the ring.
 
 Not built: the box's satin ribbon untying in an S-curve (the lid is lifted off with the bow).
+
+---
+
+## P. The letter floats, and opens only when she touches it
+
+The owner: *"thư khi mở ra và các note trong thư cuộn ra QUÁ NHANH"* — a magic sheet, light,
+floating, opened by a spell. Numbers: `motion.letter`, `motion.reading`.
+
+| t | What happens |
+|---|---|
+| 0 – ~1.3 s | the gift's own mechanism, as quick as before (box walls 0.9–1.3 s, lid, cork, cover…) |
+| ~1.3 – 3.0 s | the sheet leaves the gift (1.2–1.6 s of flight, easing in) — still folded — and comes to rest a little above the middle of the frame (`hoverDist` 1.75 m, `hoverSize` 0.34 of the page, `hoverRise` 0.06) |
+| waiting | it floats: a 0.6 Hz bob of 2.5 % of its height, ±2° sway on two axes, its edges stirring in the air (`wind`), a gilt edge with a bead of gold running round it and breathing (0.45 Hz) — the "touch me" — motes orbiting it. Pointer on it: it lifts 4 % and warms. It does NOT open by itself… |
+| touch / Enter / Space | …until she touches it (an invisible button laid over the sheet, `LetterPrompt`, focused for the keyboard, labelled for screen readers) — or after 10 s (`autoOpen`), so she is never stuck |
+| + 0 – 2.7 s | it opens (`open` 2.7 s): it moves toward her and squares up; the outer crease opens over 1.55 s (eased in and out, long tail), the inner one 0.25 s later; the sheet bows while it opens, then lies flat with one small bounce; motes fall from it; the gold, the air and the edge fade out by 85 % |
+| + 2.7 s | the page takes it over (K's handoff, ≤ 2 px), then straightens (eased in and out: it starts from still) |
+| page | the words come at a reading pace: each line clamp(0.6 + chars × 0.025, 0.8, 2.2) s, lines ≥ 0.35 s apart, a paragraph rests 0.6 s more (`LightSeq`); notes in a timeline appear when a quarter of them scrolls into view; a touch on words still arriving brings them in ×6 quicker |
+
+The letter's clocks are real seconds: the tap that opens it must not hurry it (the gift's
+scene has already ended). Reduced motion: no sheet; the page slides in short, flat.
+
+## Q. The music box: its tune makes the letter
+
+There is no letter in the music box. The lid lifts quickly (0.08 → 0.3 of a 4.4 s opening);
+the comb plays 8 notes (0.22 → 0.72), and every note lets a cluster of ~95 motes go up out of
+the box's mouth (`CondenseMotes`: 760 points, each with its own delay after its note and its
+own flight of 1.15–1.6 s on a rising Bézier with a slow curl). They land on points sampled on
+the face of a folded sheet floating ABOVE the box (`hoverRiseAir` 0.2 of the frame); from
+0.86 of the opening the real sheet appears from its middle outward (`reveal`, a soft torn
+edge) and the motes it covers go out. Then it is P exactly: it floats, waits for her touch,
+opens its three folds, becomes the page. On the page, each line begins on a note of a gentle
+cadence (6-4-1-4-6) — the reading pace is not forced to keep time. Closing runs the clock
+back: the light flies home into the box.

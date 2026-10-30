@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode, type CSSProperties } from 'react';
+import { motion } from '../../config/motion';
 
 interface Props {
   children: ReactNode;
@@ -25,7 +26,8 @@ export function Reveal({ children, as: Tag = 'div', className = '', style, root 
           io.disconnect();
         }
       },
-      { root: root?.current ?? null, threshold: 0.15, rootMargin: '0px 0px -8% 0px' },
+      // (P3: a note shows when a quarter of it is in view — one at a time, as she scrolls)
+      { root: root?.current ?? null, threshold: motion.reading.inView, rootMargin: '0px 0px -8% 0px' },
     );
     io.observe(el);
     return () => io.disconnect();

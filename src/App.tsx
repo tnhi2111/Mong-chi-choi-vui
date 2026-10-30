@@ -5,6 +5,7 @@ import { beginScene, endScene, hurryUp, sceneWait } from './lib/pace';
 import { giftMark, publishGiftMark } from './lib/giftMark';
 import { carrier } from './lib/carrier';
 import { LightTextLayer } from './components/ui/LightText';
+import { LetterPrompt } from './components/experience/LetterPrompt';
 import { gifts } from './data/gifts';
 import type { FinalePhase, Stage, Veil } from './types';
 import type { DustMode, DustPhase } from './components/3d/TransitionDust';
@@ -344,7 +345,9 @@ export default function App() {
     // (storyboard I), and a net that fires early would open the memory mid-performance
     const shape = gifts.find((g) => g.id === openingId)?.shape ?? 'box';
     const secs = reducedMotion ? MOTION.gift.quick : (MOTION.gift.open as Record<string, number>)[shape] ?? 5.2;
-    const id = setTimeout(() => void giftOpened(openingId), secs * 1000 + 1200);
+    // (P: and the letter's float — it opens by itself after `letter.autoOpen` — and its opening)
+    const letter = reducedMotion ? 0 : MOTION.letter.autoOpen + MOTION.letter.open + 1.5;
+    const id = setTimeout(() => void giftOpened(openingId), (secs + letter) * 1000 + 1200);
     return () => clearTimeout(id);
   }, [openingId, activeId, giftOpened, reducedMotion]);
 
@@ -506,6 +509,7 @@ export default function App() {
 
       <CursorLayer reducedMotion={reducedMotion} />
       <LightTextLayer />
+      {openingId && !activeId && <LetterPrompt />}
 
       <main className="stage" data-stage={stage} data-veil={veil} data-leaving={leaving} data-opening={openingId ?? ""} inert={overlayOpen}>
         {stage === 'intro' && (

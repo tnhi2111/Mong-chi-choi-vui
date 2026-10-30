@@ -6,7 +6,7 @@ import { motion as MOTION } from '../../config/motion';
 import { publishGiftMark } from '../../lib/giftMark';
 import { ShotTitle } from './ShotTitle';
 import * as THREE from 'three';
-import { pace } from '../../lib/pace';
+import { endScene, pace } from '../../lib/pace';
 import { useShader } from './useShader';
 import type { Gift } from '../../data/gifts';
 import { Glow } from './Glow';
@@ -18,6 +18,7 @@ import { LetterDog } from './LetterDog';
 import { Rope, RopeTube } from './verlet';
 import { roomHand, handNear, giftRing } from './sceneStore';
 import { PaperCarrier, newCarrierPose, type CarrierPose } from './PaperCarrier';
+import { CondenseMotes, newCondenseUniforms } from './CondenseMotes';
 import { carrier, leafRect } from '../../lib/carrier';
 
 interface Props {
@@ -448,14 +449,15 @@ const JOURNEY: [number, number][] = Array.from({ length: 22 }, (_, j) => {
 });
 /** The music box's tune: [where in the opening it plays, pentatonic step]. */
 const MUSIC_NOTES: [number, number][] = [
-  [0.44, 4],
-  [0.5, 6],
-  [0.56, 8],
-  [0.62, 6],
-  [0.68, 4],
-  [0.74, 1],
-  [0.8, 4],
-  [0.9, 6],
+  // (Q: the tune makes the letter — it begins as soon as the lid is up)
+  [0.22, 4],
+  [0.29, 6],
+  [0.36, 8],
+  [0.43, 6],
+  [0.5, 4],
+  [0.57, 1],
+  [0.64, 4],
+  [0.72, 6],
 ];
 /** How long a steady press takes to lift a lid all the way (seconds). */
 const HOLD_SECS = 0.7;
@@ -482,11 +484,12 @@ const OPEN_KEYS: [number, number][] = [
  * opening (for the puppy: of its own flight, `motion.gift.carry.dogSecs`).
  */
 const CARRY: Record<Gift['shape'], { mode: 'tri' | 'half' | 'roll' | 'page'; appear: number; fly: [number, number]; unfold: [number, number] }> = {
-  box: { mode: 'half', appear: 0.3, fly: [0.4, 1], unfold: [0.52, 0.9] },
-  capsule: { mode: 'roll', appear: 0.36, fly: [0.4, 1], unfold: [0.5, 0.92] },
-  star: { mode: 'page', appear: 0.5, fly: [0.52, 1], unfold: [0.56, 0.95] },
-  orb: { mode: 'tri', appear: 0.5, fly: [0.55, 1], unfold: [0.64, 0.95] },
-  envelope: { mode: 'tri', appear: 0, fly: [0, 1], unfold: [0.2, 0.88] },
+  box: { mode: 'half', appear: 0.3, fly: [0.48, 1], unfold: [0, 0] },
+  capsule: { mode: 'roll', appear: 0.36, fly: [0.46, 1], unfold: [0, 0] },
+  star: { mode: 'page', appear: 0.5, fly: [0.55, 1], unfold: [0, 0] },
+  // (Q: no flight — the sheet condenses out of the tune's light where it will float)
+  orb: { mode: 'tri', appear: 0.86, fly: [0, 0.0001], unfold: [0, 0] },
+  envelope: { mode: 'tri', appear: 0, fly: [0, 1], unfold: [0, 0] },
 };
 function openWarp(u: number): number {
   const x = THREE.MathUtils.clamp(u, 0, 1);
@@ -767,15 +770,17 @@ function GiftBody({
         if (ribbonTail.current) ribbonTail.current.rotation.x = Math.sin(t * 0.9 * motion) * 0.12 * motion - coverK * 0.7;
         break;
       }
-      case 'orb':
-        // the music box: the lid lifts, the little heart rises on its spindle and turns
-        if (lid.current) lid.current.rotation.x = -open * 1.75 - lift * 0.3;
+      case 'orb': {
+        // the music box: the lid lifts (quickly — the mechanism keeps its pace), the little
+        // heart rises on its spindle and turns, the drum turns and the comb plays
+        const lidUp = ss(o, 0.08, 0.3);
+        if (lid.current) lid.current.rotation.x = -lidUp * 1.75 - lift * 0.3;
         if (figure.current) {
-          figure.current.position.y = -0.075 + open * 0.24; // tucked under the lid until it opens
-          figure.current.rotation.y = t * 1.6 * open;
+          figure.current.position.y = -0.075 + lidUp * 0.24; // tucked under the lid until it opens
+          figure.current.rotation.y = t * 1.6 * lidUp;
         }
-        if (key.current) key.current.rotation.x = t * (0.25 * motion + open * 2.4);
-        if (drum.current) drum.current.rotation.x = t * open * 3;
+        if (key.current) key.current.rotation.x = t * (0.25 * motion + lidUp * 2.4);
+        if (drum.current) drum.current.rotation.x = t * lidUp * 3;
         // Storyboard I.4 — every note the comb plays lets a mote of light go up, and leaves a
         // ripple running out across the velvet
         MUSIC_NOTES.forEach(([at, pitch], n) => {
@@ -808,6 +813,7 @@ function GiftBody({
           m.rotation.x = since < 1.5 ? Math.sin(since * 95) * 0.09 * Math.exp(-since * 5) * motion : 0;
         });
         break;
+      }
     }
     if (light.current) {
       // a warm breath of light from inside — it shows the inside, it doesn't blind
@@ -1286,7 +1292,21 @@ export function Gift3D({
   const carry = CARRY[gift.shape];
   const pose = useRef<CarrierPose>(newCarrierPose());
   const dogFly = useRef(0);
+  /** P: the letter's own phases once it has flown out: waiting to be touched, then opening */
+  const letter = useRef({ phase: 'none' as 'none' | 'wait' | 'open', wait: 0, t: 0, warm: 0 });
   const fired2 = useRef(new Set<string>());
+  // Q: the music box's light, which condenses into its letter
+  const condense = useMemo(() => newCondenseUniforms(), []);
+  const noteSecs = useMemo(
+    () =>
+      MUSIC_NOTES.map(([at]) => {
+        // when, in seconds of the opening, the progress passes this note (the warp's inverse)
+        let x = 0;
+        while (x < 1 && openWarp(x) < at) x += 0.002;
+        return x * openSecs;
+      }),
+    [openSecs],
+  );
   const cv = useMemo(
     () => ({
       sp: new THREE.Vector3(),
@@ -1297,6 +1317,12 @@ export function Gift3D({
       ray: new THREE.Vector3(),
       fwd: new THREE.Vector3(),
       tilt: new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -MOTION.gift.carry.tilt),
+      hoverTilt: new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -0.08),
+      hp: new THREE.Vector3(),
+      hq: new THREE.Quaternion(),
+      up: new THREE.Vector3(),
+      right: new THREE.Vector3(),
+      sway: new THREE.Quaternion(),
       srcW: 0.3,
       seen: false,
     }),
@@ -1338,7 +1364,7 @@ export function Gift3D({
     if (opening) {
       clockOpen.current = Math.min(openSecs, clockOpen.current + real * pace.rate);
       progress.current = openWarp(clockOpen.current / openSecs);
-    } else if (clockOpen.current > 0) {
+    } else if (clockOpen.current > 0 && letter.current.t <= 0) {
       // closing: the same curve, run backwards — what came out goes back in, the walls rise,
       // the lid comes down — a little quicker than it opened
       clockOpen.current = Math.max(0, clockOpen.current - real * 1.8);
@@ -1536,10 +1562,13 @@ export function Gift3D({
       publishGiftMark({ x: (markAt.x * 0.5 + 0.5) * w, y: (-markAt.y * 0.5 + 0.5) * hgt, width: px * 2, height: px * 2, tint: gift.tint });
     }
 
-    // K: the sheet. Its pose is a function of the opening's progress — where it would be in
-    // the gift, blended toward its place in front of her — so closing simply runs it back.
+    // K / P: the sheet. Its flight is a function of the opening's progress (from where it
+    // would be in the gift to where it floats in front of her), so closing runs it back; then
+    // it WAITS, floating, until she touches it (P), and opens slowly on its own clock.
     {
       const p = pose.current;
+      const L = MOTION.letter;
+      const lt = letter.current;
       const src = markObj.current;
       if (src) {
         src.updateWorldMatrix(true, false);
@@ -1547,39 +1576,135 @@ export function Gift3D({
         cv.srcW = ((src.userData.carryW as number) ?? 0.3) * cv.ss.x;
         cv.seen = true;
       }
-      // the puppy's letter runs on its own clock once it is out of the envelope
+      // the puppy's letter runs on its own clock once it is out of the envelope (and, when
+      // she closes the page, only flies back once the letter has folded itself up again)
       if (isDog) {
         const out = opening && !!src;
-        dogFly.current = THREE.MathUtils.clamp(dogFly.current + ((out ? 1 : -1.4) * real * pace.rate) / MOTION.gift.carry.dogSecs, 0, 1);
+        if (out || lt.t <= 0) dogFly.current = THREE.MathUtils.clamp(dogFly.current + ((out ? 1 : -1.4) * real * pace.rate) / MOTION.gift.carry.dogSecs, 0, 1);
       }
       const u = isDog ? dogFly.current : o;
+      const air = gift.shape === 'orb';
+      if (air) cv.seen = true;
       const show = !reducedMotion && cv.seen && (isDog ? dogFly.current > 0 : (opening || clockOpen.current > 0) && o >= carry.appear);
       p.show = show;
-      if (show) {
+      // P: the letter's own phases. Real seconds — her tap to open must not hurry it.
+      const flown = isDog ? dogFly.current >= 1 : o >= 1;
+      if (show && opening && flown) {
+        if (lt.phase === 'none') {
+          lt.phase = 'wait';
+          lt.wait = 0;
+          carrier.requestOpen = false;
+          endScene(`gift:${gift.id}`);
+        }
+        if (lt.phase === 'wait') {
+          lt.wait += real;
+          const held = (window as unknown as { __letterHold?: boolean }).__letterHold;
+          if ((carrier.requestOpen || lt.wait > L.autoOpen) && !held) {
+            lt.phase = 'open';
+            carrier.requestOpen = false;
+            sound.paper(3, 420);
+          }
+        }
+        if (lt.phase === 'open') lt.t = Math.min(L.open, lt.t + real);
+      } else if (!opening) {
+        lt.t = Math.max(0, lt.t - real * 1.6);
+        if (lt.t <= 0) lt.phase = 'none';
+      }
+      // (only the gift that is opening speaks for the sheet — the other four would say "no")
+      const mine = opening || clockOpen.current > 0 || dogFly.current > 0;
+      if (mine) carrier.waiting = show && opening && lt.phase === 'wait';
+      lt.warm += ((mine && carrier.hover && carrier.waiting ? 1 : 0) - lt.warm) * (1 - Math.exp(-dt * 6));
+      const busy = opening || clockOpen.current > 0;
+      if (air && !busy) condense.uOn.value = 0;
+      if (show || (air && busy && !reducedMotion)) {
         const cam = state.camera as THREE.PerspectiveCamera;
         const W = state.size.width;
         const H = state.size.height;
         const lr = leafRect(W, H);
         const asp = lr.width / lr.height;
         if (Math.abs(asp - aspect) > 0.002) setAspect(asp);
-        // where the page will be: through its centre, at `dist` in front of the lens, upright,
-        // leaning back by `tilt`, `hand` of the page's size
         const C = MOTION.gift.carry;
         cv.ray.set(((lr.left + lr.width / 2) / W) * 2 - 1, -((lr.top + lr.height / 2) / H) * 2 + 1, 0.5).unproject(cam).sub(cam.position).normalize();
         cam.getWorldDirection(cv.fwd);
-        cv.tp.copy(cam.position).addScaledVector(cv.ray, C.dist / Math.max(0.2, cv.ray.dot(cv.fwd)));
-        cv.tq.copy(cam.quaternion).multiply(cv.tilt);
         const tanV = Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2);
+        const along = (d: number, out: THREE.Vector3) => out.copy(cam.position).addScaledVector(cv.ray, d / Math.max(0.2, cv.ray.dot(cv.fwd)));
+        // where it floats while it waits, and where the page takes it over (K's handoff pose)
+        along(L.hoverDist, cv.hp);
+        // (a little above the middle, so the gift it came out of still shows below it)
+        cv.up.set(0, 1, 0).applyQuaternion(cam.quaternion);
+        cv.hp.addScaledVector(cv.up, (air ? L.hoverRiseAir : L.hoverRise) * 2 * L.hoverDist * tanV);
+        along(C.dist, cv.tp);
+        const hH = ((lr.height * L.hoverSize) / H) * 2 * L.hoverDist * tanV;
         const tH = ((lr.height * C.hand) / H) * 2 * C.dist * tanV;
+        cv.tq.copy(cam.quaternion).multiply(cv.tilt);
+        cv.hq.copy(cam.quaternion).multiply(cv.hoverTilt);
+        // Q: the music box's sheet comes from nowhere but its own place in the air
+        if (air) {
+          cv.sp.copy(cv.hp);
+          cv.sq.copy(cv.hq);
+          cv.srcW = hH * asp;
+          // its light: out of the box's mouth, onto the sheet's shape, note by note
+          condense.uT.value = clockOpen.current;
+          if (markObj.current) markObj.current.getWorldPosition(condense.uFrom.value);
+          condense.uSheet.value.compose(cv.hp, cv.hq, cv.ss.set(hH * asp, hH, hH));
+          condense.uNotes.value = noteSecs;
+          condense.uAspect.value = asp;
+          condense.uOn.value = 1;
+          condense.uReveal.value = THREE.MathUtils.smoothstep(o, carry.appear, 1);
+        }
+        // 1. the flight out of the gift (it arrives slowing, to float)
         const fk = THREE.MathUtils.smoothstep(u, carry.fly[0], carry.fly[1]);
-        // (leaves gently, and arrives still moving: the page carries that speed on)
-        const e = fk * fk * (2 - fk);
-        p.pos.lerpVectors(cv.sp, cv.tp, e);
+        const e = fk * fk * (3 - 2 * fk);
+        // 2. the opening (P1): from its float to the handoff, the creases a beat apart
+        const k = lt.t / L.open;
+        const go = THREE.MathUtils.smoothstep(k, 0.08, 0.88);
+        const move = go * go * (3 - 2 * go);
+        const crease = (t: number) => {
+          // eased in and out, with a long tail (it settles, it does not stop)
+          const x = THREE.MathUtils.clamp(t / L.crease, 0, 1);
+          return 0.5 - 0.5 * Math.cos(Math.PI * Math.pow(x, 0.78));
+        };
+        const ta = lt.t - 0.18;
+        const fA = 1 - crease(ta);
+        const fB = 1 - crease(ta - L.creaseLag);
+        p.fold = carry.mode === 'tri' ? fA : fA;
+        p.foldB = fB;
+        // it bows as it opens, then lies flat with one small bounce
+        const flatAt = 0.18 + L.creaseLag + L.crease;
+        const since = lt.t - flatAt;
+        p.curl = since < 0 ? Math.sin(Math.PI * Math.min(1, Math.max(0, ta) / (L.crease + L.creaseLag))) * 0.45 : -0.28 * Math.exp(-since * 5) * Math.sin(since * 11);
+        // where it is
+        p.pos.lerpVectors(cv.sp, cv.hp, e);
         p.pos.y += Math.sin(Math.PI * e) * C.arc;
-        p.quat.slerpQuaternions(cv.sq, cv.tq, e);
-        p.height = THREE.MathUtils.lerp(cv.srcW / asp, tH, e);
-        p.fold = 1 - THREE.MathUtils.smoothstep(u, carry.unfold[0], carry.unfold[1]);
+        p.quat.slerpQuaternions(cv.sq, cv.hq, e);
+        p.height = THREE.MathUtils.lerp(cv.srcW / asp, hH, e);
+        if (lt.t > 0) {
+          p.pos.lerp(cv.tp, move);
+          p.quat.slerp(cv.tq, move);
+          p.height = THREE.MathUtils.lerp(hH, tH, move);
+        }
+        // its float (P1): a slow bob, a little sway, lifting toward her hand — fading out as it opens
+        const idle = e * (1 - THREE.MathUtils.smoothstep(k, 0, 0.5));
+        const tt = state.clock.elapsedTime;
+        cv.up.set(0, 1, 0).applyQuaternion(cam.quaternion);
+        p.pos.addScaledVector(cv.up, (Math.sin(tt * Math.PI * 2 * L.bobHz) * L.bobAmp + lt.warm * 0.04) * p.height * idle);
+        cv.sway.setFromAxisAngle(cv.fwd, THREE.MathUtils.degToRad(L.swayDeg) * Math.sin(tt * 0.9) * idle);
+        p.quat.premultiply(cv.sway);
+        cv.sway.setFromAxisAngle(cv.right.set(1, 0, 0).applyQuaternion(cam.quaternion), THREE.MathUtils.degToRad(L.swayDeg) * 0.6 * Math.sin(tt * 0.7 + 1) * idle);
+        p.quat.premultiply(cv.sway);
+        p.height *= 1 + 0.03 * lt.warm * idle;
         p.flutter = Math.sin(Math.PI * e) * (1 - e * 0.5);
+        // the magic, gone by the handoff: air at its edges, gold at its rim (breathing — "touch
+        // me"), its edge, the motes round it; motes fall from it while it opens
+        const fade = 1 - THREE.MathUtils.smoothstep(k, 0.45, 0.85);
+        const breath = 0.5 + 0.5 * Math.sin(tt * Math.PI * 2 * 0.45);
+        p.wind = e * fade;
+        p.rim = e * fade * (0.45 + 0.35 * breath * (lt.phase === 'wait' ? 1 : 0) + 0.4 * lt.warm);
+        p.edge = e * (1 - THREE.MathUtils.smoothstep(k, 0.6, 0.9));
+        p.warm = lt.warm;
+        p.motes = idle;
+        p.reveal = air ? THREE.MathUtils.smoothstep(o, carry.appear, 1) : 1;
+        p.fall = Math.sin(Math.PI * THREE.MathUtils.smoothstep(k, 0.05, 0.9)) * fade;
         if (fk > 0 && !fired2.current.has('out')) {
           fired2.current.add('out');
           sound.paper(1);
@@ -1589,12 +1714,15 @@ export function Gift3D({
         carrier.live = show;
         carrier.fold = carry.mode;
       }
-      if (isDog && dogFly.current >= 1 && opening) delivered();
-    }
-
-    if (opening && o >= 1 && !notified.current && !isDog) {
-      notified.current = true;
-      onOpened(gift.id);
+      // the page takes over once the letter has opened (P) — at once without a sheet
+      const done = reducedMotion || !cv.seen ? (isDog ? false : o >= 1) : lt.t >= L.open;
+      if (opening && done && !notified.current) {
+        if (isDog) delivered();
+        else {
+          notified.current = true;
+          onOpened(gift.id);
+        }
+      }
     }
   });
 
@@ -1679,6 +1807,7 @@ export function Gift3D({
       )}
       {!isDog && <ShotTitle ref={titleCard} title={gift.title} subtitle={gift.subtitle} />}
       {!reducedMotion && <PaperCarrier pose={pose} mode={carry.mode} aspect={aspect} />}
+      {!reducedMotion && gift.shape === 'orb' && <CondenseMotes uniforms={condense} />}
       <group ref={root} position={home}>
         <Glow ref={glow} color={gift.tint} size={1.5} opacity={0.14} position={isDog ? [0, 0.55, 0] : undefined} />
         {!isDog && (
