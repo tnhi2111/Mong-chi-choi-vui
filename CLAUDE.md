@@ -544,6 +544,84 @@ geometry laid along the wall; the layout she will see, `portrait` is passed to P
 from `.claude/skills`), zoom that follows the cursor with inertia, and blowing the candles
 out with a gesture. The brief for them is in `reference/STORYBOARD.md` C.
 
+## The light sprite, the real room, the hand (storyboards D, E, F — this pass)
+
+Shot lists and the "why" for every number: `reference/STORYBOARD.md` D/E/F. Numbers live in
+`src/config/motion.ts` (`motion.sprite`, `motion.follow`).
+
+**D — a light sprite leads the story.** `lightSprite.ts` (module singleton: leader on
+CatmullRom legs, 1.6 s of recorded path, flock shape springs, camera-follow targets, `uWake` /
+`uBuild` for the room's shaders, `rebase()` for a change of coordinates), `LightSprite.tsx`
+(one points draw in Scene3D outside the worlds: swarm with per-mote lag + divergence-free
+flow, ribbons, camera orbiters, `uCorridor` spiral tunnel, `uStars` sky; size grows with
+distance, `uSpan`), `spriteScripts.ts` (the flights). Signals the page waits on go through
+`src/lib/story.ts` (no three.js in the main chunk).
+- CameraRig: `sprite.cam` blends in on a spring; following, the rig's own springs chase the
+  lagged point (lag 0.25 s, lookahead 0.32 s), roll ≤ 4° from lateral acceleration, breath
+  0.15° @ 0.3 Hz, fov +≤9° with speed; her orbit/parallax are set aside meanwhile. A new rig
+  **adopts the last rig's springs** if it ran < 250 ms ago (`camera.userData.rig`), and
+  `rebaseCamera()` moves camera + springs together. `nudge` = focus-follows-cursor.
+- D1 heart → password: App mounts the gate as the heart settles (`anticipate + release`);
+  PasswordGate measures the card, draws an SVG frame (top centre, clockwise, linear,
+  `--leave-ms` / `--draw-ms`) and publishes its rect (`src/lib/gateRect.ts`); IntroWorld flies
+  the sprite along the same outline at the heart's depth (`cardFrame()`), the writing
+  condenses after (`.gate__card.draws`).
+- D2 password → room: IntroWorld plays `leaveHeartScript` on the dive (corridor + hold);
+  App uses dust mode `veil` (only the dark edges; the hole never closes); RoomWorld is
+  `ledIn` (`drawIn` = warp **or veil**): its rig is mounted at once, and when compiled it
+  rebases leader + camera into the room (`roomTourScript`: entry in front, past window →
+  sign → balloons → cake → front-right, then up into the orb), `touring` blocks her hand
+  until `room-home`. Shaders dim what the leader has not passed (`spriteBuilt`) and flare
+  where it passes (`spriteGlow`); set pieces in `cutGroups` lift into place
+  (`sprite.builtAt`); RoomBuild's light lands along the sweep (`sweep: true`).
+- D3 room → finale: RoomWorld plays `windowScript` (orb → arched window → through the pane;
+  `uStars` 0.6 so the flock becomes the night beyond); when the camera is
+  `window.swapAt` m from the glass it signals `window`; App swaps to the finale with
+  `.night-wash` (the window's blues) washing into the finale's wine; FinalWorld rebases so its
+  orb is straight ahead and plays `finaleArrivalScript`. Finale → room still uses the dust.
+- Reduced motion: no flights (old short dives). `?nogl`: CSS iris.
+
+**E — the room.** `verlet.ts` (Rope: fixed 120 Hz substeps, length constraints, floor/sphere/
+box collisions, `nudge`; RopeTube: round string or flat satin band rebuilt in place).
+Box gift `RibbonTails` (Verlet satin in the lid's space), balloon strings (Verlet), garland
+cable (catenary, shared `GARLAND_SWAY`), `ArchedWindow` (built frame + pane + moon shaft) in
+RoomSet, music-box drum pins + 12-tooth ringing comb, rose-water `Liquid` in the bottle,
+floor bevels + near-camera pores, props wood/paper detail near the camera only,
+`RoomEnvironment` (Lights: PMREM of the room's own light cards, 128 px, swapped in for the
+room). Set-piece build animation lifts only (several groups hold world-space children —
+scaling them would pull them to the middle).
+
+**F — the hand.** `roomHand` + `handNear()` and `giftRing` in sceneStore; RoomSet writes the
+hand every frame (touch too), `handUniforms` / `HAND_GLSL` (warm glow near the ray, floor
+pool + hand shadow); Gift3D: `shove` springs, ring waves (80 ms/step, ×0.6), ring spin
+integrated in RoomWorld; curtains in their vertex shader; candles blow out on a sweep or a
+1.6 s still hand (Cake).
+
+- **The tour never ties her hands**: any pointerdown / keydown during it (after 0.6 s) calls
+  `sprite.skip()` (flock fades, camera let go on its spring, build finishes, pending legs'
+  `onEnd`/signals honoured); App keeps the gift buttons live (`touringRef`) and choosing a
+  gift signals `skip-tour` first. (The tour runs on 3D time: a slow device stretches it.)
+- **Prewarm** also compiles the room's own ShaderMaterials (`roomWarmShaders()` in RoomSet,
+  `propsWarmShaders()` in RoomProps, the bottle's liquid) during the welcome.
+- **Measured without a GPU (swiftshader), be honest about it**: entering the room led in by
+  the sprite blocks the main thread ~10.7 s vs ~3.0 s on the commit before (both with the
+  welcome long enough for Prewarm to finish). The *amount* of shader compiling is the same
+  (138 vs 140 shaders, ~13 s of `getShaderInfoLog`/`getProgramInfoLog` either way); the
+  difference is that the room is now shown at once (dim, woken by the sprite) instead of in
+  pieces, so the lazy compiles land in one frame. With a GPU and KHR_parallel_shader_compile
+  this should be far shorter — **verify on the owner's PC: `node scripts/qa-perf.mjs --gpu`**.
+  If it is over budget, compile with every descendant forced visible before `compileAsync`
+  in RoomWorld (objects hidden at compile time are skipped and compile on first draw).
+- Pre-existing in this cloud (also failing on 36add11, no GPU): `qa --reduced` "clicking the
+  3D gift did not start opening" (press-to-lift runs on 3D time), `qa-visual` gift-opening
+  wait, `qa-perf` budget.
+
+QA for this pass: `node scripts/qa-sprite.mjs [--size=960x600] [--only=a,b,c,d] [--log]` films
+the three flights (and `d`: a hand sweep across the gifts) on a **paused virtual clock** (Playwright `clock.install` + `pauseAt`;
+each step is exact story time, frames over CDP) — the only honest way to see timing without
+a GPU (swiftshader renders ~2 fps). CSS (card frame, night wash) still runs on the wall clock
+in those films. `--log` prints leader / camera / weight per frame.
+
 ## Design references (`reference/`)
 
 - `reference/VIDEO_ANALYSIS.md` — the owner's reference videos, analysed (3 in the first

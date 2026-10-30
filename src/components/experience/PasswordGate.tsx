@@ -1,12 +1,19 @@
-import { useEffect, useRef, useState, type CSSProperties, type FormEvent } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type FormEvent } from 'react';
 import { birthdayConfig } from '../../config/birthday';
 import { checkBirthdayPassword } from '../../lib/password';
 import { motion } from '../../config/motion';
+import { publishGateRect } from '../../lib/gateRect';
 
 interface Props {
   onSuccess: () => void;
   onFail?: () => void;
+  /** The light sprite draws the card's frame first (storyboard D3.1); the writing condenses after. */
+  draw?: boolean;
 }
+
+/** How far the drawn frame stands off the writing (px), and its corner radius. */
+const FRAME_PAD = 22;
+const FRAME_R = 26;
 
 /** Auto-inserts slashes while she types digits only (numeric keyboards have no "/"). */
 function softMask(raw: string): string {
@@ -20,13 +27,25 @@ function softMask(raw: string): string {
   return `${d.slice(0, 2)}/${d.slice(2, 4)}/${d.slice(4)}`;
 }
 
-export function PasswordGate({ onSuccess, onFail }: Props) {
+export function PasswordGate({ onSuccess, onFail, draw = false }: Props) {
   const cfg = birthdayConfig.gate;
   const [value, setValue] = useState('');
   const [tries, setTries] = useState(0);
   const [shake, setShake] = useState(0);
   const [ok, setOk] = useState(false);
   const input = useRef<HTMLInputElement>(null);
+  const form = useRef<HTMLFormElement>(null);
+  // the frame: measured once the card is laid out, published for the light to fly along
+  const [frame, setFrame] = useState<{ w: number; h: number } | null>(null);
+  useLayoutEffect(() => {
+    if (!draw || !form.current) return;
+    const r = form.current.getBoundingClientRect();
+    const w = r.width + FRAME_PAD * 2;
+    const h = r.height + FRAME_PAD * 2;
+    setFrame({ w, h });
+    publishGateRect({ left: r.left - FRAME_PAD, top: r.top - FRAME_PAD, width: w, height: h, radius: FRAME_R });
+    return () => publishGateRect(null);
+  }, [draw]);
 
   useEffect(() => {
     const id = setTimeout(() => input.current?.focus({ preventScroll: true }), 900);
@@ -55,11 +74,33 @@ export function PasswordGate({ onSuccess, onFail }: Props) {
     '--card-ms': `${motion.unlock.cardMs}ms`,
     '--stagger': `${motion.unlock.cardStaggerMs}ms`,
     '--gather-ms': `${motion.enterRoom.gatherMs}ms`,
+    '--leave-ms': `${motion.sprite.card.leave * 1000}ms`,
+    '--draw-ms': `${motion.sprite.card.draw * 1000}ms`,
   } as CSSProperties;
+  // the outline, from the top centre clockwise — the same way and speed the light flies it
+  const framePath = frame
+    ? (() => {
+        const { w, h } = frame;
+        const r = Math.min(FRAME_R, w / 2, h / 2);
+        return `M ${w / 2} 0 H ${w - r} A ${r} ${r} 0 0 1 ${w} ${r} V ${h - r} A ${r} ${r} 0 0 1 ${w - r} ${h} H ${r} A ${r} ${r} 0 0 1 0 ${h - r} V ${r} A ${r} ${r} 0 0 1 ${r} 0 Z`;
+      })()
+    : '';
 
   return (
     <div className="layer gate">
-      <form className={`gate__card condense${ok ? ' is-ok' : ''}`} style={condense} onSubmit={submit} noValidate>
+      <form ref={form} className={`gate__card condense${draw ? ' draws' : ''}${ok ? ' is-ok' : ''}`} style={condense} onSubmit={submit} noValidate>
+        {draw && frame && (
+          <svg
+            className="gate__frame"
+            width={frame.w}
+            height={frame.h}
+            viewBox={`-1 -1 ${frame.w + 2} ${frame.h + 2}`}
+            style={{ left: -FRAME_PAD - 1, top: -FRAME_PAD - 1 }}
+            aria-hidden="true"
+          >
+            <path d={framePath} pathLength={1} />
+          </svg>
+        )}
         <p className="eyebrow" style={{ '--i': 0 } as CSSProperties}>
           {cfg.subtitle}
         </p>

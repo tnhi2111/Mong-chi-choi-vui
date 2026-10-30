@@ -6,14 +6,17 @@ import type { Gift } from '../../data/gifts';
 import { MemoryCelestial } from './MemoryCelestial';
 import { Gift3D } from './Gift3D';
 import { ParticleField } from './ParticleField';
-import { CameraRig } from './CameraRig';
+import { CameraRig, rebaseCamera } from './CameraRig';
+import { handUniforms, sprite } from './lightSprite';
+import { story } from '../../lib/story';
+import { roomTourScript, windowScript } from './spriteScripts';
 import { getFloorTexture, getShadowTexture } from './glowTexture';
 import { usePointerOrbit } from '../../hooks/usePointerOrbit';
 import { useDive } from '../../hooks/useDive';
 import { RoomBuild, sampleRoom, type BuildPoints } from './RoomBuild';
 import { motion as MOTION } from '../../config/motion';
-import { hoverLight, roomLights } from './sceneStore';
-import { RoomSet, SIGN_PLACEMENT, STAGE_STEP, WALL_R } from './RoomSet';
+import { giftRing, hoverLight, roomHand, roomLights } from './sceneStore';
+import { RoomSet, SIGN_PLACEMENT, STAGE_STEP, WALL_R, WINDOW_ANGLE } from './RoomSet';
 import { safeDrop } from './BirthdaySign';
 import { cakePosition } from './RoomProps';
 import { Html } from '@react-three/drei';
@@ -152,13 +155,46 @@ export function RoomWorld({
   const opening = openingId !== null;
   // leaving for the finale is told in two beats (step back, then dive) — see useDive
   const divePhase = useDive(leaving);
+  // Storyboard D3.3: on to the finale, the light sprite leaves the orb and flies out through
+  // the arched window; the camera runs after it, into the glass (App swaps the finale in
+  // when it gets there). Reduced motion keeps the plain dive into the orb.
+  const windowFlight = leaving && !reducedMotion && divePhase === 'dive';
+  useEffect(() => {
+    if (!windowFlight) return;
+    const glass = new THREE.Vector3(Math.sin(WINDOW_ANGLE) * WALL_R, FLOOR_Y + 1.45, -Math.cos(WINDOW_ANGLE) * WALL_R);
+    // out through the left-hand lower pane (the glazing bars cross at the middle)
+    const along = new THREE.Vector3(Math.cos(WINDOW_ANGLE), 0, Math.sin(WINDOW_ANGLE));
+    glass.addScaledVector(along, -0.42);
+    const outward = new THREE.Vector3(Math.sin(WINDOW_ANGLE), 0, -Math.cos(WINDOW_ANGLE));
+    const orb = new THREE.Vector3(0, ORB_Y, 0);
+    sprite.play(windowScript(orb, glass, outward), orb);
+  }, [windowFlight]);
+  // …and when the camera, running after it, reaches the glass (the night fills the frame),
+  // the finale can take over
+  const atGlass = useRef(false);
+  useEffect(() => void (atGlass.current = false), [windowFlight]);
+  useFrame(({ camera }) => {
+    if (!windowFlight || atGlass.current) return;
+    if (Math.hypot(camera.position.x, camera.position.z) > WALL_R - MOTION.sprite.window.swapAt) {
+      atGlass.current = true;
+      story.signal('window');
+    }
+  });
   const openIndex = gifts.findIndex((g) => g.id === openingId);
+  /**
+   * Storyboard D3.2: she is led in by the light sprite. Its corridor is still flying when the
+   * room mounts; once the room is ready the flight carries on INSIDE it (a change of
+   * coordinates under the moving camera), past the window, the sign, the balloons and the
+   * cake — each wakes as it passes — and up into the orb. Her hand waits until it is home.
+   */
+  const ledIn = drawIn && !reducedMotion;
+  const [touring, setTouring] = useState(ledIn);
 
   // a hidden moment in progress (the cake or the sign) — see below
   const [moment, setMoment] = useState<Moment | null>(null);
   const [momentNear, setMomentNear] = useState(false);
   const orbit = usePointerOrbit({
-    enabled: !opening && !paused && !moment,
+    enabled: !opening && !paused && !moment && !touring,
     sensitivity: 0.005,
     pitch: portrait ? [-0.45, 0.25] : [-0.25, 0.6],
     zoom: [0.78, 1.3],
@@ -193,7 +229,7 @@ export function RoomWorld({
   const onMoment = useCallback(
     (target: Moment, wish?: boolean | 'play') => {
       momentHit.current = true;
-      if (opening || paused || wish === 'play') return;
+      if (opening || paused || touring || wish === 'play') return;
       if (wish) {
         // a wish made, the candles out: a breath later, back to the room
         window.setTimeout(leaveMoment, 2300);
@@ -203,7 +239,7 @@ export function RoomWorld({
       if (!before.current) before.current = { yaw: orbit.tYaw, pitch: orbit.tPitch, zoom: orbit.tZoom };
       setMoment(target);
     },
-    [opening, paused, moment, orbit, leaveMoment],
+    [opening, paused, moment, orbit, leaveMoment, touring],
   );
   useEffect(() => {
     setMomentNear(false);
@@ -257,6 +293,63 @@ export function RoomWorld({
     orbit.tPitch = 0;
     orbit.tZoom = 1;
   }, [openIndex, orbit, ring]);
+
+  // The tour is a gift, not a gate: any touch, click or key during it brings the light home
+  // at once (the camera glides back on its spring) — and a slow device that stretches the
+  // flight never keeps her hands tied.
+  useEffect(() => {
+    if (!touring) return;
+    let armed = false;
+    const arm = window.setTimeout(() => (armed = true), 600);
+    const skip = () => armed && sprite.skip();
+    window.addEventListener('pointerdown', skip);
+    window.addEventListener('keydown', skip);
+    void story.wait('skip-tour').then(() => sprite.skip());
+    return () => {
+      window.clearTimeout(arm);
+      window.removeEventListener('pointerdown', skip);
+      window.removeEventListener('keydown', skip);
+    };
+  }, [touring]);
+
+  // a sweep of her hand across three or more gifts turns the whole ring a little, on its
+  // own inertia, and it springs back where it was (storyboard F2)
+  useFrame((state, rawDt) => {
+    const dt = Math.min(rawDt, 0.05);
+    const t = state.clock.elapsedTime;
+    const R = giftRing;
+    R.count = gifts.length;
+    R.touched = R.touched.filter((x) => t - x.t < 0.7);
+    if (new Set(R.touched.map((x) => x.i)).size >= 3 && !opening && !moment && !touring) {
+      R.spinVel += Math.sign(roomHand.wind || 1) * 0.9;
+      R.touched = [];
+    }
+    R.spinVel += (-R.spin * 5.5 - R.spinVel * 2.4) * dt;
+    R.spin = THREE.MathUtils.clamp(R.spin + R.spinVel * dt, -0.4, 0.4);
+  });
+  useEffect(
+    () => () => {
+      giftRing.spin = 0;
+      giftRing.spinVel = 0;
+      giftRing.waves = [];
+    },
+    [],
+  );
+
+  // Focus follows her hand (storyboard F4): zoomed in (wheel / pinch), the camera's eyes
+  // slide toward what the pointer is over — on a spring, so it has inertia — and back to the
+  // middle as she zooms out. Only the look moves: the camera never goes through anything.
+  const focusNudge = useMemo(() => new THREE.Vector3(), []);
+  const focusTmp = useMemo(() => new THREE.Vector3(), []);
+  useFrame((_, rawDt) => {
+    const dt = Math.min(rawDt, 0.05);
+    const zin = THREE.MathUtils.clamp((1 - orbit.zoom) / 0.22, 0, 1);
+    const hf = handUniforms.uHandFloor.value;
+    const free = !opening && !moment && !touring && !leaving && zin > 0.01 && hf.y > -50 && !reducedMotion;
+    if (free) focusTmp.set(hf.x * 0.55, 0.15, hf.z * 0.55).multiplyScalar(zin);
+    else focusTmp.set(0, 0, 0);
+    focusNudge.lerp(focusTmp, 1 - Math.exp(-dt * 1.6));
+  });
 
   // the room slowly steadies itself after being turned, but keeps the angle she chose
   useFrame((_, dt) => {
@@ -337,13 +430,16 @@ export function RoomWorld({
    */
   const [build, setBuild] = useState<BuildPoints | null>(null);
   const [drawn, setDrawn] = useState(true);
+
   // the first pull-back out of the orb is slower than any later glide: it is the reveal
   const [arriving, setArriving] = useState(true);
   useEffect(() => {
-    if (!ready) return;
+    if (!ready || touring) return;
+    // (after a led-in tour, the pull-back to the room's framing starts when the tour ends)
+    setArriving(true);
     const id = setTimeout(() => setArriving(false), 2600);
     return () => clearTimeout(id);
-  }, [ready]);
+  }, [ready, touring]);
   useEffect(() => {
     if (!leaving) return;
     orbit.tPitch = 0;
@@ -364,15 +460,46 @@ export function RoomWorld({
       if (!alive || shown) return;
       shown = true;
       clearTimeout(fallback);
+      const c = cam as THREE.PerspectiveCamera;
+      if (ledIn && sprite.playing) {
+        // the flight carries on in here: move the leader, the camera and its springs into
+        // the room's coordinates (they are all inside the corridor of light, so nothing in
+        // view jumps), then fly the tour
+        const lay = SIGN_PLACEMENT[portrait ? 'portrait' : 'landscape'];
+        const { entry, legs } = roomTourScript(
+          {
+            orb: new THREE.Vector3(0, ORB_Y, 0),
+            window: new THREE.Vector3(Math.sin(WINDOW_ANGLE) * (WALL_R - 0.6), FLOOR_Y + 1.6, -Math.cos(WINDOW_ANGLE) * (WALL_R - 0.6)),
+            sign: new THREE.Vector3(0, FLOOR_Y + 2.2, -lay.radius + 0.4),
+            balloons: new THREE.Vector3(1.9, FLOOR_Y + 2.3, -lay.radius + 0.5),
+            cake: new THREE.Vector3(cakeAt[0], ground + 0.6, cakeAt[2]),
+          },
+          () => setTouring(false),
+        );
+        const offset = entry.clone().sub(sprite.leader);
+        sprite.rebase(offset);
+        // the camera lands where a follower would be — right behind the leader — even if it
+        // had fallen back in the corridor (otherwise it could land outside the room's wall)
+        rebaseCamera(c, sprite.cam.pos.clone().sub(c.position));
+        sprite.continueWith(legs);
+        setReady(true);
+        const pts = sampleRoom(g, 15000, true);
+        if (pts) setBuild(pts);
+        let n = 0;
+        const tick = () => (++n >= 4 ? signalReady('room-ready') : requestAnimationFrame(tick));
+        requestAnimationFrame(tick);
+        return;
+      }
       // the room opens out of its orb: the camera starts right in front of it (where the
       // last world's camera dove into its own light) and the rig pulls back from there
-      const c = cam as THREE.PerspectiveCamera;
+      delete c.userData.rig;
       c.position.set(...ORB_CLOSE.pos);
       (c.userData.look ??= new THREE.Vector3()).set(0, ORB_Y, 0);
       c.lookAt(0, ORB_Y, 0);
       c.fov = ORB_CLOSE.fov;
       c.updateProjectionMatrix();
       setReady(true);
+      setTouring(false);
       // sample the room's real surfaces for the light to land on (cheap: it reads vertex
       // buffers that are already here)
       if (drawIn && !reducedMotion) {
@@ -398,7 +525,19 @@ export function RoomWorld({
         // (the whole scene, not just this group: compiling a group that holds a light
         // against its own scene counts that light twice — programs for the wrong light count)
         g.visible = true;
+        // everything in the room, even what starts hidden (glows, the pedestal, the title
+        // card, a set piece behind the dolls'-house cut): three compiles only what is visible,
+        // and whatever it skips would compile on the frame it first appears — all at once,
+        // when she is led in and the room is shown whole
+        const hidden: THREE.Object3D[] = [];
+        g.traverse((o) => {
+          if (!o.visible) {
+            hidden.push(o);
+            o.visible = true;
+          }
+        });
         gl.compileAsync(scn, cam).then(show, show);
+        hidden.forEach((o) => (o.visible = false));
         g.visible = false;
       });
     });
@@ -409,7 +548,7 @@ export function RoomWorld({
       clearTimeout(fallback);
       clearTimeout(safety);
     };
-  }, [gl, cam, scn, reducedMotion, drawIn]);
+  }, [gl, cam, scn, reducedMotion, drawIn]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const showcase = useMemo(
     () =>
@@ -486,7 +625,7 @@ export function RoomWorld({
   return (
     <>
       <group ref={root} visible={ready && drawn} userData={{ roomRoot: true }}>
-        {ready && (
+        {(ready || ledIn) && (
           // mounted once the room is ready, so it starts from the orb (see `show`)
           <CameraRig
             position={camPos}
@@ -512,6 +651,7 @@ export function RoomWorld({
             fov={camFov}
             orbit={orbit}
             orbitCamera
+            nudge={focusNudge}
             fit={portrait && !leaving ? (yaw) => 1 + 0.42 * Math.sin(yaw) ** 2 : undefined}
           />
         )}
@@ -536,7 +676,7 @@ export function RoomWorld({
           <MemoryCelestial
             count={heartPoints}
             charge={allOpened ? 1 : 0.25 + (opened.length / gifts.length) * 0.5}
-            interactive={!opening && !paused && !moment}
+            interactive={!opening && !paused && !moment && !touring}
             onTap={allOpened ? onHeartTap : undefined}
             tapAfter={1100}
             hush={opening}
@@ -557,7 +697,7 @@ export function RoomWorld({
             size={(portrait ? 0.95 : 1) * (g.shape === 'envelope' ? 1.12 : g.shape === 'box' ? 0.84 : 1)}
             opened={opened.includes(g.id)}
             opening={openingId === g.id}
-            disabled={opening || paused || !!moment}
+            disabled={opening || paused || !!moment || touring}
             focused={focusId === g.id}
             quiet={allOpened}
             // the names step away while the camera dives into the orb

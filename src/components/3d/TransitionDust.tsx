@@ -29,7 +29,9 @@ export type DustPhase = 'none' | 'close' | 'open';
  * `warp` — the way into the room: the same motes stretch into streaks and fly past the
  * camera in three layers at different speeds, then brake (storyboard B, 0.5-2.0 s).
  */
-export type DustMode = 'dust' | 'warp';
+export type DustMode = 'dust' | 'warp' | 'veil';
+// `veil` — the light sprite leads the way (storyboard D): only the dark at the edges is kept,
+// so the sprite's own corridor is the material the change travels through.
 
 interface Props {
   phase: DustPhase;
@@ -296,7 +298,7 @@ export function TransitionDust({ phase, color, factor, mode = 'dust', reducedMot
     // these two programs, under the boot veil — never in the middle of a change of world
     const warm = warmed.current < 3;
     if (warm) warmed.current++;
-    p.visible = on || warm;
+    p.visible = (on && mode !== 'veil') || warm;
     v.visible = on || warm;
     if (!on) return;
 
@@ -324,9 +326,12 @@ export function TransitionDust({ phase, color, factor, mode = 'dust', reducedMot
     // the dark: it closes a little behind the dust (the glitter is seen first) and opens
     // again a little ahead of it, so she never looks at a still, empty screen
     const closing = r.phase === 'close';
+    // led by the light sprite (veil), the dark only gathers at the edges: the corridor of
+    // light in the middle is what she travels through, so it must never be covered
+    const shut = mode === 'veil' ? 0.85 : HOLE.shut;
     const hole = closing
-      ? THREE.MathUtils.lerp(HOLE.open, HOLE.shut, easeInOut(Math.min(1, k / 0.92)))
-      : THREE.MathUtils.lerp(HOLE.shut, HOLE.open, easeOut(Math.min(1, k / 0.8)));
+      ? THREE.MathUtils.lerp(HOLE.open, shut, easeInOut(Math.min(1, k / 0.92)))
+      : THREE.MathUtils.lerp(shut, HOLE.open, easeOut(Math.min(1, k / 0.8)));
     veilUniforms.uHole.value = hole;
     veilUniforms.uCover.value = uniforms.uIntensity.value;
     veilUniforms.uAspect.value = aspect;

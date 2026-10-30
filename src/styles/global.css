@@ -146,6 +146,24 @@ button {
   filter: brightness(1.2);
 }
 
+/* Storyboard D3.3: she flies out through the room's window into the night; the finale's
+   first sky is that night (the window's own blues), washing into the finale's wine. */
+.night-wash {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  background:
+    radial-gradient(ellipse 70% 55% at 50% 40%, rgba(40, 52, 110, 0.55), transparent 72%),
+    linear-gradient(180deg, #0a0d24 0%, #141a44 60%, #1c1f3c 100%);
+  transition: opacity 2.8s var(--ease-in-out);
+}
+
+.night-wash[data-on='true'] {
+  opacity: 1;
+  transition: none;
+}
+
 .scene {
   position: fixed;
   inset: 0;

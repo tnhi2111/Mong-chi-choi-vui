@@ -19,6 +19,7 @@ import { FallbackScene } from './components/experience/FallbackScene';
 import { MusicToggle } from './components/ui/MusicToggle';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import { CursorLayer } from './components/ui/CursorLayer';
+import { story } from './lib/story';
 
 /**
  * Heavy pieces load only when needed. If the site was redeployed while the page
@@ -69,6 +70,8 @@ export default function App() {
   const [veil, setVeil] = useState<Veil>(saved.unlocked ? 'iris' : 'none');
   /** The world on screen is diving into its hero light (see `transition`). */
   const [leaving, setLeaving] = useState(false);
+  /** The night beyond the room's window, under the finale's first frames (storyboard D3.3). */
+  const [night, setNight] = useState(false);
   /** The star dust a change of world travels through — see `TransitionDust`. */
   const [dust, setDust] = useState<{ phase: DustPhase; color: string; mode: DustMode }>({ phase: 'none', color: DUST.room, mode: 'dust' });
   /**
@@ -90,6 +93,8 @@ export default function App() {
   webglRef.current = webgl;
   const [tier, setTier] = useState<Tier>(initialTier);
   const busy = useRef(false);
+  /** The light sprite is still touring the room she was just led into (storyboard D2). */
+  const touringRef = useRef(false);
 
   const allOpened = opened.length >= gifts.length;
   const activeGift = gifts.find((g) => g.id === activeId) ?? null;
@@ -164,16 +169,36 @@ export default function App() {
       busy.current = true;
       const quick = reducedMotion;
       const color = next === 'final' ? DUST.final : DUST.room;
-      // into the room she has never seen: the light flies past her (storyboard B).
-      // Back and forth between worlds she knows: the quieter holding field.
-      const mode: DustMode = next === 'room' && !quick ? 'warp' : 'dust';
+      // Storyboard D: the light sprite leads the way into the room (a corridor of its own
+      // flock — only the dark at the edges is kept from the dust) and out of it through the
+      // window into the finale (no dust at all: the flock becomes the finale's stars).
+      // Coming back from the finale: the quieter holding field, as before.
+      const led = !quick && webglRef.current && (next === 'room' ? stage === 'welcome' : next === 'final');
+      if (led && next === 'final') {
+        setLeaving(true);
+        // RoomWorld flies the sprite to the arched window; the finale is swapped in when the
+        // camera, following it, reaches the glass
+        await Promise.race([story.wait('window'), wait(5500)]);
+        // the night she flew into is the first sky of the finale: it washes into the
+        // finale's own colour (reference video 5: a colour wash as the change of scene)
+        setNight(true);
+        setStage(next);
+        setLeaving(false);
+        setTimeout(() => setNight(false), 120);
+        await wait(1200);
+        busy.current = false;
+        return;
+      }
+      // into the room she has never seen: the light flies past her (storyboard B), or the
+      // light sprite leads her down its corridor (D). Between worlds she knows: the holding field.
+      const mode: DustMode = led ? 'veil' : next === 'room' && !quick ? 'warp' : 'dust';
       // the dust is seeded first, with the camera's little step back: the change announces
       // itself at one point of light before anything moves (reference video 6, 3.50 s)
       setDust({ phase: 'close', color, mode });
       setLeaving(true);
       await wait(quick ? 0 : 180);
       setVeil('iris');
-      await wait(quick ? 450 : mode === 'warp' ? MOTION.enterRoom.streak * 1000 - 180 : 1050);
+      await wait(quick ? 450 : mode === 'veil' ? MOTION.sprite.room.leave * 1000 - 180 : mode === 'warp' ? MOTION.enterRoom.streak * 1000 - 180 : 1050);
       if (next === 'room') resetReady('room-ready');
       setStage(next);
       setLeaving(false);
@@ -189,8 +214,13 @@ export default function App() {
       await wait(quick ? 450 : mode === 'warp' ? 900 : 1600);
       setDust({ phase: 'none', color, mode });
       busy.current = false;
+      // led in: the tour of the room is still flying — choosing a gift now ends it first
+      if (mode === 'veil') {
+        touringRef.current = true;
+        void story.wait('room-home').then(() => (touringRef.current = false));
+      }
     },
-    [reducedMotion],
+    [reducedMotion, stage],
   );
 
   /* ── Intro ─────────────────────────────────────────────────────────── */
@@ -215,8 +245,12 @@ export default function App() {
       }
       if (next === TAPS_NEEDED) {
         sound.flourish();
-        // the heart opens, its light comes home, and the card condenses under it
-        setTimeout(() => setStage('gate'), (reducedMotion ? MOTION.unlock.quick.gateAt : MOTION.unlock.gateAt) * 1000);
+        // the heart opens, its light comes home, and the card condenses under it — or, with the
+        // light sprite (storyboard D3.1), the card is mounted as the heart settles so the
+        // sprite can leave the heart and draw its frame before the writing condenses
+        const U = MOTION.unlock;
+        const at = reducedMotion ? U.quick.gateAt : webglRef.current ? U.anticipate + U.release : U.gateAt;
+        setTimeout(() => setStage('gate'), at * 1000);
       }
       return next;
     });
@@ -238,6 +272,11 @@ export default function App() {
   const selectGift = useCallback(
     (id: string) => {
       if (openingId || activeId || busy.current) return;
+      // (her choice ends the light's tour: it goes home and the camera turns to the gift)
+      if (touringRef.current) {
+        touringRef.current = false;
+        story.signal('skip-tour');
+      }
       setFocusId(null);
       setOpeningId(id);
       sound.chime(gifts.findIndex((g) => g.id === id) + 2);
@@ -381,6 +420,7 @@ export default function App() {
   return (
     <>
       <div className="backdrop" data-stage={stage} data-awake={stage !== 'intro' || taps >= 1} aria-hidden="true" />
+      <div className="night-wash" data-on={night} aria-hidden="true" />
 
       <div className="scene-holder" aria-hidden="true" inert={overlayOpen}>
         {webgl ? (
@@ -411,11 +451,11 @@ export default function App() {
 
       <CursorLayer reducedMotion={reducedMotion} />
 
-      <main className="stage" data-stage={stage} inert={overlayOpen}>
+      <main className="stage" data-stage={stage} data-veil={veil} data-leaving={leaving} data-opening={openingId ?? ""} inert={overlayOpen}>
         {stage === 'intro' && (
           <IntroOverlay taps={taps} tapsNeeded={TAPS_NEEDED} onTap={tapHeart} fallback={!webgl} />
         )}
-        {stage === 'gate' && <PasswordGate onSuccess={unlock} onFail={() => sound.chime(0, 0.03)} />}
+        {stage === 'gate' && <PasswordGate onSuccess={unlock} onFail={() => sound.chime(0, 0.03)} draw={webgl && !reducedMotion} />}
         {stage === 'welcome' && (
           <Welcome
             leaving={leaving}

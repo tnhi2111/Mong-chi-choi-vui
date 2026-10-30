@@ -13,6 +13,8 @@ import { getGlowTexture, getPaperTexture, getShadowTexture } from './glowTexture
 import { Spring } from './CameraRig';
 import { sound } from '../../lib/audio';
 import { LetterDog } from './LetterDog';
+import { Rope, RopeTube } from './verlet';
+import { roomHand, handNear, giftRing } from './sceneStore';
 
 interface Props {
   gift: Gift;
@@ -213,6 +215,83 @@ function useGiftMaterials(gift: Gift, glass: boolean): GiftMaterials {
   return mats;
 }
 
+/**
+ * The bow's two tails: satin bands of 10 Verlet segments each, lying over the lid and falling
+ * over its front edge (storyboard E2). Simulated in the lid's own space, so they ride the lid
+ * when it swings open; gravity and the lid's own jolts are turned into that space each frame,
+ * and her hand passing close sweeps them aside.
+ */
+const _g = new THREE.Vector3();
+const _q = new THREE.Quaternion();
+const _wp = new THREE.Vector3();
+const _hp = new THREE.Vector3();
+const _push = new THREE.Vector3();
+function RibbonTails({ material, motion }: { material: THREE.Material; motion: number }) {
+  const holder = useRef<THREE.Group>(null);
+  const sim = useMemo(() => {
+    // the knot sits just in front of the bow's centre; one tail goes forward-left, one forward-right
+    const make = (x: number, len: number, side: number) => {
+      const n = 11;
+      const r = new Rope(new THREE.Vector3(x, 0.082, 0.015), new THREE.Vector3(side * 0.35, -0.05, 1), { points: n, segment: len / (n - 1), gravity: 0, damping: 0.12, iterations: 8 });
+      r.pin(0, new THREE.Vector3(x, 0.082, 0.015));
+      // the lid (in this space): the ribbon drapes over its top and down its front
+      r.box = new THREE.Box3(new THREE.Vector3(-0.335, -0.07, -0.335), new THREE.Vector3(0.335, 0.072, 0.335));
+      return { rope: r, tube: new RopeTube(n, 0.04, { flat: true, thick: 0.004 }) };
+    };
+    return [make(-0.02, 0.3, -1), make(0.03, 0.25, 1)];
+  }, []);
+  useEffect(() => () => sim.forEach((t) => t.tube.dispose()), [sim]);
+  const last = useRef({ p: new THREE.Vector3(), v: new THREE.Vector3(), a: new THREE.Vector3(), init: false });
+
+  useFrame((_, rawDt) => {
+    const h = holder.current;
+    if (!h) return;
+    const dt = Math.min(rawDt, 0.05);
+    h.updateWorldMatrix(true, false);
+    h.getWorldQuaternion(_q).invert();
+    // the lid's motion in the world, felt as a pull the other way in its own space
+    h.getWorldPosition(_wp);
+    const L = last.current;
+    if (!L.init) {
+      L.p.copy(_wp);
+      L.init = true;
+    }
+    const v = _g.copy(_wp).sub(L.p).divideScalar(Math.max(dt, 1e-3));
+    L.a.lerp(v.clone().sub(L.v).divideScalar(Math.max(dt, 1e-3)), 0.3);
+    L.v.copy(v);
+    L.p.copy(_wp);
+    const wind = new THREE.Vector3(0, -9.8, 0).sub(L.a.clone().multiplyScalar(0.6)).applyQuaternion(_q);
+    // a breath of draught so satin is never dead still
+    wind.x += Math.sin(performance.now() * 0.0011) * 0.25 * motion;
+    // her hand passing close sweeps the tails aside
+    let near = false;
+    if (roomHand.on > 0.02) {
+      const d = handNear(_wp, _hp);
+      if (d < 0.6) {
+        near = true;
+        _push.copy(_wp).sub(_hp).applyQuaternion(_q).normalize().multiplyScalar((1 - d / 0.6) * Math.min(roomHand.speed, 4) * roomHand.on * 0.004);
+      }
+    }
+    for (const { rope, tube } of sim) {
+      if (near) rope.nudge(rope.get(rope.n - 1, _hp), _push, 0.4);
+      rope.step(dt, wind);
+      tube.update(rope, new THREE.Vector3(0, 1, 0));
+    }
+  });
+
+  return (
+    <group ref={holder}>
+      {sim.map(({ tube }, i) => (
+        <mesh key={i} geometry={tube.geometry} material={material} frustumCulled={false} />
+      ))}
+    </group>
+  );
+}
+
+/** The music box's mechanism: pins on the drum (x along it, angle round it) and the comb's teeth. */
+const COMB_TEETH = 12;
+const DRUM_PINS: [number, number][] = Array.from({ length: 28 }, (_, i) => [-0.05 + ((i * 7) % 12) * 0.009, (i / 28) * Math.PI * 2]);
+
 /** A little card tag with "for you" written by hand. */
 let tagTex: THREE.CanvasTexture | null = null;
 function getTagTexture(): THREE.CanvasTexture {
@@ -260,6 +339,64 @@ function bottleGeometry(): THREE.LatheGeometry {
     [0.066, 0.28],
   ].map(([x, y]) => new THREE.Vector2(x, y));
   return new THREE.LatheGeometry(pts, 40);
+}
+
+/**
+ * A little rose water in the bottom of the keepsake bottle (storyboard E2): its own lathe just
+ * inside the glass, with a slightly domed meniscus. Shaded as a liquid, not a solid: rim light
+ * from Fresnel, colour that deepens with the thickness the eye looks through (Beer–Lambert, on
+ * a cylinder's chord), and light passing through it from the room behind.
+ */
+function liquidGeometry(): THREE.LatheGeometry {
+  const pts = [
+    [0.0, -0.198],
+    [0.142, -0.198],
+    [0.162, -0.172],
+    [0.167, -0.1],
+    [0.166, -0.085],
+    [0.1, -0.08],
+    [0.0, -0.078],
+  ].map(([x, y]) => new THREE.Vector2(x, y));
+  return new THREE.LatheGeometry(pts, 36);
+}
+export const liquidVertex = /* glsl */ `
+  varying vec3 vN;
+  varying vec3 vV;
+  varying vec3 vL;
+  void main() {
+    vL = position;
+    vec4 mv = modelViewMatrix * vec4(position, 1.0);
+    vN = normalize(normalMatrix * normal);
+    vV = normalize(-mv.xyz);
+    gl_Position = projectionMatrix * mv;
+  }
+`;
+export const liquidFragment = /* glsl */ `
+  uniform vec3 uTint;
+  uniform float uLight;
+  varying vec3 vN;
+  varying vec3 vV;
+  varying vec3 vL;
+  void main() {
+    float facing = clamp(abs(dot(normalize(vN), vV)), 0.0, 1.0);
+    float fres = pow(1.0 - facing, 3.0);
+    // thickness through a cylinder seen side-on: longest through the middle
+    float r = clamp(length(vL.xz) / 0.167, 0.0, 1.0);
+    float thick = sqrt(max(0.0, 1.0 - r * r)) * 0.33;
+    vec3 absorb = exp(-(vec3(1.0) - uTint) * thick * 9.0);
+    vec3 col = absorb * vec3(1.0, 0.86, 0.8) * (0.28 + uLight * 0.5) + vec3(1.0, 0.9, 0.85) * fres * 0.35;
+    gl_FragColor = vec4(col, 0.55 + fres * 0.35);
+  }
+`;
+function Liquid({ tint, level }: { tint: string; level: () => number }) {
+  const geo = useMemo(() => liquidGeometry(), []);
+  useEffect(() => () => geo.dispose(), [geo]);
+  const u = useMemo(() => ({ uTint: { value: new THREE.Color(tint).lerp(new THREE.Color('#ff9fb0'), 0.5) }, uLight: { value: 0 } }), [tint]);
+  const mat = useShader(liquidVertex, liquidFragment, u, { additive: false });
+  useFrame(() => {
+    u.uLight.value = level();
+  });
+  return <mesh geometry={geo} material={mat} renderOrder={1} />;
 }
 
 /** A few glowing motes (the hover-sparkle shader again, so no new program to compile). */
@@ -329,7 +466,11 @@ function GiftBody({
   const ribbonTail = useRef<THREE.Group>(null);
   const figure = useRef<THREE.Group>(null);
   const key = useRef<THREE.Group>(null);
-  const drum = useRef<THREE.Mesh>(null);
+  const drum = useRef<THREE.Group>(null);
+  const teeth = useRef<(THREE.Mesh | null)[]>([]);
+  /** When each comb tooth was last plucked (s, scene clock). */
+  const plucked = useRef<number[]>([]);
+  const clockNow = useRef(0);
   const mats = useGiftMaterials(gift, glass);
   const star = useMemo(() => (gift.shape === 'star' ? starGeometry() : null), [gift.shape]);
   const bottle = useMemo(() => (gift.shape === 'capsule' ? bottleGeometry() : null), [gift.shape]);
@@ -344,7 +485,13 @@ function GiftBody({
   // the music box plays a few soft notes as its lid lifts
   useEffect(() => {
     if (!opening || gift.shape !== 'orb') return;
-    const ids = [7, 9, 11, 9, 7, 4].map((p, i) => setTimeout(() => sound.chime(p, 0.04), 420 + i * 260));
+    const ids = [7, 9, 11, 9, 7, 4].map((p, i) =>
+      setTimeout(() => {
+        sound.chime(p, 0.04);
+        // the tooth that sounds that note rings (higher note, shorter tooth)
+        plucked.current[Math.min(COMB_TEETH - 1, Math.max(0, p - 1))] = clockNow.current;
+      }, 420 + i * 260),
+    );
     return () => ids.forEach(clearTimeout);
   }, [opening, gift.shape]);
 
@@ -352,6 +499,7 @@ function GiftBody({
 
   useFrame((state) => {
     const t = state.clock.elapsedTime;
+    clockNow.current = t;
     const o = progress.current;
     const h = hover.current;
     const open = openOf(o);
@@ -397,6 +545,12 @@ function GiftBody({
         }
         if (key.current) key.current.rotation.x = t * (0.25 * motion + open * 2.4);
         if (drum.current) drum.current.rotation.x = t * open * 3;
+        // each plucked tooth rings: a fast, decaying shiver at its free end
+        teeth.current.forEach((m, i) => {
+          if (!m) return;
+          const since = t - (plucked.current[i] ?? -99);
+          m.rotation.x = since < 1.5 ? Math.sin(since * 95) * 0.09 * Math.exp(-since * 5) * motion : 0;
+        });
         break;
     }
     if (light.current) {
@@ -462,13 +616,8 @@ function GiftBody({
                 <mesh position={[0.006, 0.09, 0]} material={mats.ribbon}>
                   <sphereGeometry args={[0.035, 16, 12]} />
                 </mesh>
-                {/* the ribbon's tails, lying over the lid */}
-                <mesh position={[-0.05, 0.075, 0.1]} rotation={[0.1, 0.5, 0]} material={mats.ribbon}>
-                  <boxGeometry args={[0.04, 0.006, 0.2]} />
-                </mesh>
-                <mesh position={[0.06, 0.075, 0.09]} rotation={[0.08, -0.35, 0]} material={mats.ribbon}>
-                  <boxGeometry args={[0.04, 0.006, 0.17]} />
-                </mesh>
+                {/* the ribbon's tails: real satin, draped over the lid and down its front */}
+                <RibbonTails material={mats.ribbon!} motion={motion} />
               </group>
             </group>
           </group>
@@ -478,6 +627,7 @@ function GiftBody({
       // a keepsake bottle: a note rolled inside, motes of light, cork and twine
       return (
         <group rotation={[0, 0, 0.16]}>
+          <Liquid tint={gift.tint} level={() => openOf(progress.current)} />
           <mesh geometry={bottle!} material={mats.main} />
           <mesh position={[0, -0.03, 0]} rotation={[0.2, 0, 0.42]} material={mats.paper}>
             <cylinderGeometry args={[0.035, 0.035, 0.22, 18]} />
@@ -573,10 +723,30 @@ function GiftBody({
           <mesh position={[0, 0.02, 0.152]} material={mats.metal}>
             <boxGeometry args={[0.05, 0.06, 0.004]} />
           </mesh>
-          {/* the comb's brass drum, seen when it opens */}
-          <mesh ref={drum} position={[0.1, 0.08, -0.05]} rotation-z={Math.PI / 2} material={mats.metal}>
-            <cylinderGeometry args={[0.03, 0.03, 0.12, 16]} />
-          </mesh>
+          {/* the mechanism, seen when the lid is up (storyboard E2): a brass drum studded with
+              pins turns, and each pin plucks a tooth of the steel comb, which rings and stills */}
+          <group ref={drum} position={[0.1, 0.08, -0.05]}>
+            <mesh rotation-z={Math.PI / 2} material={mats.metal}>
+              <cylinderGeometry args={[0.03, 0.03, 0.12, 16]} />
+            </mesh>
+            {DRUM_PINS.map(([x, a], i) => (
+              <mesh key={i} position={[x, Math.cos(a) * 0.032, Math.sin(a) * 0.032]} rotation-x={a} material={mats.metal}>
+                <cylinderGeometry args={[0.0018, 0.0018, 0.008, 4]} />
+              </mesh>
+            ))}
+          </group>
+          <group position={[0.1, 0.082, -0.0]}>
+            {Array.from({ length: COMB_TEETH }, (_, i) => (
+              <mesh
+                key={i}
+                ref={(m) => void (teeth.current[i] = m)}
+                position={[-0.055 + (i * 0.11) / (COMB_TEETH - 1), 0, 0.022 - (i % 2) * 0.002]}
+                material={mats.metal}
+              >
+                <boxGeometry args={[0.0065, 0.003, 0.05 - i * 0.0018]} />
+              </mesh>
+            ))}
+          </group>
           <group ref={figure} position={[-0.05, -0.075, 0.02]}>
             <mesh position={[0, 0.05, 0]} material={mats.metal}>
               <cylinderGeometry args={[0.004, 0.004, 0.1, 6]} />
@@ -722,6 +892,9 @@ export function Gift3D({
   const lift = useMemo(() => new Spring(0), []);
   const tiltX = useMemo(() => new Spring(0), []);
   const tiltZ = useMemo(() => new Spring(0), []);
+  // her hand brushing it (storyboard F): a little sideways give on a spring with friction,
+  // and which ring waves it has already answered
+  const shove = useMemo(() => ({ x: new Spring(0), z: new Spring(0), lastPush: -9, seen: new Set<number>(), hp: new THREE.Vector3(), at: new THREE.Vector3() }), []);
   const aim = useRef({ x: 0, y: 0 });
   /** Her finger is on it; how far the lid has been lifted (0..1); the lift is finishing. */
   const held = useRef(false);
@@ -814,9 +987,50 @@ export function Gift3D({
     const up = lift.step(active && !isDog ? 0.1 : 0, stiff * damp, dt);
     // hovered, it comes a little toward her
     toCam.copy(state.camera.position).sub(homeV).setY(0).normalize().multiplyScalar(isDog ? 0 : 0.14 * h);
-    tmp.copy(homeV).setY((isDog ? floorY : homeV.y) + bob + up);
+    // the whole ring may be turning a little under her sweep (it springs back): turn home with it
+    const ringTurn = giftRing.spin;
+    const cs = Math.cos(ringTurn);
+    const sn = Math.sin(ringTurn);
+    tmp.set(homeV.x * cs + homeV.z * sn, (isDog ? floorY : homeV.y) + bob + up, -homeV.x * sn + homeV.z * cs);
     tmp.x += dx + toCam.x;
     tmp.z += dz + toCam.z;
+    // her hand brushing past: it gives a few centimetres the way she pushed, then comes back
+    const free = !disabled && !opening && !reducedMotion && !isDog;
+    if (free && roomHand.on > 0.02) {
+      const d = handNear(shove.at.copy(tmp), shove.hp);
+      if (d < 0.6) {
+        const f = (1 - d / 0.6) ** 2 * Math.min(roomHand.speed, 4) * roomHand.on;
+        const ax = tmp.x - shove.hp.x;
+        const az = tmp.z - shove.hp.z;
+        const l = Math.hypot(ax, az) || 1;
+        // a light thing gives more than a heavy one (the same weight that drives its lid)
+        const give = (heavy ? 0.5 : 0.8) * f * dt;
+        shove.x.v += (ax / l) * give;
+        shove.z.v += (az / l) * give;
+        tiltZ.v -= (ax / l) * give * 6;
+        tiltX.v += (az / l) * give * 6;
+        // a real push passes the lean on round the ring, and counts toward a sweep
+        if (f > 0.2 && t - shove.lastPush > 0.25) {
+          shove.lastPush = t;
+          giftRing.waves.push({ id: giftRing.nextId++, at: t, from: index, strength: Math.min(1, f * 0.5), side: Math.sign(roomHand.wind) || 1 });
+          if (giftRing.waves.length > 24) giftRing.waves.shift();
+          giftRing.touched.push({ i: index, t });
+        }
+      }
+    }
+    // a lean arriving from a neighbour: 80 ms a step round the ring, 0.6 as strong each step
+    if (free)
+      for (const w of giftRing.waves) {
+        if (w.from === index || shove.seen.has(w.id)) continue;
+        const n = giftRing.count;
+        const k = Math.min(Math.abs(index - w.from), n - Math.abs(index - w.from));
+        if (t < w.at + 0.08 * k) continue;
+        shove.seen.add(w.id);
+        if (t > w.at + 0.08 * k + 0.5) continue;
+        tiltZ.v += w.side * w.strength * Math.pow(0.6, k) * 0.9;
+      }
+    tmp.x += shove.x.step(0, stiff * 0.9, dt);
+    tmp.z += shove.z.step(0, stiff * 0.9, dt);
     tmp.lerp(showV, isDog ? 0 : e);
     r.position.copy(tmp);
     // a gentle squash-and-rise "breath" when the opening begins

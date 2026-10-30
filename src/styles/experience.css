@@ -153,6 +153,62 @@
   animation: gate-pool calc(var(--card-ms, 760ms) * 1.6) var(--ease-out) both;
 }
 
+/* Storyboard D3.1: the light sprite draws the card's frame (top centre, clockwise, constant
+   speed — the same path it flies), and only then does the writing condense inside it. */
+.gate__frame {
+  position: absolute;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.gate__frame path {
+  fill: none;
+  stroke: rgba(240, 206, 168, 0.55);
+  stroke-width: 1;
+  stroke-dasharray: 1 1;
+  stroke-dashoffset: 1;
+  filter: drop-shadow(0 0 4px rgba(255, 210, 160, 0.45));
+  animation: gate-frame-draw var(--draw-ms, 1100ms) linear var(--leave-ms, 550ms) forwards,
+    gate-frame-settle 1.6s var(--ease-out) calc(var(--leave-ms, 550ms) + var(--draw-ms, 1100ms)) forwards;
+}
+
+@keyframes gate-frame-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* drawn, the line cools from the light's gold to a quiet hairline */
+@keyframes gate-frame-settle {
+  to {
+    stroke: rgba(232, 196, 170, 0.22);
+    filter: none;
+  }
+}
+
+.gate__card.condense > .gate__frame,
+.gate__card.is-ok > .gate__frame {
+  animation: none;
+}
+
+.gate__card.draws > :not(.gate__frame) {
+  animation-delay: calc(var(--leave-ms, 550ms) + var(--draw-ms, 1100ms) - 150ms + var(--i, 0) * var(--stagger, 120ms));
+}
+
+/* (the right answer leaves at once, whatever the drawing delayed) */
+.gate__card.draws.is-ok > :not(.gate__frame) {
+  animation-delay: calc((3 - var(--i, 0)) * 70ms);
+}
+
+.gate__card.draws::before {
+  animation-delay: calc(var(--leave-ms, 550ms) + var(--draw-ms, 1100ms) - 300ms);
+}
+
+.gate__card.is-ok .gate__frame {
+  transition: opacity 0.4s ease;
+  opacity: 0;
+}
+
 @keyframes gate-condense {
   from {
     opacity: 0;

@@ -77,6 +77,74 @@ export const motion = {
     /** Springs: [stiffness, damping] per weight class — a ribbon answers faster than a box. */
     spring: { light: [12, 0.8], heavy: [7, 0.9] },
   },
+  /**
+   * D — the light sprite: a flock with a leader, born from the heart, that leads the camera
+   * through every change of world (`lightSprite.ts`, `LightSprite.tsx`). Seconds / metres.
+   *
+   * Why a leader: motion with an intention and a character reads as alive; a cloud that
+   * moves all at once reads as an effect. The flock trails the leader with its own lag per
+   * mote (a comet's tail), plus a divergence-free flow so it curls instead of shaking.
+   */
+  sprite: {
+    /** How much path history the shader can read (s). The longest tail is this long. */
+    history: 1.6,
+    /** Motes in the flock at quality high (scaled down by the tier). */
+    count: 2200,
+    /** Share of motes that draw ribbons round the leader / orbit the camera. */
+    ribbons: 0.22,
+    orbiters: 0.08,
+    /** The swarm's tail: how far behind the leader its last motes trail (s of history). */
+    tail: 0.7,
+    /** How wide the tail opens at its end (m) — a comet widens as it trails. */
+    spread: 0.42,
+    /** Ribbon radius round the path (m) and how many turns per second of history. */
+    ribbonR: 0.16,
+    ribbonTwist: 7.5,
+    /** The corridor into the room: radius of the spiral tunnel (m), turns per second of history. */
+    corridorR: 1.05,
+    corridorTwist: 3.2,
+    /** A thing the leader passes wakes: light radius (m) and how its afterglow falls off along the trail. */
+    wakeRadius: 1.8,
+    wakeTrail: [1, 0.55, 0.3, 0.14] as const,
+    /** …sampled this far back along the path (s). */
+    wakeLags: [0, 0.3, 0.7, 1.2] as const,
+
+    /** Heart → password: the leader leaves the heart and draws the card's frame. */
+    card: { leave: 0.55, draw: 1.1, home: 0.7, depth: 1.35 },
+    /** Welcome → room: out of the heart into the corridor (until the room is ready), then
+     *  the tour round the room, then up into the orb. */
+    room: { leave: 1.4, tour: 5.0, rise: 1.3, entryZ: 2.8 },
+    /** Room → finale: out of the orb to the arched window and through it; the finale is
+     *  swapped in when the camera is `swapAt` m from the glass (the night fills the frame). */
+    window: { reach: 2.3, through: 1.0, swapAt: 0.45 },
+  },
+
+  /**
+   * The camera as someone running after the leader (CameraRig's own springs carry it).
+   * Why each number: a lag of ~0.25 s is how long a person takes to react to where a thing
+   * went; looking a little ahead of it lets the leader lead the frame instead of escaping
+   * it; banking with sideways acceleration is what a body does on a curve (4° reads as
+   * motion, more reads as a drone); a 0.15° breath at 0.3 Hz is under notice but takes the
+   * machine out of the shot; the lens widening with speed is the "rush" a runner feels.
+   */
+  follow: {
+    lag: 0.25,
+    lookahead: 0.32,
+    /** Behind and above the lagged point (m). */
+    back: 1.25,
+    up: 0.28,
+    /** Max roll (degrees) and how strongly sideways acceleration (m/s²) maps onto it. */
+    rollMax: 4,
+    rollGain: 0.55,
+    breathDeg: 0.15,
+    breathHz: 0.3,
+    /** Lens: base fov, and how much it widens per m/s of leader speed, capped. */
+    fov: 44,
+    fovGain: 2.6,
+    fovMax: 9,
+    /** CameraRig spring speed while following (higher = tighter on the lagged target). */
+    speed: 3.2,
+  },
 } as const;
 
 export type Motion = typeof motion;

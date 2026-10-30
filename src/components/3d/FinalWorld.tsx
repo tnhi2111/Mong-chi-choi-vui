@@ -4,7 +4,9 @@ import * as THREE from 'three';
 import { SURPRISE_PHASES, type FinalePhase } from '../../types';
 import { MemoryCelestial, type MemoryCelestialHandle } from './MemoryCelestial';
 import { ParticleField } from './ParticleField';
-import { CameraRig } from './CameraRig';
+import { CameraRig, rebaseCamera } from './CameraRig';
+import { sprite } from './lightSprite';
+import { finaleArrivalScript } from './spriteScripts';
 import { usePointerOrbit } from '../../hooks/usePointerOrbit';
 import { Glow } from './Glow';
 import { FinalGift } from './FinalGift';
@@ -23,6 +25,9 @@ interface Props {
   /** Back to the room: the camera dives into the orb. */
   leaving?: boolean;
 }
+
+/** The height the finale's orb hangs at (shared with `frame` below). */
+const frameHeartY = (portrait: boolean) => (portrait ? 0.55 : 0.42);
 
 const easeInOut = (x: number) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2);
 
@@ -144,6 +149,27 @@ export function FinalWorld({ phase, photos, onFormed, reducedMotion, particleFac
   const group = useRef<THREE.Group>(null);
   const coreGlow = useRef<THREE.Sprite>(null);
   const t = useMemo(() => timing(reducedMotion), [reducedMotion]);
+
+  /**
+   * Storyboard D3.3, the far side of the window: she arrives here following the light sprite
+   * through the glass. The finale is moved under the camera so its orb lies straight ahead
+   * along the way she is looking (nothing in view turns), the flock spreads into this sky as
+   * stars, and the leader flies on into the orb — which then gathers as before.
+   */
+  const arrived = useRef(false);
+  useFrame(({ camera }) => {
+    if (arrived.current) return;
+    arrived.current = true;
+    if (reducedMotion || !sprite.playing) return;
+    const orbAt = new THREE.Vector3(0, frameHeartY(portrait), 0);
+    const look = new THREE.Vector3();
+    camera.getWorldDirection(look);
+    const D = portrait ? 12 : 9.8;
+    const offset = orbAt.clone().addScaledVector(look, -D).sub(camera.position);
+    rebaseCamera(camera, offset);
+    sprite.rebase(offset);
+    sprite.continueWith(finaleArrivalScript(orbAt, sprite.leader.clone()));
+  });
   const [isFormed, setIsFormed] = useState(false);
 
   // ── the final surprise ──

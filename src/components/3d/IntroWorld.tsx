@@ -12,6 +12,9 @@ import { HeartVortex } from './HeartVortex';
 import { LightDog } from './LightDog';
 import { heartTipY } from './heartShape';
 import { birthdayConfig } from '../../config/birthday';
+import { sprite } from './lightSprite';
+import { cardFrame, cardScript, leaveHeartScript } from './spriteScripts';
+import { gateRect } from '../../lib/gateRect';
 
 interface Props {
   stage: Stage;
@@ -29,6 +32,7 @@ interface Props {
 }
 
 const target = new THREE.Vector3();
+const heartAt = new THREE.Vector3();
 
 /** Stage 1–3: the lone heart in the dark, then the gate and the welcome. */
 export function IntroWorld({
@@ -128,8 +132,19 @@ export function IntroWorld({
     orbit.lastInput = performance.now();
   }, [gathering, orbit]);
 
-  useFrame((_, dt) => {
+  // Storyboard D3.1: when the card is laid out, the light sprite leaves the heart and draws
+  // its frame (PasswordGate draws the same line, at the same speed, in SVG).
+  const drawnCard = useRef(-1);
+  useFrame(({ camera, size }, dt) => {
     orbit.step(Math.min(dt, 0.05));
+    if (stage === 'gate' && !reducedMotion && gateRect.rect && gateRect.version !== drawnCard.current && holder.current) {
+      drawnCard.current = gateRect.version;
+      holder.current.getWorldPosition(heartAt);
+      const cam = camera as THREE.PerspectiveCamera;
+      // the frame hangs at the heart's distance, so the light flies at the heart's depth
+      const depth = cam.position.distanceTo(heartAt);
+      sprite.play(cardScript(heartAt, cardFrame(gateRect.rect, cam, size, depth)), heartAt);
+    }
     if (stage !== 'intro') {
       // the gate and the welcome are read head-on: glide back to the front
       const home = Math.round(orbit.tYaw / (Math.PI * 2)) * Math.PI * 2;
@@ -152,7 +167,16 @@ export function IntroWorld({
   // (The heart's points and shell fade right in front of the camera: no flash.)
   // two beats: a small step back with the lens narrowing (the breath in), then the dive
   const divePhase = useDive(leaving && stage !== 'intro');
-  const dive = divePhase === 'dive';
+  // Storyboard D3.2: stepping inside, the light sprite leaves the heart and the camera runs
+  // after it into a spiral corridor of light; the room picks the story up on the other side
+  // (RoomWorld continues the same flight). Reduced motion keeps the plain dive.
+  const flying = !reducedMotion && divePhase === 'dive';
+  useEffect(() => {
+    if (!flying || !holder.current) return;
+    holder.current.getWorldPosition(heartAt);
+    sprite.play(leaveHeartScript(heartAt, () => false), heartAt);
+  }, [flying]);
+  const dive = divePhase === 'dive' && !flying;
   const pull = divePhase === 'pull';
   const restY = heartPoints > 0 && stage === 'intro' && !settling ? 1.25 : 0.15;
   const camPos: [number, number, number] = dive

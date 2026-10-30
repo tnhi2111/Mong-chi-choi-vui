@@ -12,6 +12,7 @@ import { Prewarm } from './Prewarm';
 import { birthdayConfig } from '../../config/birthday';
 import { IntroWorld } from './IntroWorld';
 import { TransitionDust, type DustMode, type DustPhase } from './TransitionDust';
+import { LightSprite } from './LightSprite';
 import { RoomWorld } from './RoomWorld';
 import { FinalWorld } from './FinalWorld';
 
@@ -80,6 +81,8 @@ export default function Scene3D(props: SceneProps) {
       <Suspense fallback={null}>
         <Lights mood={mood} cursorLight={finePointer && tier !== 'low' && !reducedMotion} />
       </Suspense>
+      {/* the light sprite lives outside the worlds: it carries the story across their swaps */}
+      <LightSprite factor={q.particles} />
       <TransitionDust phase={props.dust} mode={props.dustMode} color={props.dustColor} factor={q.particles} reducedMotion={reducedMotion} />
       <Atmosphere mood={mood} bokeh={tier === 'low' ? 6 : 14} stars={tier === 'low' ? 300 : 700} awake={stage !== 'intro' || props.taps >= 1} reducedMotion={reducedMotion} />
       {stage === 'welcome' && <Prewarm gifts={props.gifts} glass={q.transmission} solidHeart={heartPoints === 0} portrait={portrait} />}
@@ -117,7 +120,7 @@ export default function Scene3D(props: SceneProps) {
           hoverFx={finePointer}
           heartPoints={Math.round(heartPoints * 0.75)}
           leaving={props.leaving}
-          drawIn={props.dustMode === 'warp'}
+          drawIn={props.dustMode === 'warp' || props.dustMode === 'veil'}
         />
       )}
       {stage === 'final' && (

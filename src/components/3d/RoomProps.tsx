@@ -2,6 +2,8 @@ import { useEffect, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useShader } from './useShader';
+import { HAND_GLSL, SPRITE_GLSL, handUniforms, spriteWake } from './lightSprite';
+import { roomHand } from './sceneStore';
 import { getHeartGeometry } from './heartShape';
 
 /*
@@ -777,6 +779,8 @@ const propVertex = /* glsl */ `
 `;
 /** The room's light on a surface (shared by the props, the photos and the curtains). */
 export const ROOM_LIGHT = /* glsl */ `
+  ${SPRITE_GLSL}
+  ${HAND_GLSL}
   uniform vec4 uLamps[8];
   uniform vec4 uCandles[12];
   uniform int uCount;
@@ -804,6 +808,8 @@ export const ROOM_LIGHT = /* glsl */ `
     light += vec3(1.0, 0.32, 0.5) * uHeart * max(dot(n, normalize(H)), 0.0) * 0.4 / (1.0 + dot(H, H) * 0.08);
     light += vec3(0.28, 0.38, 0.75) * max(dot(n, uMoonDir), 0.0) * 0.16;
     light *= mix(0.55, 1.0, smoothstep(0.0, 0.14, P.y - uFloorY));
+    // the light sprite: dim until it has flown past, and a warm flare where it passes
+    light = light * mix(0.5, 1.0, spriteBuilt(P)) + spriteGlow(P) * 1.3 + handGlow(P);
     return light;
   }
 `;
@@ -836,6 +842,10 @@ const propFragment = /* glsl */ `
       // walnut / oak: grain along the piece, satin
       float grain = 0.5 + 0.5 * sin((vWorld.x + vWorld.z) * 60.0 + sin(vWorld.y * 30.0) * 2.0);
       base *= 0.86 + 0.18 * grain;
+      // close up: pores and a finer figure in the wood (storyboard E4 — near the camera only)
+      float nearW = smoothstep(3.2, 0.8, length(cameraPosition - vWorld));
+      base *= 1.0 - nearW * 0.1 * step(0.86, h3(floor(vWorld * 420.0)));
+      base *= 1.0 + nearW * 0.05 * sin((vWorld.x + vWorld.z) * 380.0 + vWorld.y * 50.0);
       col = base * light + vec3(1.0, 0.78, 0.55) * pow(max(dot(n, Hh), 0.0), 24.0) * 0.16 * length(light);
     } else if (k < 1.5) {
       // fabric: a fine weave, a velvet-like sheen at grazing angles
@@ -846,7 +856,11 @@ const propFragment = /* glsl */ `
       col = base * light + vec3(1.0, 0.85, 0.7) * pow(max(dot(n, Hh), 0.0), 40.0) * 0.4 * length(light);
     } else if (k < 3.5) {
       // paper and book cloth
-      col = base * (0.94 + 0.06 * h3(floor(vWorld * 300.0))) * light;
+      // paper: its fibres show up close (short streaks in every direction), a plain tooth from afar
+      float nearP = smoothstep(2.5, 0.6, length(cameraPosition - vWorld));
+      vec3 fq = vWorld * 900.0;
+      float fibre = smoothstep(0.92, 1.0, sin(fq.x + sin(fq.y * 0.37) * 3.0) * sin(fq.z * 0.53 + fq.y * 0.21));
+      col = base * (0.94 + 0.06 * h3(floor(vWorld * 300.0)) - fibre * 0.06 * nearP) * light;
     } else {
       // muted brass, never chrome
       base *= 0.7 + 0.3 * pow(1.0 - max(dot(n, V), 0.0), 2.0);
@@ -890,6 +904,10 @@ const photoFragment = /* glsl */ `
 const curtainVertex = /* glsl */ `
   uniform float uTime;
   uniform float uMotion;
+  uniform vec3 uHandO;
+  uniform vec3 uHandD;
+  uniform float uHandOn;
+  uniform float uWind;
   attribute float aFree;
   varying vec3 vWorld;
   varying vec3 vN;
@@ -901,6 +919,12 @@ const curtainVertex = /* glsl */ `
     // breathing in a slow draught from the window, more toward the hem
     p.z += sin(t * 0.6 + p.x * 3.0) * 0.02 * aFree + sin(t * 0.23 + p.x * 1.3) * 0.015 * aFree;
     vec4 w = modelMatrix * vec4(p, 1.0);
+    // her hand brushing past (storyboard F): the linen gives way from it, more toward the
+    // hem (aFree), and is dragged a little the way her hand is sweeping
+    vec3 c = uHandO + uHandD * max(0.0, dot(w.xyz - uHandO, uHandD));
+    vec3 off = w.xyz - c;
+    float near = uHandOn * exp(-dot(off, off) * 2.5) * (0.25 + aFree);
+    w.xyz += normalize(off + 1e-4) * near * 0.07 + vec3(uWind, 0.0, -uWind) * 0.012 * near;
     vWorld = w.xyz;
     vN = normalize(mat3(modelMatrix) * normal);
     vFold = uv.x;
@@ -986,6 +1010,8 @@ export function RoomProps({ floorY, windowAngle, wallR, candleVec, candleCount, 
 
   const light = useMemo(
     () => ({
+      ...spriteWake,
+      ...handUniforms,
       uLamps: { value: roomLamps(floorY, wallR) },
       uCandles: { value: candleVec },
       uCount: { value: candleCount },
@@ -1026,13 +1052,18 @@ export function RoomProps({ floorY, windowAngle, wallR, candleVec, candleCount, 
   }, [floorY, wallR]);
   useEffect(() => () => photos.dispose(), [photos]);
 
-  const curtainU = useMemo(() => ({ ...light, uMotion: { value: motion }, uFolds: { value: 6 } }), [light]); // eslint-disable-line react-hooks/exhaustive-deps
+  const curtainU = useMemo(
+    () => ({ ...light, uMotion: { value: motion }, uFolds: { value: 6 }, uHandO: { value: roomHand.o }, uHandD: { value: roomHand.d }, uHandOn: { value: 0 }, uWind: { value: 0 } }),
+    [light], // eslint-disable-line react-hooks/exhaustive-deps
+  );
   const curtainMat = useShader(curtainVertex, curtainFragment, curtainU, { opaque: true, side: THREE.DoubleSide });
   const curtains = useMemo(() => [curtainGeometry(0.78, 2.95, 6, 0.14), curtainGeometry(0.7, 2.95, 6, 0.04)], []);
   useEffect(() => () => curtains.forEach((c) => c.dispose()), [curtains]);
 
   useFrame((state) => {
     light.uTime.value = state.clock.elapsedTime;
+    curtainU.uHandOn.value = roomHand.on;
+    curtainU.uWind.value = THREE.MathUtils.clamp(roomHand.wind, -3, 3);
     light.uHeart.value += (heart - light.uHeart.value) * 0.05;
     curtainU.uMotion.value = motion;
   });
@@ -1053,4 +1084,13 @@ export function RoomProps({ floorY, windowAngle, wallR, candleVec, candleCount, 
       ))}
     </group>
   );
+}
+
+/** The furnished room's programs, for Prewarm (see RoomSet's roomWarmShaders). */
+export function propsWarmShaders(): [string, string, THREE.Side, boolean][] {
+  return [
+    [propVertex, propFragment, THREE.FrontSide, true],
+    [photoVertex, photoFragment, THREE.FrontSide, true],
+    [curtainVertex, curtainFragment, THREE.DoubleSide, true],
+  ];
 }

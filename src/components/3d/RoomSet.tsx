@@ -3,6 +3,9 @@ import { useFrame, type ThreeEvent } from '@react-three/fiber';
 import { Html } from '@react-three/drei';
 import * as THREE from 'three';
 import { useShader } from './useShader';
+import { HAND_GLSL, SPRITE_GLSL, handUniforms, sprite, spriteWake } from './lightSprite';
+import { roomHand, handNear } from './sceneStore';
+import { Rope, RopeTube } from './verlet';
 import { birthdayConfig } from '../../config/birthday';
 import { fill } from '../../lib/text';
 import { sound } from '../../lib/audio';
@@ -46,7 +49,7 @@ const FLICK = /* glsl */ `
  * leaves), and the "wind" it makes — its smoothed sideways speed. Written once a frame by
  * RoomSet (mouse only), read by flames, balloons and dust.
  */
-const hand = { o: new THREE.Vector3(), d: new THREE.Vector3(0, 0, -1), on: 0, wind: 0, speed: 0 };
+const hand = roomHand;
 const closest = new THREE.Vector3();
 /** Distance from a point to her hand's ray, and the push direction (xz) away from it. */
 const HAZE = /* glsl */ `
@@ -162,6 +165,8 @@ const floorVertex = /* glsl */ `
   }
 `;
 const floorFragment = /* glsl */ `
+  ${SPRITE_GLSL}
+  ${HAND_GLSL}
   uniform float uTime;
   uniform vec4 uCandles[${MAX_CANDLES}];
   uniform int uCount;
@@ -190,6 +195,16 @@ const floorFragment = /* glsl */ `
     float grain = 0.5 + 0.5 * sin(along * 90.0 + sin(p.y * 40.0 + id * 9.0) * 2.4 + id * 20.0);
     vec3 wood = mix(vec3(0.15, 0.085, 0.05), vec3(0.25, 0.145, 0.085), id * 0.6 + grain * 0.25); // dark walnut
     wood *= 0.7 + 0.3 * (1.0 - seamW) * (1.0 - seamE);
+    // close up (storyboard E4) — only near the camera, so nothing is paid for far away:
+    // each plank's long edges are bevelled (one side catches the light, the other falls into
+    // shade), and the walnut's open pores and fine rays show
+    float nearCam = smoothstep(4.5, 1.2, length(cameraPosition - vWorld));
+    float across = fract(p.y / 0.34) - 0.5;
+    float bevel = smoothstep(0.455, 0.49, abs(across)) * sign(across);
+    wood *= 1.0 + bevel * 0.2 * (0.35 + 0.65 * nearCam);
+    float pore = step(0.8, hash(floor(along * 240.0) * 3.1 + floor(p.y * 70.0) * 17.3));
+    wood *= 1.0 - pore * 0.14 * nearCam;
+    wood *= 1.0 + 0.05 * nearCam * sin(along * 520.0 + id * 40.0 + sin(p.y * 90.0) * 1.5);
 
     // the stage stands on the floor: a soft contact shadow round its foot
     float e = length(p / uRug);
@@ -259,12 +274,19 @@ const floorFragment = /* glsl */ `
     // out toward the wall the room falls into darkness
     col *= 1.0 - smoothstep(6.0, 9.0, r) * 0.7;
     col = haze(col, vWorld);
+    // the light sprite: what it has flown past is awake, what it has not waits at half light,
+    // and where it passes the surface flares and settles (storyboard D)
+    col = col * mix(0.5, 1.0, spriteBuilt(vWorld)) + spriteGlow(vWorld) * (0.06 + col * 1.4);
+    // her hand: a warm pool under it, and beside it the soft shadow of a hand held above
+    vec2 hf = handFloor(vWorld);
+    col = col * (1.0 - 0.28 * hf.y) * (1.0 + 0.5 * hf.x) + vec3(1.0, 0.72, 0.48) * 0.035 * hf.x;
     gl_FragColor = vec4(col, 1.0);
   }
 `;
 
 /* ── the stage: a two-step round platform, matte burgundy with champagne inlays ── */
 const stageFragment = /* glsl */ `
+  ${SPRITE_GLSL}
   uniform float uTime;
   uniform vec4 uCandles[${MAX_CANDLES}];
   uniform int uCount;
@@ -348,11 +370,15 @@ const stageFragment = /* glsl */ `
     vec3 col = base * light * 1.25;
     col += vec3(0.86, 0.66, 0.42) * clamp(trim, 0.0, 1.0) * (light * 0.75 + 0.02);
     col = haze(col, vWorld);
+    // the light sprite: what it has flown past is awake, what it has not waits at half light,
+    // and where it passes the surface flares and settles (storyboard D)
+    col = col * mix(0.5, 1.0, spriteBuilt(vWorld)) + spriteGlow(vWorld) * (0.06 + col * 1.4);
     gl_FragColor = vec4(col, 1.0);
   }
 `;
 /* the stage's sides: dark wine lacquer, the candles glinting along them */
 const bandFragment = /* glsl */ `
+  ${SPRITE_GLSL}
   uniform float uTime;
   uniform vec4 uCandles[${MAX_CANDLES}];
   uniform int uCount;
@@ -374,6 +400,9 @@ const bandFragment = /* glsl */ `
     }
     vec3 col = vec3(0.2, 0.055, 0.075) * light * 2.0;
     col = haze(col, vWorld);
+    // the light sprite: what it has flown past is awake, what it has not waits at half light,
+    // and where it passes the surface flares and settles (storyboard D)
+    col = col * mix(0.5, 1.0, spriteBuilt(vWorld)) + spriteGlow(vWorld) * (0.06 + col * 1.4);
     gl_FragColor = vec4(col, 1.0);
   }
 `;
@@ -388,6 +417,7 @@ const wallVertex = /* glsl */ `
   }
 `;
 const wallFragment = /* glsl */ `
+  ${SPRITE_GLSL}
   uniform float uTime;
   uniform vec4 uCandles[${MAX_CANDLES}];
   uniform int uCount;
@@ -548,6 +578,9 @@ const wallFragment = /* glsl */ `
     // up into the dark
     col *= 1.0 - smoothstep(3.6, ${WALL_H.toFixed(1)}, h) * 0.85;
     col = haze(col, vWorld);
+    // the light sprite: what it has flown past is awake, what it has not waits at half light,
+    // and where it passes the surface flares and settles (storyboard D)
+    col = col * mix(0.5, 1.0, spriteBuilt(vWorld)) + spriteGlow(vWorld) * (0.06 + col * 1.4);
     gl_FragColor = vec4(col, 1.0);
   }
 `;
@@ -640,18 +673,46 @@ const flameFragment = /* glsl */ `
 `;
 
 /* ── little lights: fairy lights, the tree's lights and star ─────────────── */
+
+/**
+ * The fairy-light cable sways (storyboard E2): every span is a pendulum hanging from its two
+ * hooks — the middle of a span moves most (aSag), the hooks not at all — in a slow draught,
+ * and her hand's wind (uWind) and nearness (uHandO/uHandD) push it. Shared by the bulbs and
+ * the cable so they move as one thing.
+ */
+const GARLAND_SWAY = /* glsl */ `
+  uniform float uWind;
+  uniform float uHandOn;
+  uniform vec3 uHandO;
+  uniform vec3 uHandD;
+  vec3 garlandSway(vec3 p, float sag, float seed) {
+    vec3 inward = -normalize(vec3(p.x, 0.0, p.z));
+    vec3 along = vec3(-inward.z, 0.0, inward.x);
+    float t = uTime * uMotion;
+    float swing = sin(t * 1.1 + seed * 2.0) * 0.012 + sin(t * 0.37 + seed * 7.0) * 0.008;
+    // her hand: how close the ray passes, and which way it is sweeping
+    vec3 c = uHandO + uHandD * max(0.0, dot(p - uHandO, uHandD));
+    float near = uHandOn * exp(-dot(p - c, p - c) * 1.6);
+    swing += clamp(uWind, -3.0, 3.0) * 0.035 * near;
+    return (inward * swing * 0.6 + along * swing + vec3(0.0, abs(swing) * 0.2, 0.0)) * sag;
+  }
+`;
+
 const twinkleVertex = /* glsl */ `
   ${CUT}
   uniform float uTime;
   uniform float uPixelRatio;
   uniform float uMotion;
+  ${GARLAND_SWAY}
   attribute float aSeed;
+  attribute float aSag;
   attribute vec3 aColor;
   attribute float aSize;
   varying vec3 vColor;
   varying float vA;
   void main() {
-    vec4 mv = modelViewMatrix * vec4(position, 1.0);
+    vec3 sp = position + garlandSway(position, aSag, floor(aSeed * 9.0));
+    vec4 mv = modelViewMatrix * vec4(sp, 1.0);
     gl_Position = projectionMatrix * mv;
     if (cutAway(normalize(position.xz))) gl_Position = vec4(0.0, 0.0, 2.0, 1.0);
     // each bulb breathes at its own pace, now and then dipping low
@@ -673,14 +734,42 @@ const twinkleFragment = /* glsl */ `
   }
 `;
 
+/* the cable the bulbs hang on: a thin dark-bronze wire, lit by its own bulbs */
+const cableVertex = /* glsl */ `
+  ${CUT}
+  uniform float uTime;
+  uniform float uMotion;
+  ${GARLAND_SWAY}
+  attribute float aSag;
+  attribute float aSpan;
+  varying float vSag;
+  void main() {
+    vec3 sp = position + garlandSway(position, aSag, aSpan);
+    vSag = aSag;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(sp, 1.0);
+    if (cutAway(normalize(position.xz))) gl_Position = vec4(0.0, 0.0, 2.0, 1.0);
+  }
+`;
+const cableFragment = /* glsl */ `
+  varying float vSag;
+  void main() {
+    gl_FragColor = vec4(vec3(0.16, 0.11, 0.07) + vec3(0.35, 0.22, 0.1) * 0.25, 1.0);
+  }
+`;
+
 /* ── glossy latex: the balloons ────────────────────────────────────────────── */
 const glassVertex = /* glsl */ `
   varying vec3 vN;
   varying vec3 vView;
+  varying vec3 vWN;
+  varying vec3 vWV;
   void main() {
     vec4 mv = modelViewMatrix * vec4(position, 1.0);
     vN = normalize(normalMatrix * normal);
     vView = normalize(-mv.xyz);
+    vec4 w = modelMatrix * vec4(position, 1.0);
+    vWN = normalize(mat3(modelMatrix) * normal);
+    vWV = normalize(cameraPosition - w.xyz);
     gl_Position = projectionMatrix * mv;
   }
 `;
@@ -689,6 +778,8 @@ const glassFragment = /* glsl */ `
   uniform float uGlow;
   varying vec3 vN;
   varying vec3 vView;
+  varying vec3 vWN;
+  varying vec3 vWV;
   void main() {
     float facing = clamp(dot(vN, vView), 0.0, 1.0);
     float fres = pow(1.0 - facing, 3.0);
@@ -697,6 +788,15 @@ const glassFragment = /* glsl */ `
     vec3 col = uColor * (0.14 + 0.42 * warm) + vec3(1.0, 0.7, 0.45) * fres * 0.45;
     vec3 hl = normalize(vec3(-0.4, 0.6, 0.7));
     col += vec3(1.0, 0.95, 0.9) * pow(max(dot(reflect(-vView, vN), hl), 0.0), 60.0) * 0.6;
+    // the arched window, mirrored small in the taut latex: a cool panel with its glazing
+    // cross (storyboard E2 — a balloon shows what is round it)
+    vec3 R = reflect(-vWV, normalize(vWN));
+    vec3 W = normalize(vec3(${Math.sin(WINDOW_ANGLE).toFixed(3)}, 0.12, ${(-Math.cos(WINDOW_ANGLE)).toFixed(3)}));
+    vec3 Wr = normalize(cross(vec3(0.0, 1.0, 0.0), W));
+    vec2 q = vec2(dot(R, Wr), R.y - W.y) / max(dot(R, W), 1e-3);
+    float pane = step(0.0, dot(R, W)) * smoothstep(0.2, 0.17, abs(q.x)) * smoothstep(0.26, 0.22, abs(q.y - 0.02));
+    float bars = smoothstep(0.012, 0.0, abs(q.x)) + smoothstep(0.012, 0.0, abs(q.y - 0.05));
+    col += vec3(0.55, 0.62, 0.95) * pane * (1.0 - clamp(bars, 0.0, 1.0) * 0.8) * (0.18 + fres * 0.5);
     col += uColor * uGlow;
     gl_FragColor = vec4(col, 1.0);
   }
@@ -726,7 +826,16 @@ function Balloon({
   const uniforms = useMemo(() => ({ uColor: { value: new THREE.Color(color) }, uGlow: { value: 0 } }), [color]);
   const latex = useShader(glassVertex, glassFragment, uniforms, { opaque: true });
   const seed = useMemo(() => Math.random() * 10, []);
-  const ribbon = useMemo(() => new THREE.MeshBasicMaterial({ color: '#e8c9b0', transparent: true, opacity: 0.35, depthWrite: false }), []);
+  const ribbon = useMemo(() => new THREE.MeshBasicMaterial({ color: '#e8c9b0', transparent: true, opacity: 0.45, depthWrite: false }), []);
+  // its string is a real rope (storyboard E2): tied at the floor, held at the knot under the
+  // balloon, a little longer than the gap so it hangs in a soft curve and swings
+  const string = useMemo(() => {
+    const n = 12;
+    const rope = new Rope(new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 1, 0), { points: n, segment: (length * 1.02) / (n - 1), gravity: -3, damping: 0.25, iterations: 10 });
+    rope.pin(0, new THREE.Vector3(0, 0, 0));
+    return { rope, tube: new RopeTube(n, 0.0035, { sides: 4 }), knot: new THREE.Vector3(), tmp: new THREE.Vector3(), push: new THREE.Vector3(), hp: new THREE.Vector3() };
+  }, [length]);
+  useEffect(() => () => string.tube.dispose(), [string]);
   const knot = useMemo(() => new THREE.MeshBasicMaterial({ color }), [color]);
   const heartGeo = useMemo(() => (heart ? getHeartGeometry('low') : null), [heart]);
   const head = useMemo(() => new THREE.Vector3(), []);
@@ -766,6 +875,18 @@ function Balloon({
     if (pivot.current) {
       pivot.current.rotation.set(p.ax, 0, p.az);
       pivot.current.position.y = Math.sin(t * 0.9 + seed) * 0.03 * motion;
+      // the string follows the knot wherever the balloon has drifted to
+      const st = string;
+      st.knot.set(0, length, 0).applyEuler(pivot.current.rotation);
+      st.knot.y += pivot.current.position.y;
+      st.rope.pin(st.rope.n - 1, st.knot);
+      if (hand.on > 0.02) {
+        head.set(at[0], at[1] + length * 0.5, at[2]);
+        const d = fromHand(head, away);
+        if (d < 0.7) st.rope.nudge(st.tmp.set(0, length * 0.5, 0), st.push.set(away.x, 0, away.y).multiplyScalar((1 - d / 0.7) * Math.min(hand.speed, 4) * hand.on * 0.01), length * 0.6);
+      }
+      st.rope.step(dt, st.hp.set(Math.sin(t * 0.7 + seed) * 0.15 * motion, 0, 0));
+      st.tube.update(st.rope, st.tmp.set(1, 0, 0));
     }
   });
 
@@ -779,10 +900,8 @@ function Balloon({
 
   return (
     <group position={at}>
+      <mesh geometry={string.tube.geometry} material={ribbon} frustumCulled={false} />
       <group ref={pivot}>
-        <mesh position={[0, length / 2, 0]} material={ribbon}>
-          <cylinderGeometry args={[0.004, 0.004, length, 4, 1, true]} />
-        </mesh>
         <mesh position={[0, length + 0.01, 0]} material={knot}>
           <coneGeometry args={[0.03, 0.05, 10]} />
         </mesh>
@@ -1043,10 +1162,29 @@ function Cake({
   const explodeUntil = useRef(-1);
   const wickGroup = useRef<THREE.Group>(null);
   const flameAt = useMemo(() => new THREE.Vector3(), []);
+  // blowing them out with her hand (storyboard F4): a quick sweep across the flames, or a
+  // hand held still just over them for a breath
+  const gesture = useRef({ sweep: 0, still: 0, near: new THREE.Vector3() });
   useFrame((state, rawDt) => {
     const t = state.clock.elapsedTime;
     const dt = Math.min(rawDt, 0.05);
     now.current = t;
+    const wg = wickGroup.current;
+    if (wg && motion > 0.5) {
+      wg.getWorldPosition(gesture.current.near);
+      gesture.current.near.y += 0.12;
+      const d = handNear(gesture.current.near, flameAt);
+      const g = gesture.current;
+      g.sweep = d < 0.32 && hand.on > 0.3 && hand.speed > 2.2 ? g.sweep + dt : Math.max(0, g.sweep - dt * 2);
+      g.still = d < 0.22 && hand.speed < 0.35 ? g.still + dt : 0;
+      const since = blownAt.current === null ? 999 : t - blownAt.current;
+      if ((g.sweep > 0.14 || g.still > 1.6) && since > 5) {
+        g.sweep = 0;
+        g.still = 0;
+        blowOut();
+        if (focused) onTap?.(true);
+      }
+    }
     hover.current += ((hovered.current ? 1 : 0) - hover.current) * (1 - Math.exp(-dt * 5));
     focusAmt.current += ((focused ? 1 : 0) - focusAmt.current) * (1 - Math.exp(-dt * 2.2));
     flare.current = Math.max(0, flare.current - dt * 0.9);
@@ -1333,26 +1471,34 @@ function Dust({ candles, candleVec, floorY, count, motion }: { candles: Candle[]
 
 /** A garland of fairy lights sagging between hooks along the wall. */
 function Garland({ floorY }: { floorY: number }) {
+  const hooks = 9;
+  const per = 16;
+  const r = WALL_R - 0.08;
+  // along the back two thirds of the wall
+  const a0 = -2.1;
+  const a1 = 2.1;
+  /** A span between two hooks hangs in a catenary (cosh), not a sine: deepest in the middle. */
+  const spanAt = (hk: number, u: number) => {
+    const a = a0 + ((hk + u) / hooks) * (a1 - a0);
+    const c = Math.cosh((u - 0.5) * 2.2);
+    const sag = (Math.cosh(1.1) - c) / (Math.cosh(1.1) - 1);
+    return { x: Math.sin(a) * r, y: floorY + 2.9 - sag * 0.19, z: -Math.cos(a) * r, sag };
+  };
   const geo = useMemo(() => {
-    const hooks = 9;
-    const per = 16;
     const pts: number[] = [];
     const seed: number[] = [];
+    const sagA: number[] = [];
     const color: number[] = [];
     const size: number[] = [];
     const palette = ['#ffd9a0', '#ffb070', '#fff2d8', '#ff9fb5'].map((c) => new THREE.Color(c));
-    const r = WALL_R - 0.08;
-    // along the back two thirds of the wall
-    const a0 = -2.1;
-    const a1 = 2.1;
     for (let hk = 0; hk < hooks; hk++) {
       for (let k = 0; k < per; k++) {
-        const u = k / per;
-        const a = a0 + ((hk + u) / hooks) * (a1 - a0);
-        const sag = Math.sin(u * Math.PI) * 0.32;
-        const y = floorY + 2.9 - sag * 0.6;
-        pts.push(Math.sin(a) * r, y, -Math.cos(a) * r);
-        seed.push(Math.random());
+        const q = spanAt(hk, k / per);
+        // each bulb hangs a few millimetres under the wire on its own little stem
+        pts.push(q.x, q.y - 0.022, q.z);
+        // (the span index is the seed's integer part, so the bulbs of a span sway with it)
+        seed.push(hk / 9 + Math.random() * 0.001);
+        sagA.push(q.sag);
         const c = palette[(hk * per + k) % palette.length];
         color.push(c.r, c.g, c.b);
         size.push(2.4 + Math.random() * 0.8);
@@ -1361,17 +1507,192 @@ function Garland({ floorY }: { floorY: number }) {
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
     g.setAttribute('aSeed', new THREE.Float32BufferAttribute(seed, 1));
+    g.setAttribute('aSag', new THREE.Float32BufferAttribute(sagA, 1));
     g.setAttribute('aColor', new THREE.Float32BufferAttribute(color, 3));
     g.setAttribute('aSize', new THREE.Float32BufferAttribute(size, 1));
     return g;
-  }, [floorY]);
-  useEffect(() => () => geo.dispose(), [geo]);
-  const u = useMemo(() => ({ uTime: { value: 0 }, uPixelRatio: { value: Math.min(window.devicePixelRatio, 2) }, uMotion: { value: 1 } }), []);
+  }, [floorY]); // eslint-disable-line react-hooks/exhaustive-deps
+  // the wire: one thin tube per span, carrying its sag so the shader sways it with the bulbs
+  const cable = useMemo(() => {
+    const parts: THREE.BufferGeometry[] = [];
+    for (let hk = 0; hk < hooks; hk++) {
+      const pts: THREE.Vector3[] = [];
+      for (let k = 0; k <= 20; k++) {
+        const q = spanAt(hk, k / 20);
+        pts.push(new THREE.Vector3(q.x, q.y, q.z));
+      }
+      const tube = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 40, 0.0035, 4, false);
+      const pos = tube.attributes.position as THREE.BufferAttribute;
+      const sag = new Float32Array(pos.count);
+      const span = new Float32Array(pos.count).fill(hk);
+      for (let i = 0; i < pos.count; i++) {
+        // the tube's ring index along the curve gives u
+        const u = Math.floor(i / 5) / 40;
+        sag[i] = spanAt(hk, Math.min(1, u)).sag;
+      }
+      tube.setAttribute('aSag', new THREE.BufferAttribute(sag, 1));
+      tube.setAttribute('aSpan', new THREE.BufferAttribute(span, 1));
+      parts.push(tube);
+    }
+    const merged = mergeGeometries(parts);
+    parts.forEach((p) => p.dispose());
+    return merged;
+  }, [floorY]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => {
+    geo.dispose();
+    cable.dispose();
+  }, [geo, cable]);
+  const u = useMemo(
+    () => ({
+      uTime: { value: 0 },
+      uPixelRatio: { value: Math.min(window.devicePixelRatio, 2) },
+      uMotion: { value: 1 },
+      uWind: { value: 0 },
+      uHandOn: { value: 0 },
+      uHandO: { value: hand.o },
+      uHandD: { value: hand.d },
+    }),
+    [],
+  );
   const mat = useShader(twinkleVertex, twinkleFragment, u);
+  const wire = useShader(cableVertex, cableFragment, u, { opaque: true });
   useFrame((state) => {
     u.uTime.value = state.clock.elapsedTime;
+    u.uWind.value = hand.wind;
+    u.uHandOn.value = hand.on;
   });
-  return <points geometry={geo} material={mat} frustumCulled={false} />;
+  return (
+    <>
+      <mesh geometry={cable} material={wire} frustumCulled={false} />
+      <points geometry={geo} material={mat} frustumCulled={false} />
+    </>
+  );
+}
+
+
+/* ── the arched window, built (storyboard E2) ──────────────────────────────
+   The night and the city are painted by the wall shader; in front of them stands a real
+   frame — painted wood with depth, a glazing cross, a deep sill — a pane of glass that
+   catches the warm room, and a shaft of moonlight falling in. Seen from across the room it
+   reads the same as before; from close (the light sprite flies out through it) it has depth. */
+const WIN = { w: 0.95, h: 0.95, arch: 0.45, frame: 0.12, depth: 0.09 };
+function archShape(w: number, below: number, straight: number, arch: number) {
+  const sh = new THREE.Shape();
+  sh.moveTo(-w, -below);
+  sh.lineTo(w, -below);
+  sh.lineTo(w, straight);
+  // the arch: an ellipse from one side to the other
+  for (let i = 1; i <= 24; i++) {
+    const a = (i / 24) * Math.PI;
+    sh.lineTo(Math.cos(a) * w, straight + Math.sin(a) * arch);
+  }
+  sh.lineTo(-w, -below);
+  return sh;
+}
+const glassVertexW = /* glsl */ `
+  varying vec3 vWorld;
+  varying vec2 vUv2;
+  void main() {
+    vUv2 = position.xy;
+    vec4 w = modelMatrix * vec4(position, 1.0);
+    vWorld = w.xyz;
+    gl_Position = projectionMatrix * viewMatrix * w;
+  }
+`;
+const glassFragmentW = /* glsl */ `
+  uniform vec3 uNormal;
+  uniform float uTime;
+  varying vec3 vWorld;
+  varying vec2 vUv2;
+  void main() {
+    vec3 V = normalize(cameraPosition - vWorld);
+    float f = pow(1.0 - abs(dot(V, uNormal)), 3.0);
+    // the warm room, faintly, in the glass; a soft diagonal sheen that slides as she moves
+    float sheen = smoothstep(0.06, 0.0, abs(vUv2.x * 0.7 + vUv2.y * 0.5 - 0.3 + V.x * 0.25)) * 0.6
+                + smoothstep(0.03, 0.0, abs(vUv2.x * 0.7 + vUv2.y * 0.5 - 0.55 + V.x * 0.25)) * 0.35;
+    vec3 col = vec3(1.0, 0.72, 0.5) * (0.035 + f * 0.25) + vec3(0.9, 0.92, 1.0) * sheen * 0.05;
+    gl_FragColor = vec4(col, 1.0);
+  }
+`;
+const moonVertex = /* glsl */ `
+  varying vec3 vWorld;
+  varying float vAlong;
+  void main() {
+    vAlong = uv.y;
+    vec4 w = modelMatrix * vec4(position, 1.0);
+    vWorld = w.xyz;
+    gl_Position = projectionMatrix * viewMatrix * w;
+  }
+`;
+const moonFragment = /* glsl */ `
+  uniform float uTime;
+  uniform float uOn;
+  varying vec3 vWorld;
+  varying float vAlong;
+  float n3(vec3 p) { return fract(sin(dot(floor(p), vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
+  void main() {
+    vec3 V = normalize(cameraPosition - vWorld);
+    // a shaft seen from the side is brightest at its middle; slow drifting dust in it
+    float dust = 0.75 + 0.25 * n3(vWorld * 18.0 + vec3(0.0, uTime * 0.6, 0.0));
+    float a = (1.0 - vAlong) * smoothstep(0.0, 0.12, vAlong) * 0.055 * dust * uOn;
+    gl_FragColor = vec4(vec3(0.55, 0.65, 1.0) * a, 1.0);
+  }
+`;
+function ArchedWindow({ floorY, motion }: { floorY: number; motion: number }) {
+  const W = WINDOW_ANGLE;
+  const inward = useMemo(() => new THREE.Vector3(-Math.sin(W), 0, Math.cos(W)), [W]);
+  const parts = useMemo(() => {
+    const outer = archShape(WIN.w + WIN.frame, WIN.h + WIN.frame, WIN.arch * 0.0 + 0.55, WIN.arch + WIN.frame);
+    outer.holes.push(archShape(WIN.w, WIN.h, 0.55, WIN.arch) as unknown as THREE.Path);
+    const frame = new THREE.ExtrudeGeometry(outer, { depth: WIN.depth, bevelEnabled: true, bevelThickness: 0.012, bevelSize: 0.012, bevelSegments: 2, curveSegments: 24 });
+    const bars: THREE.BufferGeometry[] = [];
+    const v = new THREE.BoxGeometry(0.045, WIN.h + 0.55 + WIN.arch, 0.05);
+    v.translate(0, (0.55 + WIN.arch - WIN.h) / 2, 0.03);
+    const hz = new THREE.BoxGeometry(WIN.w * 2, 0.045, 0.05);
+    hz.translate(0, 0.2, 0.03);
+    bars.push(v, hz);
+    const sill = new THREE.BoxGeometry((WIN.w + WIN.frame) * 2 + 0.16, 0.05, 0.2);
+    sill.translate(0, -WIN.h - WIN.frame - 0.02, 0.1);
+    const glass = new THREE.ShapeGeometry(archShape(WIN.w, WIN.h, 0.55, WIN.arch), 24);
+    // the shaft of moonlight: from the pane down to where it falls on the floor
+    const shaft = new THREE.CylinderGeometry(0.75, 1.15, 1, 18, 1, true);
+    shaft.translate(0, -0.5, 0);
+    return { frame, bars: mergeGeometries(bars)!, sill, glass, shaft, v, hz };
+  }, []);
+  useEffect(() => () => Object.values(parts).forEach((g) => g.dispose()), [parts]);
+  const paint = useMemo(() => surface({ color: '#9c8676', roughness: 0.72, clearcoat: 0.05, bumpScale: 0.004 }), []);
+  const wood = useMemo(() => surface({ color: '#5a3a26', roughness: 0.45, clearcoat: 0.3, bumpScale: 0.01 }), []);
+  useEffect(() => () => {
+    paint.dispose();
+    wood.dispose();
+  }, [paint, wood]);
+  const glassU = useMemo(() => ({ uNormal: { value: inward.clone() }, uTime: { value: 0 } }), [inward]);
+  const glassMat = useShader(glassVertexW, glassFragmentW, glassU);
+  const moonU = useMemo(() => ({ uTime: { value: 0 }, uOn: { value: 1 } }), []);
+  const moonMat = useShader(moonVertex, moonFragment, moonU, { side: THREE.DoubleSide });
+  const shaft = useRef<THREE.Mesh>(null);
+  useFrame((state) => {
+    glassU.uTime.value = state.clock.elapsedTime;
+    moonU.uTime.value = state.clock.elapsedTime * motion;
+  });
+  const center = new THREE.Vector3(Math.sin(W) * (WALL_R - 0.05), floorY + 1.85, -Math.cos(W) * (WALL_R - 0.05));
+  // the shaft: from the window down and in, to the moon pool on the floor
+  const target = new THREE.Vector3(MOON[0], floorY, MOON[1]);
+  const from = center.clone().add(new THREE.Vector3(0, 0.25, 0));
+  const dir = target.clone().sub(from);
+  const len = dir.length();
+  const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, -1, 0), dir.clone().normalize());
+  return (
+    <>
+      <group position={center} rotation-y={-W}>
+        <mesh geometry={parts.frame} material={paint} position-z={-0.06} />
+        <mesh geometry={parts.bars} material={paint} />
+        <mesh geometry={parts.sill} material={wood} />
+        <mesh geometry={parts.glass} material={glassMat} position-z={0.012} renderOrder={2} />
+      </group>
+      <mesh ref={shaft} geometry={parts.shaft} material={moonMat} position={from} quaternion={q} scale={[1, len, 1]} renderOrder={3} />
+    </>
+  );
 }
 
 /** A spot on the stage that belongs to one of the memories. */
@@ -1492,6 +1813,8 @@ export function RoomSet({ floorY: stageY, rx, rz, heart, reducedMotion, hoverFx,
 
   const floorU = useMemo(
     () => ({
+      ...handUniforms,
+      ...spriteWake,
       uTime: { value: 0 },
       uCandles: { value: candleVec },
       uCount: { value: candles.length },
@@ -1507,12 +1830,13 @@ export function RoomSet({ floorY: stageY, rx, rz, heart, reducedMotion, hoverFx,
     [candleVec, candles.length, rx, rz], // eslint-disable-line react-hooks/exhaustive-deps
   );
   const wallU = useMemo(
-    () => ({ uTime: { value: 0 }, uCandles: { value: candleVec }, uCount: { value: candles.length }, uFloorY: { value: floorY }, uMotion: { value: motion }, uLove: { value: 999 }, uLamps: floorU.uLamps }),
+    () => ({ ...spriteWake, uTime: { value: 0 }, uCandles: { value: candleVec }, uCount: { value: candles.length }, uFloorY: { value: floorY }, uMotion: { value: motion }, uLove: { value: 999 }, uLamps: floorU.uLamps }),
     [candleVec, candles.length, floorY, floorU], // eslint-disable-line react-hooks/exhaustive-deps
   );
   const floorMat = useShader(floorVertex, floorFragment, floorU, { opaque: true });
   const stageU = useMemo(
     () => ({
+      ...spriteWake,
       uTime: { value: 0 },
       uCandles: { value: candleVec },
       uCount: { value: candles.length },
@@ -1525,7 +1849,7 @@ export function RoomSet({ floorY: stageY, rx, rz, heart, reducedMotion, hoverFx,
     [candleVec, candles.length, floorU], // eslint-disable-line react-hooks/exhaustive-deps
   );
   const bandU = useMemo(
-    () => ({ uTime: stageU.uTime, uCandles: { value: candleVec }, uCount: { value: candles.length }, uRug: floorU.uRug, uMotion: stageU.uMotion }),
+    () => ({ ...spriteWake, uTime: stageU.uTime, uCandles: { value: candleVec }, uCount: { value: candles.length }, uRug: floorU.uRug, uMotion: stageU.uMotion }),
     [candleVec, candles.length, floorU, stageU],
   );
   const stageMat = useShader(floorVertex, stageFragment, stageU, { opaque: true });
@@ -1566,10 +1890,13 @@ export function RoomSet({ floorY: stageY, rx, rz, heart, reducedMotion, hoverFx,
   const lastPointer = useRef({ x: 0, y: 0, moved: -10 });
   useFrame((state, rawDt) => {
     const dt = Math.min(rawDt, 0.05);
-    if (!hoverFx || reducedMotion) {
+    // (a finger on a phone is a hand too: its moves come through the same pointer)
+    if (reducedMotion) {
       hand.on = 0;
       hand.wind = 0;
       hand.speed = 0;
+      handUniforms.uHandOn.value = 0;
+      handUniforms.uHandFloor.value.w = 0;
       return;
     }
     const pt = state.pointer;
@@ -1589,6 +1916,17 @@ export function RoomSet({ floorY: stageY, rx, rz, heart, reducedMotion, hoverFx,
     hand.speed += (Math.hypot(dx, dy) / Math.max(dt, 1e-3) - hand.speed) * k;
     flameU.uHandOn.value = hand.on;
     flameU.uWind.value = hand.wind;
+    // the room's shaders: where her ray goes, and where it meets the floor
+    handUniforms.uHandO.value.copy(hand.o);
+    handUniforms.uHandD.value.copy(hand.d);
+    handUniforms.uHandOn.value = hand.on * (hoverFx ? 1 : 0.6);
+    const hf = handUniforms.uHandFloor.value;
+    if (hand.d.y < -0.05) {
+      const k2 = (stageY - hand.o.y) / hand.d.y;
+      hf.set(hand.o.x + hand.d.x * k2, stageY, hand.o.z + hand.d.z * k2, hand.on);
+      // only inside the room
+      if (Math.hypot(hf.x, hf.z) > WALL_R - 0.2) hf.w = 0;
+    } else hf.w = 0;
   });
 
   useFrame((state) => {
@@ -1631,14 +1969,25 @@ export function RoomSet({ floorY: stageY, rx, rz, heart, reducedMotion, hoverFx,
   // the dolls'-house cut for the set pieces: whatever stands between the camera and the
   // room (when she walks round it) steps out of the way, like the wall behind it
   const cutGroups = useRef<(THREE.Object3D | null)[]>([]);
-  useFrame(({ camera: cam }) => {
+  useFrame(({ camera: cam }, rawDt) => {
     const cx = cam.position.x;
     const cz = cam.position.z;
     const d = Math.hypot(cx, cz);
+    const k = 1 - Math.exp(-Math.min(rawDt, 0.05) * 5);
     for (const g of cutGroups.current) {
       if (!g) continue;
       const a = g.userData.anchor as number;
       g.visible = !(d > WALL_R - 0.6 && (Math.sin(a) * cx - Math.cos(a) * cz) / d > 0.42);
+      // built by the light sprite as it flies past (storyboard D): it rises into its place
+      // — a builder's order, one piece after the next. (Only a lift: several of these groups
+      // hold pieces laid out in world space, so scaling them would pull them to the middle.)
+      const u = g.userData as { b?: number; y0?: number };
+      u.y0 ??= g.position.y;
+      const want = sprite.builtAt(a);
+      // (only the rising is animated: when a tour begins, what is not built yet simply is not)
+      u.b = want < (u.b ?? want) ? want : (u.b ?? want) + (want - (u.b ?? want)) * k;
+      const e = u.b * u.b * (3 - 2 * u.b);
+      g.position.y = u.y0 - (1 - e) * 0.35;
     }
   });
 
@@ -1701,6 +2050,9 @@ export function RoomSet({ floorY: stageY, rx, rz, heart, reducedMotion, hoverFx,
         <meshBasicMaterial transparent opacity={0} depthWrite={false} colorWrite={false} />
       </mesh>
       <Garland floorY={floorY} />
+      <group ref={(g) => void (cutGroups.current[4] = g)} userData={{ anchor: WINDOW_ANGLE }}>
+        <ArchedWindow floorY={floorY} motion={motion} />
+      </group>
       <group ref={(g) => void (cutGroups.current[0] = g)} userData={{ anchor: 0 }}>
         <BirthdaySign floorY={floorY} {...SIGN_PLACEMENT[portrait ? 'portrait' : 'landscape']} heart={heart} motion={motion} focused={focus === 'sign'} onTap={onMoment && (() => onMoment('sign'))} />
       </group>
@@ -1725,4 +2077,23 @@ export function RoomSet({ floorY: stageY, rx, rz, heart, reducedMotion, hoverFx,
       </group>
     </group>
   );
+}
+
+/**
+ * The room's own shader programs, for Prewarm to compile during the welcome (they are plain
+ * ShaderMaterials: no lights in their key, so a copy compiled early is the same program the
+ * room will use). [vertex, fragment, side, opaque]
+ */
+export function roomWarmShaders(): [string, string, THREE.Side, boolean][] {
+  return [
+    [floorVertex, floorFragment, THREE.FrontSide, true],
+    [floorVertex, stageFragment, THREE.FrontSide, true],
+    [floorVertex, bandFragment, THREE.FrontSide, true],
+    [wallVertex, wallFragment, THREE.BackSide, true],
+    [twinkleVertex, twinkleFragment, THREE.FrontSide, false],
+    [cableVertex, cableFragment, THREE.FrontSide, true],
+    [glassVertex, glassFragment, THREE.FrontSide, true],
+    [glassVertexW, glassFragmentW, THREE.FrontSide, false],
+    [moonVertex, moonFragment, THREE.DoubleSide, false],
+  ];
 }

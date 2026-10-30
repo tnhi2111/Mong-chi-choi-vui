@@ -23,14 +23,27 @@ export interface BuildPoints {
   /** 0..1 — the order it lands in (floor first). */
   delay: Float32Array;
   seed: Float32Array;
+  /** Storyboard D: the light lands where the light sprite's tour passes, not floor-first. */
+  sweep?: boolean;
 }
+
+/** The tour's clock (s): when the sprite's sweep passes angle `a` (atan(x, -z)) at radius r. */
+function sweepTime(a: number, r: number) {
+  const R = motion.sprite.room;
+  if (r < 2.2) return R.tour + R.rise * 0.55; // the stage, last, as it rises into the orb
+  // (the tour sweeps from the front-left round the back to the front-right, ≈ 2.4 rad)
+  if (a <= 2.4) return ((a + Math.PI) / (Math.PI + 2.4)) * R.tour;
+  return R.tour + ((a - 2.4) / (Math.PI - 2.4)) * R.rise * 0.8;
+}
+/** How long one mote takes to fly onto its surface in the sweep (s). */
+const SWEEP_FLY = 1.0;
 
 /**
  * Samples the room's own meshes. `limit` keeps it cheap: the biggest meshes give the most
  * points, and every mesh gives at least a few, so nothing in the room is missing from the
  * drawing.
  */
-export function sampleRoom(root: THREE.Object3D, limit = 15000): BuildPoints | null {
+export function sampleRoom(root: THREE.Object3D, limit = 15000, sweep = false): BuildPoints | null {
   const parts: { mesh: THREE.Mesh; tris: number; weight: number }[] = [];
   root.updateWorldMatrix(true, true);
   root.traverse((o) => {
@@ -95,17 +108,25 @@ export function sampleRoom(root: THREE.Object3D, limit = 15000): BuildPoints | n
     if (y > hi) hi = y;
   }
   const span = Math.max(0.001, hi - lo);
+  const total = motion.sprite.room.tour + motion.sprite.room.rise;
+  const fly = SWEEP_FLY / total;
   for (let i = 0; i < n; i++) {
     const y = (target[i * 3 + 1] - lo) / span;
     const r = Math.hypot(target[i * 3], target[i * 3 + 2]);
     seed[i] = Math.random();
-    delay[i] = THREE.MathUtils.clamp(y * 0.46 + Math.min(1, r / 9) * 0.18 + Math.random() * 0.14, 0, 1);
+    if (sweep) {
+      // it lands a little after the leader has gone by (the shader's flight is `fly` long)
+      const at = sweepTime(Math.atan2(target[i * 3], -target[i * 3 + 2]), r) - SWEEP_FLY * 0.55 + Math.random() * 0.25;
+      delay[i] = THREE.MathUtils.clamp(at / total / (1 - fly), 0, 1);
+    } else delay[i] = THREE.MathUtils.clamp(y * 0.46 + Math.min(1, r / 9) * 0.18 + Math.random() * 0.14, 0, 1);
   }
-  return { target, delay, seed };
+  return { target, delay, seed, sweep };
 }
 
 const vertex = /* glsl */ `
   uniform float uT;
+  uniform float uFly;
+  uniform float uSweep;
   uniform float uFade;
   uniform float uPixelRatio;
   uniform vec3 uFrom;
@@ -116,10 +137,12 @@ const vertex = /* glsl */ `
 
   void main() {
     // each mote waits its turn, then flies out and slows into its place
-    float e = clamp((uT - aDelay * 0.52) / 0.48, 0.0, 1.0);
+    float e = clamp((uT - aDelay * (1.0 - uFly)) / uFly, 0.0, 1.0);
     e = 1.0 - pow(1.0 - e, 3.0);
-    // it starts gathered at the middle, a little off the axis so the swarm has body
+    // it starts gathered at the middle, a little off the axis so the swarm has body — or, in
+    // the sprite's sweep, out of the path the leader flew (inside the room, at its height)
     vec3 from = uFrom + normalize(position - uFrom + 1e-4) * (0.25 + aSeed * 0.5);
+    from = mix(from, vec3(position.x * 0.74, 1.1 + aSeed * 0.4, position.z * 0.74), uSweep);
     vec3 p = mix(from, position, e);
     // a breath of drift while it travels, gone by the time it lands
     p += vec3(sin(uT * 3.1 + aSeed * 30.0), cos(uT * 2.7 + aSeed * 18.0), sin(uT * 2.3 + aSeed * 11.0)) * 0.09 * (1.0 - e);
@@ -175,6 +198,8 @@ export function RoomBuild({ points, from, onDrawn, reducedMotion = false }: Prop
   const uniforms = useMemo(
     () => ({
       uT: { value: 0 },
+      uFly: { value: 0.48 },
+      uSweep: { value: 0 },
       uFade: { value: 0 },
       uPixelRatio: { value: Math.min(window.devicePixelRatio, 2) },
       uFrom: { value: new THREE.Vector3(...from) },
@@ -198,7 +223,7 @@ export function RoomBuild({ points, from, onDrawn, reducedMotion = false }: Prop
   useEffect(() => {
     told.current = false;
     t.current = 0;
-    wait.current = reducedMotion ? 0 : 0.3;
+    wait.current = reducedMotion || points?.sweep ? 0 : 0.3;
     uniforms.uFade.value = 0;
     uniforms.uT.value = 0;
   }, [points, reducedMotion, uniforms]);
@@ -211,8 +236,18 @@ export function RoomBuild({ points, from, onDrawn, reducedMotion = false }: Prop
     // should land where she can see it
     wait.current = Math.max(0, wait.current - dt);
     if (wait.current > 0) return;
-    t.current += dt / (reducedMotion ? 0.3 : L.land);
+    const sweep = !!points?.sweep;
+    const total = motion.sprite.room.tour + motion.sprite.room.rise;
+    uniforms.uSweep.value = sweep ? 1 : 0;
+    uniforms.uFly.value = sweep ? SWEEP_FLY / total : 0.48;
+    t.current += dt / (reducedMotion ? 0.3 : sweep ? total : L.land);
     uniforms.uT.value = t.current;
+    if (sweep) {
+      // the room is already there (dim where the leader has not been); the light only lands
+      // on it, and lets go once the tour is home
+      if (t.current > 1.02) uniforms.uFade.value = Math.min(1, uniforms.uFade.value + dt / 0.8);
+      return;
+    }
     // the room takes over while the light that drew it is still at full strength (no gap
     // between the two: the motes hide the moment the surfaces arrive)…
     if (!told.current && t.current > (reducedMotion ? 0.5 : 0.34)) {

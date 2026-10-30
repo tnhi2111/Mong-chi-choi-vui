@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { Environment, Lightformer } from '@react-three/drei';
 import * as THREE from 'three';
@@ -98,6 +98,7 @@ export function Lights({ mood = 'intro', cursorLight = false }: { mood?: Mood; c
       <spotLight ref={top} position={[0, 7, 1.5]} angle={0.75} penumbra={1} intensity={0} distance={18} decay={1.6} color="#ffe2d6" target={topTarget} />
       {cursorLight && <CursorLight />}
       <HoverLight />
+      <RoomEnvironment active={mood === 'room'} />
       <Environment resolution={128} frames={1}>
         {/* a big soft window up-left and a crisp vertical strip on the right: product-shot reflections */}
         <Lightformer form="rect" intensity={1.4} color="#fff1ea" position={[-2.5, 3, 4]} scale={[6, 2.4, 1]} />
@@ -161,4 +162,79 @@ function CursorLight() {
   });
 
   return <pointLight ref={light} intensity={0} distance={7} decay={2} color="#ffd9df" />;
+}
+
+/**
+ * What the room's lacquer, brass and glass reflect (storyboard E3): not a studio far away but
+ * the room itself — a dark box with small bright "cards" exactly where its lights are: the
+ * table and floor lamps and the sconces (warm discs), a ring of candle points low down, the
+ * arched window (a cool panel with its glazing cross), the sign's champagne band, and the
+ * floor's wine. Built once, a few seconds after the page starts (no hitch on the way in),
+ * at the same resolution as the default environment so swapping it in recompiles nothing.
+ */
+function buildRoomEnv(gl: THREE.WebGLRenderer): THREE.Texture {
+  const sc = new THREE.Scene();
+  sc.background = new THREE.Color('#0b0608');
+  const card = (color: string, k: number, w: number, h: number, at: THREE.Vector3, round = false) => {
+    const m = new THREE.Mesh(round ? new THREE.CircleGeometry(w, 20) : new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(k), side: THREE.DoubleSide }));
+    m.position.copy(at);
+    m.lookAt(0, at.y * 0.4, 0);
+    sc.add(m);
+  };
+  const R = 6.6;
+  const on = (a: number, r: number, y: number) => new THREE.Vector3(Math.sin(a) * r, y, -Math.cos(a) * r);
+  // lamps round the walls (angles as in RoomProps' LAYOUT), warm, at shade height
+  for (const [a, y, k] of [[-0.93, 0.0, 2.6], [1.43, 0.8, 2.4], [0.445, 1.2, 1.6], [-0.445, 1.2, 1.6], [2.05, 0.1, 1.8], [2.7, 0.2, 1.5], [-2.02, 0.2, 1.4]] as const)
+    card('#ffc98e', k, 0.35, 0.35, on(a, R - 0.8, y), true);
+  // candle clusters: a low ring of tiny points
+  for (let i = 0; i < 10; i++) card('#ffb067', 2.2, 0.06, 0.06, on((i / 10) * Math.PI * 2 + 0.3, 3.7, -0.75), true);
+  // the window: a cool tall panel, darker cross
+  card('#5a6bb8', 1.1, 1.9, 2.0, on(-0.78, R, 0.9));
+  card('#0b0608', 1, 0.05, 2.0, on(-0.78, R - 0.02, 0.9));
+  // the sign's band of light, at the back
+  card('#f3d3a2', 1.3, 3.2, 0.5, on(0, R - 0.3, 1.3));
+  // the floor: wine, faint
+  const floor = new THREE.Mesh(new THREE.CircleGeometry(7, 32), new THREE.MeshBasicMaterial({ color: new THREE.Color('#3b1420').multiplyScalar(0.8) }));
+  floor.rotation.x = -Math.PI / 2;
+  floor.position.y = -1;
+  sc.add(floor);
+  const pmrem = new THREE.PMREMGenerator(gl);
+  const rt = pmrem.fromScene(sc, 0.02, 0.1, 40, { size: 128 });
+  pmrem.dispose();
+  sc.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (m.isMesh) {
+      m.geometry.dispose();
+      (m.material as THREE.Material).dispose();
+    }
+  });
+  return rt.texture;
+}
+
+function RoomEnvironment({ active }: { active: boolean }) {
+  const gl = useThree((s) => s.gl);
+  const scene = useThree((s) => s.scene);
+  const env = useRef<THREE.Texture | null>(null);
+  const saved = useRef<THREE.Texture | null>(null);
+  useEffect(() => {
+    const id = setTimeout(() => {
+      try {
+        env.current = buildRoomEnv(gl);
+      } catch {
+        /* the default studio stays — nothing lost */
+      }
+    }, 2500);
+    return () => clearTimeout(id);
+  }, [gl]);
+  useFrame(() => {
+    const e = env.current;
+    if (!e) return;
+    if (active && scene.environment !== e && scene.environment) {
+      saved.current = scene.environment;
+      scene.environment = e;
+    } else if (!active && scene.environment === e && saved.current) {
+      scene.environment = saved.current;
+    }
+  });
+  return null;
 }

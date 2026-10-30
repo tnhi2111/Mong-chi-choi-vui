@@ -2,16 +2,16 @@ import { useEffect } from 'react';
 import { useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { Gift } from '../../data/gifts';
-import { createGiftMaterials } from './Gift3D';
+import { createGiftMaterials, liquidVertex, liquidFragment } from './Gift3D';
 import { celestialVertex, celestialFragment, orbGlassVertex, orbGlassFragment, lineVertex, lineFragment, getOrbGeometry } from './MemoryCelestial';
 import { createFloorMaterial, FLOOR_Y } from './RoomWorld';
 import { createHeartMaterial } from './heartMaterial';
 import { createLetterDogMaterials } from './LetterDog';
 import { loadLetterDog } from './letterDogGeometry';
-import { getPropsGeometry } from './RoomProps';
+import { getPropsGeometry, propsWarmShaders } from './RoomProps';
 import { getSignGlyphs, getSignLetters, SIGN_CHARS } from './BirthdaySign';
 import { getCake } from './cakeModel';
-import { WALL_R, WINDOW_ANGLE, SIGN_PLACEMENT } from './RoomSet';
+import { WALL_R, WINDOW_ANGLE, SIGN_PLACEMENT, roomWarmShaders } from './RoomSet';
 
 /*
  * Compiling a physically based shader takes a few hundred milliseconds on some
@@ -95,6 +95,14 @@ export function Prewarm({
     shader(orbGlassVertex, orbGlassFragment, THREE.BackSide, false);
     shader(celestialVertex, celestialFragment);
     shader(lineVertex, lineFragment);
+    // the room's own surfaces, wire, latex, window and furniture: plain shader programs with
+    // no lights in their key — compiled now, the room only has to use them
+    for (const [v, f, side, opaque] of [...roomWarmShaders(), ...propsWarmShaders()]) {
+      const m = new THREE.ShaderMaterial({ vertexShader: v, fragmentShader: f, transparent: !opaque, depthWrite: opaque, side, blending: opaque ? THREE.NoBlending : THREE.AdditiveBlending });
+      keepAlive.push(m);
+      jobs.push(new THREE.Mesh(box, m));
+    }
+    shader(liquidVertex, liquidFragment, THREE.FrontSide, false);
 
     const compileOne = async (obj: THREE.Object3D, target: THREE.WebGLRenderTarget | null) => {
       const temp = new THREE.Scene();
@@ -113,10 +121,12 @@ export function Prewarm({
       await pause(delay);
       // only the glass heart still refracts; without it there is no second render pass to warm
       const rt = glass && solidHeart ? new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType }) : null;
+      const dbg = new URLSearchParams(location.search).has('debug') ? ((window as unknown as Record<string, unknown>).__prewarm = { total: jobs.length, done: 0, error: '' }) as { total: number; done: number; error: string } : null;
       try {
         for (const obj of jobs) {
           if (cancelled) return;
           await compileOne(obj, null);
+          if (dbg) dbg.done++;
           await pause(60);
           if (rt && !cancelled) {
             await compileOne(obj, rt);
@@ -124,8 +134,9 @@ export function Prewarm({
           }
         }
         done = !cancelled;
-      } catch {
+      } catch (e) {
         /* nothing lost: the shaders simply compile on first use */
+        if (dbg) dbg.error = String(e);
       } finally {
         rt?.dispose();
       }
