@@ -261,6 +261,17 @@ class SpriteController {
     this.build.reach = this.build.start;
   }
 
+  /**
+   * No tour is coming after all (a room shown without its flight): whatever was waiting for
+   * the light is simply there. Without this a room that armed `expectBuild` and was then
+   * shown another way stayed empty for good — every standing thing held at scale 0 (J1).
+   */
+  cancelBuild() {
+    if (this.build.active) return;
+    this.build.pending = false;
+    spriteWake.uBuild.value.z = 0;
+  }
+
   /** QA (?debug): how far round the room the build has reached. */
   debugBuild() {
     return this.build.active || this.build.pending

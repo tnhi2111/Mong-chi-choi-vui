@@ -164,7 +164,13 @@ await scenario(
       await p.getByRole('button', { name: 'One more thing…' }).waitFor({ timeout: 30000 });
       await p.waitForTimeout(3000);
       await p.getByRole('button', { name: 'One more thing…' }).click();
-      await p.getByRole('button', { name: 'Back to our room' }).waitFor({ state: 'visible', timeout: 15000 });
+      // the ways out appear only at the very end (J4): answer the surprise until they do
+      const back = p.getByRole('button', { name: 'Back to our room' });
+      for (let t = 0; t < 140 && !(await back.isVisible().catch(() => false)); t++) {
+        const m = p.getByRole('button', { name: 'There’s more?' });
+        if (await m.isVisible().catch(() => false)) await m.click().catch(() => {});
+        await p.waitForTimeout(500);
+      }
       await p.waitForTimeout(2500);
     },
   },

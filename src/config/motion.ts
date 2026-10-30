@@ -109,6 +109,40 @@ export const motion = {
   },
 
   /**
+   * J — the hidden moments (the cake, the sign): the camera frames the thing by its REAL
+   * bounds for THIS screen, in the part of the screen its words do not use.
+   *
+   * Why: fixed distances framed one window shape well and cut the cake off at the bottom, or
+   * let the words sit on the sign, on another. The screen is split in two areas — the subject
+   * and its words — and the subject is fitted into its own (NDC, -1…1, y up).
+   */
+  moment: {
+    /** How much of its area the subject may fill (the rest is air round it). */
+    fill: 0.82,
+    /** How far above the subject the camera looks down from (radians), [landscape, portrait].
+     *  (On a phone the camera stands far back from the sign, so it rises and looks OVER the
+     *  orb — level, it would look through the orb's light.) */
+    elev: { cake: [0.3, 0.3], sign: [0.06, 0.22] },
+    /** The words appear only once the camera has arrived (s after the touch). */
+    textAfter: t(1.6),
+    /** The subject's area and where its words sit: [landscape, portrait]. */
+    cake: {
+      area: [
+        { x: [-0.94, 0.22], y: [-0.9, 0.86] },
+        { x: [-0.92, 0.92], y: [-0.86, 0.3] },
+      ],
+      text: [
+        [0.6, 0.05],
+        [0, 0.6],
+      ],
+    },
+    /** The sign: its words under it, the band they need measured from the words (px). */
+    sign: { top: 0.9, sides: 0.94, gapPx: 28, bottomPx: 34 },
+    /** A warm key on the cake while she is close to it (0 = only its own candles). */
+    cakeKey: 0.55,
+  },
+
+  /**
    * C — her hand in the room: nothing is a button. Resting near a thing brings the camera
    * to it; a thing has weight when it answers.
    */

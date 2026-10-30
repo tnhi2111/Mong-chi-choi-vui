@@ -329,6 +329,7 @@ export const cakeFragment = /* glsl */ `
   uniform float uLit;          // 0 when they're blown out
   uniform float uTime;
   uniform float uWarm;         // her hand near / leaning in: a touch warmer
+  uniform float uKey;          // the moment: a soft warm key from where she stands
   uniform vec3 uRoomDir;       // toward the middle of the room (rose bounce from the heart)
   varying vec3 vWorld;
   varying vec3 vN;
@@ -345,6 +346,8 @@ export const cakeFragment = /* glsl */ `
     // the room's soft light, from above; a rose bounce from the heart's side
     vec3 light = vec3(0.56, 0.46, 0.45) + vec3(0.26, 0.22, 0.2) * max(n.y, 0.0);
     light += vec3(0.5, 0.2, 0.3) * 0.18 * max(dot(n, uRoomDir), 0.0);
+    // (wrapped, so the buttercream's turned-away side still glows a little)
+    light += vec3(1.0, 0.78, 0.6) * uKey * (0.35 + 0.65 * max(dot(n, V) * 0.6 + 0.4, 0.0));
     // the flames warm what's near them (the top, the candles, the upper tier most)
     vec3 spec = vec3(0.0);
     for (int i = 0; i < 4; i++) {

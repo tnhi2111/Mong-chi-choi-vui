@@ -207,7 +207,9 @@ export default function App() {
       }
       // into the room she has never seen: the light flies past her (storyboard B), or the
       // light sprite leads her down its corridor (D). Between worlds she knows: the holding field.
-      const mode: DustMode = led ? 'veil' : next === 'room' && !quick ? 'warp' : 'dust';
+      // (warp only on the first way in: back from the finale she returns to a room she knows,
+      //  and a warp there armed the room to be built by a flight that never came — J1)
+      const mode: DustMode = led ? 'veil' : next === 'room' && stage === 'welcome' && !quick ? 'warp' : 'dust';
       // the dust is seeded first, with the camera's little step back: the change announces
       // itself at one point of light before anything moves (reference video 6, 3.50 s)
       setDust({ phase: 'close', color, mode });
@@ -523,7 +525,7 @@ export default function App() {
         )}
         {stage === 'final' && (
           <Suspense fallback={null}>
-            <FinalReveal phase={finalePhase} onOneMore={oneMore} onBackToRoom={backToRoom} onReplay={replay} onChooseDone={chooseDone} onChooseMore={chooseMore} />
+            <FinalReveal phase={finalePhase} surpriseAhead={!surpriseSeen.current} onOneMore={oneMore} onBackToRoom={backToRoom} onReplay={replay} onChooseDone={chooseDone} onChooseMore={chooseMore} />
           </Suspense>
         )}
       </main>

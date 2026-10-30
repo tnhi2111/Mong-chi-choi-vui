@@ -678,6 +678,27 @@ in those films. `--log` prints leader / camera / weight per frame.
   helper call in the ceiling hung the GPU on D3D (context lost → white screen).
   QA: `qa-output/tmp/openclose.mjs N` (open → page → close, timestamps), `tour.mjs`.
 
+## Fixes from the owner's checks (stage J)
+
+- **J1 — the room came back empty after the finale.** Cause (measured, `scripts/qa-return.mjs`):
+  `transition()` picked dust mode `warp` for ANY way into the room, so finale → room mounted
+  RoomWorld with `drawIn`, which armed `sprite.expectBuild()` — but no flight came, so
+  `build.pending` stayed true and every BuildGate held its thing at scale 0 (gifts, cake, sign,
+  balloons, candles), while the surfaces (no `uBuild.z`) still drew. Fix: `warp` only from the
+  welcome; and RoomWorld calls `sprite.cancelBuild()` whenever it is shown without a flight.
+  `npm run qa:return -- --gpu [--times=3] [--size=390x844]` walks room → finale → back N times
+  and fails if any gate is not at full scale, the build is still waiting, or WebGL was lost.
+- **J2/J3 — the cake / sign moments** are framed by `frameBox()` (RoomWorld): the subject's real
+  bounds (meshes tagged `userData.frame = 'cake' | 'sign'`), the lens and THIS screen's aspect,
+  fitted into the subject's own area of the screen (`motion.moment`: cake left / words right on
+  a wide screen, words above on a phone; the sign above, its words in a band under it measured
+  by `whisperHeight`). The words are pinned to screen px (`calculatePosition`; the Html anchor
+  is the subject — drei hides an Html whose anchor is behind the camera) and appear only after
+  `motion.moment.textAfter`. The cake gets a soft wrapped warm key while focused (`uKey`). On a
+  phone the sign camera rises (`elev.sign[1]`) to look over the orb. `?debug` → `window.__frame`.
+- **J4 — the finale's ways out** ("Back to our room", "From the beginning") appear only when no
+  step is left: in `waiting`, or in `secret` once the surprise has been seen (`surpriseAhead`).
+
 ## Design references (`reference/`)
 
 - `reference/VIDEO_ANALYSIS.md` — the owner's reference videos, analysed (3 in the first

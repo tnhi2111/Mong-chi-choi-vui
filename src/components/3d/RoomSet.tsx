@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useFrame, type ThreeEvent } from '@react-three/fiber';
 import { Html } from '@react-three/drei';
 import * as THREE from 'three';
+import { motion as MOTION } from '../../config/motion';
 import { useShader } from './useShader';
 import { HAND_GLSL, SPRITE_GLSL, handUniforms, sprite, spriteWake } from './spriteFlight';
 import { BuildGate } from './BuildGate';
@@ -1116,7 +1117,7 @@ function CakeTopper({ y, outward, explode, onTap }: { y: number; outward: THREE.
         </mesh>
       ))}
       {/* (a generous invisible target round the numerals) */}
-      <mesh position={[0, 0.2, 0]} userData={{ cakeTopper: true }}>
+      <mesh position={[0, 0.2, 0]} userData={{ cakeTopper: true, frame: 'cake' }}>
         <boxGeometry args={[0.24, 0.24, 0.1]} />
         <meshBasicMaterial transparent opacity={0} depthWrite={false} colorWrite={false} />
       </mesh>
@@ -1181,6 +1182,7 @@ function Cake({
       uLit: { value: 1 },
       uTime: { value: 0 },
       uWarm: { value: 0 },
+      uKey: { value: 0 },
       uRoomDir: { value: new THREE.Vector3(-outward[0], 0, -outward[2]).normalize() },
       uExplode: { value: 0 },
     }),
@@ -1290,6 +1292,7 @@ function Cake({
     cakeU.uTime.value = t * motion;
     cakeU.uLit.value = lit * (1 + 0.12 * flare.current);
     cakeU.uWarm.value = Math.max(hover.current, focusAmt.current);
+    cakeU.uKey.value = focusAmt.current * MOTION.moment.cakeKey;
     sparkleU.uTime.value = t;
     sparkleU.uOn.value = Math.max(hover.current * 0.7, focusAmt.current) * (0.4 + 0.6 * lit);
     // an under-damped spring: it opens with a soft overshoot and lands with a small bounce
@@ -1404,7 +1407,7 @@ function Cake({
       >
         {/* the cake itself: tiers, piping, pearls, rosettes, berries, flowers, candles */}
         <group ref={body} position={[0, top, 0]}>
-          <mesh ref={cakeMesh} geometry={cake.geometry} material={cakeMat} />
+          <mesh ref={cakeMesh} geometry={cake.geometry} material={cakeMat} userData={{ frame: 'cake' }} />
           <points geometry={sparkles} material={sparkleMat} frustumCulled={false} raycast={() => null} />
           <points geometry={ring} material={ringMat} frustumCulled={false} raycast={() => null} />
         </group>

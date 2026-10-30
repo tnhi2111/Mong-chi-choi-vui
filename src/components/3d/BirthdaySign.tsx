@@ -712,8 +712,8 @@ export function BirthdaySign({ floorY, radius, scale, drop = 0.32, heart, motion
         <group position={[-pivot[0], -pivot[1], -pivot[2]]}>
           <mesh geometry={halos} material={shadowMat} renderOrder={-3} />
           <mesh geometry={halos} material={haloMat} renderOrder={-2} />
-          <mesh geometry={letters} material={letterMat} />
-          <mesh geometry={parts.arch} material={goldMat} />
+          <mesh geometry={letters} material={letterMat} userData={{ frame: 'sign' }} />
+          <mesh geometry={parts.arch} material={goldMat} userData={{ frame: 'sign' }} />
           <mesh geometry={parts.inner} material={goldMat} />
           <mesh geometry={parts.back} material={goldMat} />
           <mesh geometry={parts.ties} material={goldMat} />

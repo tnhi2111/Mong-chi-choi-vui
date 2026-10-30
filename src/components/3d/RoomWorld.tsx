@@ -62,13 +62,10 @@ const ORB_CLOSE = { pos: [0, ORB_Y + 0.3, 2.5] as [number, number, number], fov:
  * [landscape, portrait].
  */
 const MOMENT = {
-  // the cake's thought sits beside it (to the right as she looks; above it on a phone)
-  // (on a wide screen the camera looks a little to the cake's right: the cake sits left of
-  // centre and its thought has the right third)
-  cake: { back: [1.95, 2.9], lift: [0.5, 0.95], lookH: 1.0, lookSide: [0.3, 0], text: { side: [0.82, 0], h: [1.1, 1.95] } },
-  // (on a phone the camera must stand back to fit the sign — so it rises, and looks over
-  // the heart instead of through it)
-  sign: { back: [4.5, 7.4], lift: [0.25, 1.95], lookOffset: -0.05, text: { h: 0.55, inward: 0.45 } },
+  // (the near framing is not a set of distances any more: `frameBox` fits the subject's
+  //  real bounds into its own part of THIS screen — motion.moment holds those areas)
+  cake: { lookH: 1.0 },
+  sign: { lookOffset: -0.05 },
   /** how quickly the camera leans in (CameraRig speed: ~1 s to settle) */
   speed: 1.35,
   /** the first beat: turn toward it from where she stands, then (after this) lean in —
@@ -77,6 +74,71 @@ const MOMENT = {
   far: { back: [5.2, 6.4], lift: [2.2, 3.2] },
 } as const;
 type Moment = 'cake' | 'sign';
+
+/**
+ * J2/J3 — where the camera must stand so that `box` fills `area` (NDC, y up) of a screen of
+ * this `aspect` and lens, looking along `dir` (horizontal, toward the subject) from `elev`
+ * radians above it. Returns the look point (world) and the camera's un-rotated offset from it
+ * (toward +z — the orbit, steered to face the subject, swings it round, as for every framing).
+ */
+function frameBox(
+  box: THREE.Box3,
+  dir: THREE.Vector3,
+  fovDeg: number,
+  aspect: number,
+  elev: number,
+  area: { x: readonly number[]; y: readonly number[] },
+  fill: number,
+) {
+  const tanV = Math.tan(THREE.MathUtils.degToRad(fovDeg) / 2);
+  const tanH = tanV * aspect;
+  const right = new THREE.Vector3(-dir.z, 0, dir.x);
+  const ce = Math.cos(elev);
+  const se = Math.sin(elev);
+  // the camera's forward (looking down a little) and up
+  const fwd = dir.clone().multiplyScalar(ce).add(new THREE.Vector3(0, -se, 0));
+  const up = new THREE.Vector3(0, ce, 0).addScaledVector(dir, se);
+  const c = box.getCenter(new THREE.Vector3());
+  let w = 0;
+  let h = 0;
+  let near = 0;
+  const v = new THREE.Vector3();
+  for (let i = 0; i < 8; i++) {
+    v.set(i & 1 ? box.max.x : box.min.x, i & 2 ? box.max.y : box.min.y, i & 4 ? box.max.z : box.min.z).sub(c);
+    w = Math.max(w, Math.abs(v.dot(right)));
+    h = Math.max(h, Math.abs(v.dot(up)));
+    near = Math.max(near, -v.dot(fwd));
+  }
+  const ox = (area.x[0] + area.x[1]) / 2;
+  const oy = (area.y[0] + area.y[1]) / 2;
+  const ax = (area.x[1] - area.x[0]) / 2;
+  const ay = (area.y[1] - area.y[0]) / 2;
+  // far enough that its nearest face still fits (perspective grows the near side)
+  const D = near + Math.max(w / (tanH * ax), h / (tanV * ay)) / fill;
+  // the camera slides so the subject's centre lands on the area's centre
+  const cam = c
+    .clone()
+    .addScaledVector(fwd, -D)
+    .addScaledVector(right, -ox * D * tanH)
+    .addScaledVector(up, -oy * D * tanV);
+  const look = cam.clone().addScaledVector(fwd, D);
+  return {
+    look: [look.x, look.y, look.z] as [number, number, number],
+    offset: [0, D * se, D * ce] as [number, number, number],
+    /** where a point at NDC (x, y) of the subject's plane is, in the world (for its words) */
+    at: (x: number, y: number) => {
+      const p = look.clone().addScaledVector(right, x * D * tanH).addScaledVector(up, y * D * tanV);
+      return [p.x, p.y, p.z] as [number, number, number];
+    },
+  };
+}
+
+/** How tall the whispered words will be on this screen (px) — mirrors `.room-whisper`. */
+function whisperHeight(lines: readonly string[], width: number, maxW: number) {
+  const fs = THREE.MathUtils.clamp(width * 0.021, 18, 26);
+  const n = lines.reduce((k, l) => k + Math.max(1, Math.ceil((l.length * fs * 0.44) / maxW)), 0);
+  return n * fs * 1.35 + 6 * (lines.length - 1);
+}
 
 /**
  * The gifts stand on a ring around the heart, on a real floor. From the default
@@ -216,14 +278,50 @@ export function RoomWorld({
   const ground = FLOOR_Y - STAGE_STEP;
   const cakeAt = useMemo(() => cakePosition(ground, WALL_R), [ground]);
   const sign = SIGN_PLACEMENT[portrait ? 'portrait' : 'landscape'];
-  const cakeTextAt = useMemo((): [number, number, number] => {
-    const d = Math.hypot(cakeAt[0], cakeAt[2]);
-    // looking out at the cake from the room, "right" is (−out.z, out.x)
-    const rx = -cakeAt[2] / d;
-    const rz = cakeAt[0] / d;
-    const k = MOMENT.cake.text.side[portrait ? 1 : 0];
-    return [cakeAt[0] + rx * k, ground + MOMENT.cake.text.h[portrait ? 1 : 0], cakeAt[2] + rz * k];
-  }, [cakeAt, ground, portrait]);
+  // J2/J3: the close framing of a moment, fitted to the subject's real bounds on this screen,
+  // and where its words go (screen px) — measured when the moment starts, and on a resize
+  const size = useThree((st) => st.size);
+  const [frame, setFrame] = useState<{ look: [number, number, number]; offset: [number, number, number]; text: [number, number]; maxW: number } | null>(null);
+  const [whisper, setWhisper] = useState(false);
+  useEffect(() => {
+    setFrame(null);
+    const g = root.current;
+    if (!moment || !g) return;
+    const box = new THREE.Box3();
+    g.updateWorldMatrix(true, true);
+    g.traverse((o) => {
+      if (o.userData.frame === moment) box.expandByObject(o);
+    });
+    if (box.isEmpty()) return;
+    const M = MOTION.moment;
+    const aspect = size.width / Math.max(1, size.height);
+    const fov = portrait ? 50 : 40;
+    const dir =
+      moment === 'cake' ? new THREE.Vector3(cakeAt[0], 0, cakeAt[2]).normalize() : new THREE.Vector3(0, 0, -1);
+    if (moment === 'cake') {
+      const pi = portrait ? 1 : 0;
+      const f = frameBox(box, dir, fov, aspect, M.elev.cake[pi], M.cake.area[pi], M.fill);
+      const [tx, ty] = M.cake.text[pi];
+      // beside the cake its words have the right third; above it, the whole width
+      const maxW = portrait ? Math.min(size.width * 0.84, 560) : Math.min(size.width * 0.34, 520);
+      setFrame({ look: f.look, offset: f.offset, text: [((tx + 1) / 2) * size.width, ((1 - ty) / 2) * size.height], maxW });
+      if (new URLSearchParams(location.search).has('debug')) Object.assign(window, { __frame: { box: box.clone(), ...f } });
+    } else {
+      // the words go under the sign, in a band as tall as they will really be
+      const maxW = Math.min(size.width * 0.84, 560);
+      const th = whisperHeight(birthdayConfig.room.moments.sign, size.width, maxW);
+      const half = size.height / 2;
+      const bottom = -1 + (M.sign.bottomPx + th + M.sign.gapPx) / half;
+      const f = frameBox(box, dir, fov, aspect, M.elev.sign[portrait ? 1 : 0], { x: [-M.sign.sides, M.sign.sides], y: [bottom, M.sign.top] }, M.fill);
+      setFrame({ look: f.look, offset: f.offset, text: [size.width / 2, size.height - M.sign.bottomPx - th / 2], maxW });
+    }
+  }, [moment, size.width, size.height, portrait, cakeAt]);
+  useEffect(() => {
+    setWhisper(false);
+    if (!moment) return;
+    const id = window.setTimeout(() => setWhisper(true), MOTION.moment.textAfter * 1000);
+    return () => window.clearTimeout(id);
+  }, [moment]);
   const leaveMoment = useCallback(() => {
     // back exactly to where she was looking from
     const b = before.current;
@@ -489,6 +587,8 @@ export function RoomWorld({
         requestAnimationFrame(tick);
         return;
       }
+      // not led in (or the flight is not there to lead): nothing waits for the light
+      sprite.cancelBuild();
       // the room opens out of its orb: the camera starts right in front of it (where the
       // last world's camera dove into its own light) and the rig pulls back from there
       delete c.userData.rig;
@@ -571,16 +671,15 @@ export function RoomWorld({
   if (moment === 'cake') {
     // leaning in to the cake, from the room's side of it
     const d = Math.hypot(cakeAt[0], cakeAt[2]);
-    const ls = MOMENT.cake.lookSide[pi];
-    camLook = [cakeAt[0] - (cakeAt[2] / d) * ls, ground + MOMENT.cake.lookH, cakeAt[2] + (cakeAt[0] / d) * ls];
-    camPos = momentNear
-      ? [camLook[0], camLook[1] + MOMENT.cake.lift[pi], camLook[2] + MOMENT.cake.back[pi]]
+    camLook = frame && momentNear ? frame.look : [cakeAt[0] - (cakeAt[2] / d) * 0, ground + MOMENT.cake.lookH, cakeAt[2]];
+    camPos = frame && momentNear
+      ? [camLook[0] + frame.offset[0], camLook[1] + frame.offset[1], camLook[2] + frame.offset[2]]
       : [camLook[0], camLook[1] + MOMENT.far.lift[pi], camLook[2] + MOMENT.far.back[pi]];
   } else if (moment === 'sign') {
-    camLook = [0, ground + 2.0 - safeDrop(sign.scale, sign.drop) + MOMENT.sign.lookOffset, -sign.radius];
-    camPos = momentNear
-      ? [0, camLook[1] + MOMENT.sign.lift[pi], camLook[2] + MOMENT.sign.back[pi]]
-      : [0, camLook[1] + Math.max(MOMENT.far.lift[pi], MOMENT.sign.lift[pi]), camLook[2] + Math.max(MOMENT.far.back[pi], MOMENT.sign.back[pi])];
+    camLook = frame && momentNear ? frame.look : [0, ground + 2.0 - safeDrop(sign.scale, sign.drop) + MOMENT.sign.lookOffset, -sign.radius];
+    camPos = frame && momentNear
+      ? [camLook[0] + frame.offset[0], camLook[1] + frame.offset[1], camLook[2] + frame.offset[2]]
+      : [0, camLook[1] + MOMENT.far.lift[pi], camLook[2] + MOMENT.far.back[pi] + 1.2];
   } else if (leaving) {
     if (divePhase === 'pull') {
       // the breath in: the room steps back a little and the lens narrows, before the dive
@@ -651,7 +750,7 @@ export function RoomWorld({
             orbit={orbit}
             orbitCamera
             nudge={focusNudge}
-            fit={portrait && !leaving ? (yaw) => 1 + 0.42 * Math.sin(yaw) ** 2 : undefined}
+            fit={portrait && !leaving && !moment ? (yaw) => 1 + 0.42 * Math.sin(yaw) ** 2 : undefined}
           />
         )}
         <RoomSet
@@ -714,19 +813,20 @@ export function RoomWorld({
           />
           </BuildGate>
         ))}
-        {moment === 'cake' && (
+        {/* the words sit in their own part of the SCREEN (never on the thing they speak of),
+            and only once the camera has arrived (J2/J3) */}
+        {moment && whisper && frame && (
           <Html
-            position={cakeTextAt}
+            key={moment}
+            // (anchored on the subject, which is in front of the camera — drei hides an Html
+            //  whose anchor is behind it — but drawn where `calculatePosition` puts it)
+            position={frame.look}
             center
+            calculatePosition={() => frame.text}
             style={{ pointerEvents: 'none' }}
             zIndexRange={[8, 0]}
           >
-            <Whisper lines={birthdayConfig.room.moments.cake} />
-          </Html>
-        )}
-        {moment === 'sign' && (
-          <Html position={[0, ground + MOMENT.sign.text.h, -sign.radius + MOMENT.sign.text.inward]} center style={{ pointerEvents: 'none' }} zIndexRange={[8, 0]}>
-            <Whisper lines={birthdayConfig.room.moments.sign} />
+            <Whisper lines={birthdayConfig.room.moments[moment]} maxW={frame.maxW} />
           </Html>
         )}
         <ParticleField
@@ -746,9 +846,9 @@ export function RoomWorld({
 }
 
 /** The room's whispered message: lines that arrive one after another, like a thought. */
-function Whisper({ lines }: { lines: readonly string[] }) {
+function Whisper({ lines, maxW }: { lines: readonly string[]; maxW?: number }) {
   return (
-    <div className="room-whisper" role="status">
+    <div className="room-whisper" role="status" style={maxW ? { maxWidth: maxW } : undefined}>
       {lines.map((l, i) => (
         <span key={i} style={{ animationDelay: `${0.9 + i * 0.55}s` }}>
           {l}

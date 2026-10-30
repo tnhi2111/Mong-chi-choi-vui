@@ -5,6 +5,8 @@ import type { FinalePhase } from '../../types';
 
 interface Props {
   phase: FinalePhase;
+  /** The secret is not the end yet: the surprise follows it (the first finale of a visit). */
+  surpriseAhead?: boolean;
   onOneMore: () => void;
   onBackToRoom: () => void;
   onReplay: () => void;
@@ -16,7 +18,7 @@ interface Props {
 type Choice = 'done' | 'more' | null;
 
 /** Words for the finale; the 3D world does the rest. */
-export default function FinalReveal({ phase, onOneMore, onBackToRoom, onReplay, onChooseDone, onChooseMore }: Props) {
+export default function FinalReveal({ phase, surpriseAhead = false, onOneMore, onBackToRoom, onReplay, onChooseDone, onChooseMore }: Props) {
   const cfg = birthdayConfig.final;
   const sp = birthdayConfig.surprise;
   const days = daysTogether(birthdayConfig.togetherSince);
@@ -90,14 +92,18 @@ export default function FinalReveal({ phase, onOneMore, onBackToRoom, onReplay, 
           <p className="finale__sign rise" style={{ animationDelay: `${0.8 + cfg.secretMessage.length * 1.6}s` }}>
             {fill(cfg.signature)}
           </p>
-          <div className="finale__actions rise" style={{ animationDelay: `${1.8 + cfg.secretMessage.length * 1.6}s` }}>
-            <button type="button" className="btn btn--quiet" onClick={onBackToRoom} tabIndex={phase === 'quiet' ? -1 : undefined}>
-              Back to our room
-            </button>
-            <button type="button" className="btn btn--quiet" onClick={onReplay} tabIndex={phase === 'quiet' ? -1 : undefined}>
-              From the beginning
-            </button>
-          </div>
+          {/* the way out only when nothing waits after these words (J4): the first time, the
+              surprise follows, and buttons here would invite her to leave before it */}
+          {!surpriseAhead && (
+            <div className="finale__actions rise" style={{ animationDelay: `${1.8 + cfg.secretMessage.length * 1.6}s` }}>
+              <button type="button" className="btn btn--quiet" onClick={onBackToRoom} tabIndex={phase === 'quiet' ? -1 : undefined}>
+                Back to our room
+              </button>
+              <button type="button" className="btn btn--quiet" onClick={onReplay} tabIndex={phase === 'quiet' ? -1 : undefined}>
+                From the beginning
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -184,14 +190,15 @@ export default function FinalReveal({ phase, onOneMore, onBackToRoom, onReplay, 
               </p>
             );
           })}
-          <button
-            type="button"
-            className="btn btn--quiet surprise__back rise"
-            style={{ animationDelay: `${2.4 + sp.finalMessage.length * 1.5}s` }}
-            onClick={onBackToRoom}
-          >
-            Back to our room
-          </button>
+          {/* the last step: now, and only now, the ways out */}
+          <div className="finale__actions surprise__back rise" style={{ animationDelay: `${2.4 + sp.finalMessage.length * 1.5}s` }}>
+            <button type="button" className="btn btn--quiet" onClick={onBackToRoom}>
+              Back to our room
+            </button>
+            <button type="button" className="btn btn--quiet" onClick={onReplay}>
+              From the beginning
+            </button>
+          </div>
         </div>
       )}
     </div>
