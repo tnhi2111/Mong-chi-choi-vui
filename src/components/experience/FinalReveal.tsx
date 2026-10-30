@@ -2,6 +2,37 @@ import { useEffect, useRef, useState } from 'react';
 import { birthdayConfig } from '../../config/birthday';
 import { daysTogether, fill } from '../../lib/text';
 import type { FinalePhase } from '../../types';
+import { LightText } from '../ui/LightText';
+
+/** The days together, counting up to today with a small sparkle on each step (L). */
+function CountUp({ value, delay }: { value: number; delay: number }) {
+  const [shown, setShown] = useState(0);
+  const [tick, setTick] = useState(false);
+  useEffect(() => {
+    if (document.documentElement.hasAttribute('data-reduce')) return void setShown(value);
+    let raf = 0;
+    const t0 = performance.now() + delay * 1000;
+    const dur = 1600;
+    let last = -1;
+    const step = (now: number) => {
+      const k = Math.min(1, Math.max(0, (now - t0) / dur));
+      const v = Math.round(value * (1 - Math.pow(1 - k, 3)));
+      if (v !== last) {
+        last = v;
+        setShown(v);
+        setTick((x) => !x);
+      }
+      if (k < 1) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [value, delay]);
+  return (
+    <span className={`count-up${tick ? ' is-tick' : ''}`} aria-hidden="true">
+      {shown.toLocaleString('vi-VN')}
+    </span>
+  );
+}
 
 interface Props {
   phase: FinalePhase;
@@ -54,15 +85,17 @@ export default function FinalReveal({ phase, surpriseAhead = false, onOneMore, o
     <div className="layer finale" aria-live="polite" data-phase={phase}>
       {phase === 'formed' && (
         <div className="finale__block" key="formed">
-          <h1 className="display finale__title rise" style={{ animationDelay: '0.3s' }}>
-            {fill(cfg.title)} <span className="finale__heart">❤</span>
+          {/* L: the title blooms warm, word by word, and lets fall a few sparks */}
+          <h1 className="display finale__title">
+            <LightText as="span" text={fill(cfg.title)} variant="bloom" delay={0.3} />{' '}
+            <span className="finale__heart rise" style={{ animationDelay: '1.1s' }}>
+              ❤
+            </span>
           </h1>
-          <p className="finale__message rise" style={{ animationDelay: '1.3s' }}>
-            {fill(cfg.message)}
-          </p>
+          <LightText className="finale__message" text={fill(cfg.message)} delay={1.3} />
           {days !== null && (
-            <p className="eyebrow rise" style={{ animationDelay: '2.1s' }}>
-              {days.toLocaleString('vi-VN')} days together — and counting
+            <p className="eyebrow rise" style={{ animationDelay: '2.1s' }} aria-label={`${days.toLocaleString('vi-VN')} days together — and counting`}>
+              <CountUp value={days} delay={2.2} /> <span aria-hidden="true">days together — and counting</span>
             </p>
           )}
           <button
@@ -80,18 +113,18 @@ export default function FinalReveal({ phase, surpriseAhead = false, onOneMore, o
       {/* the last words — they stay a moment, then step back as the world grows still */}
       {(phase === 'secret' || phase === 'quiet') && (
         <div className={`finale__block finale__block--secret${phase === 'quiet' ? ' is-leaving' : ''}`} key="secret" aria-hidden={phase === 'quiet' || undefined}>
+          {/* L: the secret comes as constellations — stars, joined, then words; it leaves as stars */}
           {cfg.secretMessage.map((line, i) => (
-            <p
+            <LightText
               key={i}
-              className={`rise ${i === 0 ? 'title' : 'whisper finale__line'}`}
-              style={{ animationDelay: `${0.8 + i * 1.6}s` }}
-            >
-              {fill(line)}
-            </p>
+              text={fill(line)}
+              className={i === 0 ? 'title' : 'whisper finale__line'}
+              variant="constellation"
+              delay={0.8 + i * 1.6}
+              leaving={phase === 'quiet'}
+            />
           ))}
-          <p className="finale__sign rise" style={{ animationDelay: `${0.8 + cfg.secretMessage.length * 1.6}s` }}>
-            {fill(cfg.signature)}
-          </p>
+          <LightText className="finale__sign" text={fill(cfg.signature)} variant="constellation" delay={0.8 + cfg.secretMessage.length * 1.6} leaving={phase === 'quiet'} />
           {/* the way out only when nothing waits after these words (J4): the first time, the
               surprise follows, and buttons here would invite her to leave before it */}
           {!surpriseAhead && (
@@ -181,13 +214,13 @@ export default function FinalReveal({ phase, surpriseAhead = false, onOneMore, o
           {sp.finalMessage.map((line, i) => {
             const last = i === sp.finalMessage.length - 1;
             return (
-              <p
+              <LightText
                 key={i}
-                className={`surprise__ink ${last ? 'surprise__sign' : i === 0 ? 'surprise__lead' : 'surprise__para'}`}
-                style={{ ['--d' as string]: `${0.6 + i * 1.5 + (last ? 0.6 : 0)}s` }}
-              >
-                {fill(line)}
-              </p>
+                text={fill(line)}
+                className={last ? 'surprise__sign' : i === 0 ? 'surprise__lead' : 'surprise__para'}
+                variant="constellation"
+                delay={0.6 + i * 1.5 + (last ? 0.6 : 0)}
+              />
             );
           })}
           {/* the last step: now, and only now, the ways out */}

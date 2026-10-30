@@ -44,7 +44,7 @@ type Mote = {
 };
 type Line = { a: [number, number]; b: [number, number]; t0: number; dur: number; fade: number };
 type Pen = { path: { x: number; y: number; t: number }[]; end: number };
-const groups = new Set<{ motes: Mote[]; lines: Line[]; pens: Pen[]; until: number }>();
+const groups = new Set<{ motes: Mote[]; lines: Line[]; pens: Pen[]; until: number; ink?: boolean }>();
 let wake: (() => void) | null = null;
 
 const reduced = () => typeof document !== 'undefined' && document.documentElement.hasAttribute('data-reduce');
@@ -198,7 +198,8 @@ export function LightText({ text, as = 'p', className = '', id, style, delay = 0
       });
       pen.end = (pen.path[pen.path.length - 1]?.t ?? now) + 200;
       const until = Math.max(pen.end, ...motes.map((m) => m.t0 + m.dur + m.hold + m.fade), ...lines.map((l) => l.t0 + l.dur + l.fade + 1200)) + 50;
-      groups.add({ motes, lines, pens: variant === 'bloom' ? [] : [pen], until });
+      // (on paper the light is gilt ink: drawn over the paper, not added to it — light on cream vanishes)
+      groups.add({ motes, lines, pens: variant === 'bloom' ? [] : [pen], until, ink: variant === 'ink' });
       el.classList.add('is-run');
       wake?.();
     };
@@ -258,17 +259,28 @@ export function LightTextLayer() {
     g.addColorStop(1, 'rgba(255,160,150,0)');
     d.fillStyle = g;
     d.fillRect(0, 0, 32, 32);
+    // the same mote as gilt ink, for words written on paper
+    const inkDot = document.createElement('canvas');
+    inkDot.width = inkDot.height = 32;
+    const di = inkDot.getContext('2d')!;
+    const gi = di.createRadialGradient(16, 16, 0, 16, 16, 16);
+    gi.addColorStop(0, 'rgba(176,118,58,0.95)');
+    gi.addColorStop(0.35, 'rgba(196,140,80,0.55)');
+    gi.addColorStop(1, 'rgba(210,160,110,0)');
+    di.fillStyle = gi;
+    di.fillRect(0, 0, 32, 32);
     let raf = 0;
     let running = false;
     const frame = (now: number) => {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, c.width, c.height);
-      ctx.globalCompositeOperation = 'lighter';
       for (const gr of groups) {
         if (now > gr.until) {
           groups.delete(gr);
           continue;
         }
+        ctx.globalCompositeOperation = gr.ink ? 'source-over' : 'lighter';
+        const sprite = gr.ink ? inkDot : dot;
         for (const l of gr.lines) {
           const k = Math.min(1, Math.max(0, (now - l.t0) / l.dur));
           if (k <= 0) continue;
@@ -300,7 +312,7 @@ export function LightTextLayer() {
           a = Math.min(1, a);
           const r = m.size * (k < 1 ? 1.6 - 0.6 * k : 1) * 2.4;
           ctx.globalAlpha = a * 0.9;
-          ctx.drawImage(dot, x - r, y - r, r * 2, r * 2);
+          ctx.drawImage(sprite, x - r, y - r, r * 2, r * 2);
         }
         for (const p of gr.pens) {
           const P = p.path;
@@ -314,9 +326,9 @@ export function LightTextLayer() {
           const y = A.y + (B.y - A.y) * k;
           const fade = Math.min(1, (p.end - now) / 200);
           ctx.globalAlpha = 0.95 * fade;
-          ctx.drawImage(dot, x - 9, y - 9, 18, 18);
+          ctx.drawImage(sprite, x - 9, y - 9, 18, 18);
           ctx.globalAlpha = 0.5 * fade;
-          ctx.drawImage(dot, x - 22, y - 5, 18, 10);
+          ctx.drawImage(sprite, x - 22, y - 5, 18, 10);
         }
       }
       ctx.globalAlpha = 1;

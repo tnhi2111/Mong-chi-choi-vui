@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { birthdayConfig } from '../../config/birthday';
 import { fill } from '../../lib/text';
+import { LightText } from '../ui/LightText';
 
 export function Welcome({ onEnter, leaving = false }: { onEnter: () => void; leaving?: boolean }) {
   const { lines, button } = birthdayConfig.welcome;
@@ -15,14 +16,9 @@ export function Welcome({ onEnter, leaving = false }: { onEnter: () => void; lea
   return (
     <div className="layer welcome" data-leaving={leaving}>
       <div className="welcome__text">
+        {/* L: the heart's light writes each line, word by word */}
         {lines.map((l, i) => (
-          <p
-            key={i}
-            className={`rise ${i === 0 ? 'display welcome__hi' : 'whisper'}`}
-            style={{ animationDelay: `${0.4 + i * step}s` }}
-          >
-            {fill(l)}
-          </p>
+          <LightText key={i} text={fill(l)} className={i === 0 ? 'display welcome__hi' : 'whisper'} delay={0.4 + i * step} variant={i === 0 ? 'bloom' : 'condense'} />
         ))}
       </div>
       <button

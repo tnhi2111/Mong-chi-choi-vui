@@ -730,6 +730,25 @@ in those films. `--log` prints leader / camera / weight per frame.
   corners in a page-shot and a sheet-shot): ≤ 1.4 px on desktop and phone. `npm test` checks
   the homography lands on its corners. `?debug` → `window.__carrier`.
 
+## Words that arrive as light (stage L)
+
+- **`LightText`** (`src/components/ui/LightText.tsx`): the words stay real DOM text (one span
+  per word — read, selected, copied as usual); their arrival is drawn on ONE shared canvas
+  (`LightTextLayer`, mounted once in App, z 70, pointer-events none). Each word's shape is
+  sampled from a canvas in the word's own computed font at its own place on screen (accents
+  included), and motes make that shape before the real word takes over (`.lt__w` animation
+  delayed to its landing). Variants: `condense` (motes fly from the hero — `lightOrigin`,
+  written each frame by IntroWorld (heart) / FinalWorld (orb) — a pen of light running along
+  the line), `ink` (on paper: gilt-ink motes drawn source-over, from the pen; memory pages),
+  `bloom` (blooms warm where it stands, a few sparks fall), `constellation` (a few stars per
+  word joined one by one, then the words sharpen; `leaving` scatters them as stars).
+  `ready` holds it (the memory page starts once the leaf is straight). Reduced motion: plain
+  fade. Numbers: `motion.lightText`.
+- Used by: the welcome lines, the finale title (bloom) and message, the days together
+  (`CountUp`, sparkling steps; the full sentence is the `aria-label`), the secret lines and
+  the last words of the surprise (constellations), the memory page's title/date/message (ink;
+  the music box plays a comb note per line).
+
 ## Design references (`reference/`)
 
 - `reference/VIDEO_ANALYSIS.md` — the owner's reference videos, analysed (3 in the first

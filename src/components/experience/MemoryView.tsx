@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { useGiftOrigin } from '../../hooks/useGiftOrigin';
 import { useLeaf } from '../../hooks/useLeaf';
 import { motion } from '../../config/motion';
@@ -7,6 +7,8 @@ import { assetUrl } from '../../lib/text';
 import { Reveal } from '../ui/Reveal';
 import { useDialog } from '../ui/useDialog';
 import { Timeline } from './Timeline';
+import { LightText } from '../ui/LightText';
+import { sound } from '../../lib/audio';
 
 interface Props {
   gift: Gift;
@@ -27,6 +29,13 @@ export default function MemoryView({ gift, index, onClose, closing = false, redu
   const from = useGiftOrigin();
   // K: the page's paper IS the sheet that flew out of the gift (it takes over from it)
   const leaf = useLeaf(closing, reducedMotion);
+  // L: the music box's page is written in time with its tune — a note for each line
+  const beat = gift.shape === 'orb' ? 0.42 : 0.3;
+  useEffect(() => {
+    if (!leaf.inked || gift.shape !== 'orb' || reducedMotion) return;
+    const ids = [4, 6, 8].map((p, i) => window.setTimeout(() => sound.comb(p), (0.05 + i * beat) * 1000));
+    return () => ids.forEach(clearTimeout);
+  }, [leaf.inked, gift.shape, beat, reducedMotion]);
 
   return (
     <div
@@ -65,10 +74,8 @@ export default function MemoryView({ gift, index, onClose, closing = false, redu
               {number}
               {gift.subtitle ? ` — ${gift.subtitle}` : ''}
             </p>
-            <h2 id="memory-title" className="display">
-              {gift.title}
-            </h2>
-            {meta && <p className="memory__meta">{meta}</p>}
+            <LightText as="h2" id="memory-title" className="display" text={gift.title} variant="ink" ready={leaf.inked} delay={0.05} />
+            {meta && <LightText className="memory__meta" text={meta} variant="ink" ready={leaf.inked} delay={0.05 + beat} />}
           </header>
 
           {gift.coverImage && (
@@ -78,9 +85,7 @@ export default function MemoryView({ gift, index, onClose, closing = false, redu
           )}
 
           {gift.message && (
-            <p className="memory__message whisper rise" style={{ animationDelay: '0.55s' }}>
-              {gift.message}
-            </p>
+            <LightText className="memory__message whisper" text={gift.message} variant="ink" ready={leaf.inked} delay={0.05 + beat * 2} />
           )}
 
           {gift.timeline && gift.timeline.length > 0 && (
