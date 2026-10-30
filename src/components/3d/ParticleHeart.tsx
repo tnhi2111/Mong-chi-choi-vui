@@ -3,6 +3,7 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { getHeartRadiusTexture, sampleHeartPoints } from './heartShape';
 import { useShader } from './useShader';
+import { motion as MOTION } from '../../config/motion';
 
 /**
  * The heart as a cloud of light.
@@ -44,6 +45,9 @@ const vertex = /* glsl */ `
   uniform float uAssemble;
   uniform float uRelease;
   uniform float uReach;
+  uniform float uPetals;
+  uniform float uPetalTwist;
+  uniform float uPetalLag;
   uniform sampler2D uRadius;
   uniform float uNormScale;
   uniform float uNormCy;
@@ -112,15 +116,22 @@ const vertex = /* glsl */ `
     // heartbeat: spring outward, with per-point variation
     p *= 1.0 + uBeat * e * (0.05 + 0.09 * aSeed);
 
-    // The heart opens (the third touch): every point spirals outward on its own delay and
-    // comes home again — the light that the password card is then made of. Out and back on
-    // one sine, so it leaves and arrives with no speed of its own at either end.
+    // The heart opens like a flower (the third touch, storyboard G): the light is divided
+    // into petals by the angle it stands at; each petal opens a beat after the one before,
+    // swings outward and twists about its own axis, then folds home. Out and back on one
+    // sine, so it leaves and arrives with no speed of its own at either end.
     float rel = 0.0;
     if (uRelease > 0.0) {
-      float ph = clamp((uRelease - aDelay * 0.30) / 0.70, 0.0, 1.0);
+      float ang = atan(p.z, p.x);                       // which petal this point belongs to
+      float petal = floor((ang + PI) / (2.0 * PI) * uPetals);
+      float lag = petal / max(1.0, uPetals) * uPetalLag + aDelay * 0.18;
+      float ph = clamp((uRelease - lag) / max(0.15, 1.0 - uPetalLag - 0.18), 0.0, 1.0);
       rel = sin(ph * PI);
-      p += normalize(p + 1e-4) * rel * uReach * (0.45 + 1.15 * aSeed);
-      float tw = rel * (1.5 + aSeed * 1.3);
+      // the petal's own direction: outward, and a little upward for the ones near the cleft
+      vec3 petalDir = normalize(vec3(p.x, p.y * 0.55 + 0.25, p.z) + 1e-4);
+      p += petalDir * rel * uReach * (0.5 + 1.0 * aSeed);
+      // and it rolls open about the heart's axis as it goes
+      float tw = rel * uPetalTwist * (0.7 + 0.6 * aSeed);
       float ct = cos(tw), st = sin(tw);
       p = vec3(p.x * ct - p.z * st, p.y, p.x * st + p.z * ct);
     }
@@ -218,7 +229,10 @@ export const ParticleHeart = forwardRef<ParticleHeartHandle, { count: number; re
         uHover: { value: 0 },
         uAssemble: { value: 1 },
         uRelease: { value: 0 },
-        uReach: { value: 0.62 },
+        uReach: { value: MOTION.unlock.reach },
+        uPetals: { value: MOTION.unlock.petals },
+        uPetalTwist: { value: MOTION.unlock.petalTwist },
+        uPetalLag: { value: MOTION.unlock.petalStagger },
         uRadius: { value: r.texture },
         uNormScale: { value: r.scale },
         uNormCy: { value: r.cy },

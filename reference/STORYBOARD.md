@@ -163,3 +163,31 @@ Wood pores/figure and paper fibres fade in only within ~1–4 m of the camera (s
 | A hand you can feel | a warm glow where the ray passes close to a surface (`handGlow`), a warm pool on the floor under it and the **soft shadow of a hand** held above (`handFloor`); the existing cursor light gives the moving highlight on glossy things | light and shadow prove something is there |
 | Focus follows the hand | zoomed in (wheel/pinch), the camera's eyes drift toward what the pointer is over, on a spring (`nudge` in CameraRig); only the look moves, so it never passes through anything | a zoom that ignores where she looks feels like UI |
 | Blowing the candles | a quick sweep across the flames (> 0.14 s fast within 0.32 m) or a hand held still over them for 1.6 s | the gesture you would make |
+
+---
+
+## G. The third touch → the password (≈5.5 s, no card)
+
+The owner: *"chậm lại, nhìn 3D hơn, bỏ cái khung vuông, cần cách nối huyền ảo hơn."* So the
+card is gone: what she reads is written by the light that just left the heart. Timings in
+`motion.unlock` / `motion.sprite.card`, all of them through the one `tempo` knob.
+
+| t (s) | Frame | What is happening |
+|---|---|---|
+| 0.00–0.38 | the heart, whole, her finger on it | The third touch. It **contracts 6 % and holds** — a beat long enough to be a held breath, not a flinch. |
+| 0.38–1.4 | petals opening | It opens **like a flower**: the light is divided into 6 petals by the angle each point stands at, and each petal opens a beat (0.22) after the one before, swinging outward and rolling about its own axis. Meanwhile the camera **arcs 41° round the heart and cranes up**, so the light is seen from a moving point of view — that is what makes it read as a body instead of a picture — and the ring of words below passes across the lens (the parallax). |
+| 1.4–2.5 | petals folding home | They come home on the same sine, so nothing starts or stops with a jerk. The camera finishes its arc and settles back to her eye line. |
+| 2.5–3.75 | the heart smaller, drifting | It shrinks to 0.55 and takes the place it will keep above the writing — before there is any writing. |
+| 3.75–4.7 | a light leaves the heart | One point of light spirals out, up and over, and arrives travelling the way writing goes. |
+| 4.7–6.2 | **the words are written** | The light runs along the line the words sit on; the writing is uncovered behind the nib (a mask that opens left to right, with the nib's glow on it). There is no card, no frame, no panel — only the words. |
+| 6.2–7.3 | the rule and the slots | It drops to the line she types on and draws it as it runs along (a thin rule of light), with **eight slots of starlight** under it — one per digit of the date. |
+| 7.3–8.2 | home | The light climbs back into the heart and goes quiet. |
+
+While she types, **each digit lands as a star falling from the heart** into its slot. A wrong
+answer makes the stars scatter like startled fireflies and settle back; the right one draws
+everything up into the heart (storyboard B takes over from there).
+
+Accessibility: the real `<input>` is still the input — the rule, the slots and the stars are
+a drawing of it. It takes focus as soon as the light reaches the words (and after 1.6 s
+whatever happens to the flight), so a keyboard never waits for an animation. Without WebGL
+or with reduced motion the words simply rise (`is-plain`).

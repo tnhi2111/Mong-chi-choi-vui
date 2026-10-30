@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 import { motion } from '../../config/motion';
-import type { CardRect } from '../../lib/gateRect';
-import { easeInCubic, easeOutCubic, linear, sprite, type Leg } from './lightSprite';
+import { easeInCubic, easeInOutCubic, easeOutCubic, linear, sprite, type Leg } from './spriteFlight';
 
 /**
  * The three flights of the light sprite (storyboard D in `reference/STORYBOARD.md`).
@@ -12,65 +11,77 @@ const S = motion.sprite;
 const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 const curve = (pts: THREE.Vector3[], tension = 0.5) => new THREE.CatmullRomCurve3(pts, false, 'catmullrom', tension);
 
-/* ── D3.1 heart → password: draw the card's frame ───────────────────────── */
+/* ── G heart → password: the light writes the words ─────────────────────── */
 
 /**
- * Points along the card's frame, in the world, at the heart's distance from the camera — so
- * the leader flies the same line on screen that the frame is drawn along (PasswordGate's
- * SVG runs with the same duration and the same constant speed).
+ * A stroke in the world at the heart's distance from the camera, so the leader flies the
+ * same line on screen that the writing sits on. `sag` bows the stroke a little (a hand
+ * writing a line is never a ruler), `rise` lifts its far end.
  */
-export function cardFrame(rect: CardRect, camera: THREE.PerspectiveCamera, size: { width: number; height: number }, depth: number) {
-  const { left: l, top: t, width: w, height: h } = rect;
-  const r = Math.min(rect.radius, w / 2, h / 2);
-  const cx = l + w / 2;
-  // the outline in screen px: top centre → right → bottom → left → back to the top centre
-  const px: [number, number][] = [];
-  const arc = (ox: number, oy: number, a0: number, a1: number) => {
-    for (let i = 0; i <= 6; i++) {
-      const a = a0 + ((a1 - a0) * i) / 6;
-      px.push([ox + Math.cos(a) * r, oy + Math.sin(a) * r]);
-    }
-  };
-  px.push([cx, t]);
-  arc(l + w - r, t + r, -Math.PI / 2, 0);
-  arc(l + w - r, t + h - r, 0, Math.PI / 2);
-  arc(l + r, t + h - r, Math.PI / 2, Math.PI);
-  arc(l + r, t + r, Math.PI, Math.PI * 1.5);
-  px.push([cx, t]);
+export function screenStroke(
+  mark: { left: number; right: number; top: number },
+  camera: THREE.PerspectiveCamera,
+  size: { width: number; height: number },
+  depth: number,
+  sag = 10,
+  rise = 0,
+) {
   camera.updateMatrixWorld();
+  const fwd = camera.getWorldDirection(new THREE.Vector3());
   const dir = new THREE.Vector3();
-  const pts = px.map(([x, y]) => {
+  const at = (x: number, y: number) => {
     dir.set((x / size.width) * 2 - 1, -(y / size.height) * 2 + 1, 0.5).unproject(camera).sub(camera.position).normalize();
-    // the same distance along the view axis for every corner (a plane facing the camera)
-    const fwd = camera.getWorldDirection(new THREE.Vector3());
     const k = depth / Math.max(0.05, dir.dot(fwd));
     return camera.position.clone().addScaledVector(dir, k);
-  });
-  return pts;
+  };
+  const { left: l, right: r, top } = mark;
+  return [at(l, top + rise), at(l + (r - l) * 0.33, top + sag * 0.9 + rise * 0.5), at(l + (r - l) * 0.68, top + sag * 0.55), at(r, top)];
 }
 
-export function cardScript(heart: THREE.Vector3, frame: THREE.Vector3[]): Leg[] {
+/**
+ * The flight that writes the password screen (storyboard G):
+ * leave the heart in a slow spiral → run along the words (they appear behind the stroke) →
+ * underline the place she types → climb home to the heart and go quiet.
+ */
+export function writeScript(heart: THREE.Vector3, words: THREE.Vector3[], line: THREE.Vector3[]): Leg[] {
   const C = S.card;
-  const start = frame[0];
-  // out of the heart in a small rising curl, to the top of the card
-  const mid = heart.clone().lerp(start, 0.5).add(V(0.35, 0.25, 0.1));
+  const start = words[0];
+  // out of the heart, up and over, then down to where the first word begins: a spiral, so
+  // the light arrives travelling the way the writing goes
+  const over = heart.clone().lerp(start, 0.35).add(V(0.85, 0.5, 0.55));
+  const round = heart.clone().lerp(start, 0.72).add(V(-0.7, 0.05, 0.3));
   return [
     {
-      curve: curve([heart.clone(), mid, start]),
+      curve: curve([heart.clone(), over, round, start.clone().add(V(-0.15, 0.12, 0.05)), start]),
       duration: C.leave,
-      ease: easeOutCubic,
-      camera: { mode: 'watch', weight: 0.05 },
+      ease: easeInOutCubic,
+      camera: { mode: 'watch', weight: 0.06 },
       intensity: 1,
+      signal: 'gate-stroke',
     },
-    // the frame itself, at one constant speed (the SVG stroke runs linear too)
-    { curve: new THREE.CatmullRomCurve3(frame, false, 'centripetal'), duration: C.draw, ease: linear, signal: 'card-drawn' },
+    // the words, at one steady speed — the writing is revealed behind the stroke
+    { curve: new THREE.CatmullRomCurve3(words, false, 'centripetal'), duration: C.write, ease: linear, signal: 'gate-written' },
+    // down to the rule she types on, and along it
+    {
+      curve: curve([words[words.length - 1], words[words.length - 1].clone().lerp(line[0], 0.6).add(V(0.1, -0.12, 0)), line[0]]),
+      duration: C.write * 0.28,
+      ease: easeInOutCubic,
+    },
+    // (the rule is drawn WHILE the light runs along it: the page starts on `onStart`)
+    {
+      curve: new THREE.CatmullRomCurve3(line, false, 'centripetal'),
+      duration: C.line,
+      ease: linear,
+      onStart: () => sprite.signal('gate-line'),
+    },
     // home into the heart, where it is quiet again
     {
-      curve: curve([frame[frame.length - 1], start.clone().lerp(heart, 0.5).add(V(-0.2, 0.2, 0.05)), heart.clone()]),
+      curve: curve([line[line.length - 1], line[line.length - 1].clone().lerp(heart, 0.55).add(V(-0.3, 0.45, 0.1)), heart.clone()]),
       duration: C.home,
       ease: easeInCubic,
       intensity: 0,
       camera: { mode: 'off' },
+      signal: 'gate-home',
     },
   ];
 }

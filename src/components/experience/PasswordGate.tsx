@@ -1,19 +1,19 @@
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type FormEvent } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type FormEvent } from 'react';
 import { birthdayConfig } from '../../config/birthday';
 import { checkBirthdayPassword } from '../../lib/password';
 import { motion } from '../../config/motion';
-import { publishGateRect } from '../../lib/gateRect';
+import { publishGateMarks } from '../../lib/gateMarks';
+import { story } from '../../lib/story';
 
 interface Props {
   onSuccess: () => void;
   onFail?: () => void;
-  /** The light sprite draws the card's frame first (storyboard D3.1); the writing condenses after. */
+  /** The light writes the words first (storyboard G); without it they simply fade in. */
   draw?: boolean;
 }
 
-/** How far the drawn frame stands off the writing (px), and its corner radius. */
-const FRAME_PAD = 22;
-const FRAME_R = 26;
+/** How many digits the date takes (DD MM YYYY) — one slot, one star. */
+const SLOTS = 8;
 
 /** Auto-inserts slashes while she types digits only (numeric keyboards have no "/"). */
 function softMask(raw: string): string {
@@ -27,90 +27,140 @@ function softMask(raw: string): string {
   return `${d.slice(0, 2)}/${d.slice(2, 4)}/${d.slice(4)}`;
 }
 
+/**
+ * The password screen (storyboard G). There is no card: the words are written by the light
+ * that just left the heart, and what she types is a thin rule with eight slots of starlight
+ * above it. Every digit lands as a star falling from the heart.
+ *
+ * The real `<input>` is still there and still focusable — the rule and the stars are a
+ * drawing of it, not a replacement (a screen reader hears the label and the message).
+ */
 export function PasswordGate({ onSuccess, onFail, draw = false }: Props) {
   const cfg = birthdayConfig.gate;
   const [value, setValue] = useState('');
   const [tries, setTries] = useState(0);
   const [shake, setShake] = useState(0);
   const [ok, setOk] = useState(false);
+  /** 'none' → the light has not arrived yet; 'words' → it is writing; 'line' → the rule; 'done'. */
+  const [wrote, setWrote] = useState<'none' | 'words' | 'line' | 'done'>(draw ? 'none' : 'done');
   const input = useRef<HTMLInputElement>(null);
-  const form = useRef<HTMLFormElement>(null);
-  // the frame: measured once the card is laid out, published for the light to fly along
-  const [frame, setFrame] = useState<{ w: number; h: number } | null>(null);
+  const words = useRef<HTMLDivElement>(null);
+  const rule = useRef<HTMLDivElement>(null);
+  /** Stars that have fallen into their slots: one per digit, keyed so each falls once. */
+  const [stars, setStars] = useState(0);
+
+  // tell the 3D world where to write (and re-tell it when the window changes shape)
   useLayoutEffect(() => {
-    if (!draw || !form.current) return;
-    const r = form.current.getBoundingClientRect();
-    const w = r.width + FRAME_PAD * 2;
-    const h = r.height + FRAME_PAD * 2;
-    setFrame({ w, h });
-    publishGateRect({ left: r.left - FRAME_PAD, top: r.top - FRAME_PAD, width: w, height: h, radius: FRAME_R });
-    return () => publishGateRect(null);
+    if (!draw) return;
+    const publish = () => {
+      const w = words.current?.getBoundingClientRect();
+      const r = rule.current?.getBoundingClientRect();
+      if (!w || !r) return;
+      publishGateMarks({
+        write: { left: w.left + w.width * 0.06, right: w.right - w.width * 0.06, top: w.top + w.height * 0.52 },
+        line: { left: r.left, right: r.right, top: r.top + r.height * 0.5 },
+      });
+    };
+    publish();
+    window.addEventListener('resize', publish);
+    return () => {
+      window.removeEventListener('resize', publish);
+      publishGateMarks(null);
+    };
+  }, [draw]);
+
+  // the writing follows the stroke: the world tells us when the light reaches each part
+  useEffect(() => {
+    if (!draw) return;
+    let alive = true;
+    void story.wait('gate-stroke').then(() => alive && setWrote('words'));
+    void story.wait('gate-line').then(() => alive && setWrote((w) => (w === 'done' ? w : 'line')));
+    void story.wait('gate-home').then(() => alive && setWrote('done'));
+    return () => {
+      alive = false;
+    };
   }, [draw]);
 
   useEffect(() => {
-    const id = setTimeout(() => input.current?.focus({ preventScroll: true }), 900);
-    return () => clearTimeout(id);
-  }, []);
-
-  const submit = (e: FormEvent) => {
-    e.preventDefault();
-    if (ok) return;
-    if (checkBirthdayPassword(value, birthdayConfig.birthdayPassword)) {
-      setOk(true);
-      input.current?.blur();
-      onSuccess();
-    } else {
-      setTries((t) => t + 1);
-      setShake((s) => s + 1);
-      onFail?.();
+    // focus as soon as the light has reached the words — she can type while it finishes
+    // writing them, and a keyboard never has to wait for a flight to end
+    let alive = true;
+    const take = () => alive && input.current?.focus({ preventScroll: true });
+    if (!draw) {
+      const id = setTimeout(take, 900);
+      return () => {
+        alive = false;
+        clearTimeout(id);
+      };
     }
-  };
+    void story.wait('gate-stroke').then(() => alive && setTimeout(take, 250));
+    // …and whatever happens to the flight, she can type after a second and a half
+    const safety = setTimeout(take, 1600);
+    return () => {
+      alive = false;
+      clearTimeout(safety);
+    };
+  }, [draw]);
+
+  const digits = value.replace(/\D/g, '').length;
+  useEffect(() => setStars(digits), [digits]);
+
+  const submit = useCallback(
+    (e: FormEvent) => {
+      e.preventDefault();
+      if (ok) return;
+      if (checkBirthdayPassword(value, birthdayConfig.birthdayPassword)) {
+        setOk(true);
+        input.current?.blur();
+        onSuccess();
+      } else {
+        setTries((t) => t + 1);
+        setShake((s) => s + 1);
+        onFail?.();
+      }
+    },
+    [ok, value, onSuccess, onFail],
+  );
 
   const message = tries > 0 ? cfg.wrong[Math.min(tries - 1, cfg.wrong.length - 1)] : '';
-
-  // The card is made of the heart's light: it condenses out of a blur, line after line
-  // (durations in src/config/motion.ts).
-  const condense = {
+  const vars = {
+    '--write-ms': `${motion.sprite.card.write * 1000}ms`,
+    '--line-ms': `${motion.sprite.card.line * 1000}ms`,
     '--card-ms': `${motion.unlock.cardMs}ms`,
     '--stagger': `${motion.unlock.cardStaggerMs}ms`,
+    '--spark-ms': `${motion.unlock.sparkMs}ms`,
     '--gather-ms': `${motion.enterRoom.gatherMs}ms`,
-    '--leave-ms': `${motion.sprite.card.leave * 1000}ms`,
-    '--draw-ms': `${motion.sprite.card.draw * 1000}ms`,
   } as CSSProperties;
-  // the outline, from the top centre clockwise — the same way and speed the light flies it
-  const framePath = frame
-    ? (() => {
-        const { w, h } = frame;
-        const r = Math.min(FRAME_R, w / 2, h / 2);
-        return `M ${w / 2} 0 H ${w - r} A ${r} ${r} 0 0 1 ${w} ${r} V ${h - r} A ${r} ${r} 0 0 1 ${w - r} ${h} H ${r} A ${r} ${r} 0 0 1 0 ${h - r} V ${r} A ${r} ${r} 0 0 1 ${r} 0 Z`;
-      })()
-    : '';
 
   return (
     <div className="layer gate">
-      <form ref={form} className={`gate__card condense${draw ? ' draws' : ''}${ok ? ' is-ok' : ''}`} style={condense} onSubmit={submit} noValidate>
-        {draw && frame && (
-          <svg
-            className="gate__frame"
-            width={frame.w}
-            height={frame.h}
-            viewBox={`-1 -1 ${frame.w + 2} ${frame.h + 2}`}
-            style={{ left: -FRAME_PAD - 1, top: -FRAME_PAD - 1 }}
-            aria-hidden="true"
-          >
-            <path d={framePath} pathLength={1} />
-          </svg>
-        )}
-        <p className="eyebrow" style={{ '--i': 0 } as CSSProperties}>
-          {cfg.subtitle}
-        </p>
-        <h1 className="title gate__title" style={{ '--i': 1 } as CSSProperties}>
-          {cfg.title}
-        </h1>
+      <form
+        className={`gate__card${draw ? ' is-written' : ' is-plain'}${ok ? ' is-ok' : ''}`}
+        style={vars}
+        onSubmit={submit}
+        noValidate
+        data-wrote={wrote}
+      >
+        <div ref={words} className="gate__words">
+          <p className="eyebrow" style={{ '--i': 0 } as CSSProperties}>
+            {cfg.subtitle}
+          </p>
+          <h1 className="title gate__title" style={{ '--i': 1 } as CSSProperties}>
+            {cfg.title}
+          </h1>
+        </div>
         <label htmlFor="bday" className="sr-only">
           {cfg.inputLabel}
         </label>
-        <div key={shake} className={`gate__field${shake ? ' shake' : ''}`} style={{ '--i': 2 } as CSSProperties}>
+        <div key={shake} ref={rule} className={`gate__field${shake ? ' shake' : ''}`}>
+          {/* the slots: one star per digit of the date, lit as she types */}
+          <span className="gate__slots" aria-hidden="true">
+            {Array.from({ length: SLOTS }, (_, i) => (
+              <span key={i} className={`gate__slot${i < stars ? ' is-lit' : ''}`} data-gap={i === 2 || i === 4 ? '' : undefined}>
+                <i />
+              </span>
+            ))}
+          </span>
           <input
             ref={input}
             id="bday"
@@ -133,7 +183,7 @@ export function PasswordGate({ onSuccess, onFail, draw = false }: Props) {
             </svg>
           </button>
         </div>
-        <p id="gate-msg" className="gate__msg" role="status" aria-live="polite" style={{ '--i': 3 } as CSSProperties}>
+        <p id="gate-msg" className="gate__msg" role="status" aria-live="polite">
           {ok ? '❤' : message}
         </p>
       </form>

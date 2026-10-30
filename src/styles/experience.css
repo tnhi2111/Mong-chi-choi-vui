@@ -123,90 +123,85 @@
   padding-bottom: max(14vh, calc(env(safe-area-inset-bottom) + 48px));
 }
 
+@property --ink {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 0;
+}
+
 .gate__card {
-  width: min(440px, 100%);
+  width: min(460px, 100%);
   display: grid;
   justify-items: center;
-  gap: 14px;
+  gap: 20px;
   position: relative;
 }
 
-/* The card does not appear — it CONDENSES out of the light the heart has just let go of:
-   each line comes out of a blur, one after the next (--i), while a pool of that light
-   contracts behind the field. Durations: src/config/motion.ts (motion.unlock). */
-.gate__card.condense > * {
-  animation: gate-condense var(--card-ms, 760ms) var(--ease-out) both;
-  animation-delay: calc(var(--i, 0) * var(--stagger, 120ms));
+/* There is no card any more (storyboard G): the words are WRITTEN. A stroke of light runs
+   along them — the light sprite flies that same line in the world — and the writing is
+   uncovered behind the nib: a mask that opens left to right, with a glow where the nib is.
+   `--ink` is animated (hence @property), and the duration is the flight's own. */
+.gate__words {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  width: 100%;
+  text-align: center;
 }
 
-.gate__card.condense::before {
+.gate__card.is-written .gate__words {
+  -webkit-mask-image: linear-gradient(
+    90deg,
+    #000 calc(var(--ink) * 100% - 6%),
+    rgba(0, 0, 0, 0.45) calc(var(--ink) * 100%),
+    transparent calc(var(--ink) * 100% + 6%)
+  );
+  mask-image: linear-gradient(
+    90deg,
+    #000 calc(var(--ink) * 100% - 6%),
+    rgba(0, 0, 0, 0.45) calc(var(--ink) * 100%),
+    transparent calc(var(--ink) * 100% + 6%)
+  );
+}
+
+.gate__card.is-written[data-wrote='none'] .gate__words {
+  opacity: 0;
+}
+
+.gate__card.is-written[data-wrote='words'] .gate__words,
+.gate__card.is-written[data-wrote='line'] .gate__words,
+.gate__card.is-written[data-wrote='done'] .gate__words {
+  animation: gate-ink var(--write-ms, 1500ms) linear both;
+}
+
+/* the nib: a small warm light travelling with the ink */
+.gate__card.is-written[data-wrote='words'] .gate__words::after {
   content: '';
   position: absolute;
-  left: 50%;
-  top: 56%;
-  width: 150%;
-  aspect-ratio: 2.4;
-  translate: -50% -50%;
+  top: 50%;
+  left: calc(var(--ink) * 100%);
+  width: 90px;
+  height: 90px;
+  margin: -45px 0 0 -45px;
   border-radius: 50%;
-  background: radial-gradient(ellipse, rgba(255, 214, 206, 0.3) 0%, rgba(212, 154, 165, 0.14) 38%, transparent 70%);
   pointer-events: none;
-  animation: gate-pool calc(var(--card-ms, 760ms) * 1.6) var(--ease-out) both;
+  background: radial-gradient(circle, rgba(255, 226, 205, 0.5) 0%, rgba(226, 150, 160, 0.16) 38%, transparent 70%);
 }
 
-/* Storyboard D3.1: the light sprite draws the card's frame (top centre, clockwise, constant
-   speed — the same path it flies), and only then does the writing condense inside it. */
-.gate__frame {
-  position: absolute;
-  overflow: visible;
-  pointer-events: none;
-}
-
-.gate__frame path {
-  fill: none;
-  stroke: rgba(240, 206, 168, 0.55);
-  stroke-width: 1;
-  stroke-dasharray: 1 1;
-  stroke-dashoffset: 1;
-  filter: drop-shadow(0 0 4px rgba(255, 210, 160, 0.45));
-  animation: gate-frame-draw var(--draw-ms, 1100ms) linear var(--leave-ms, 550ms) forwards,
-    gate-frame-settle 1.6s var(--ease-out) calc(var(--leave-ms, 550ms) + var(--draw-ms, 1100ms)) forwards;
-}
-
-@keyframes gate-frame-draw {
+@keyframes gate-ink {
+  from {
+    --ink: 0;
+  }
   to {
-    stroke-dashoffset: 0;
+    --ink: 1.08;
   }
 }
 
-/* drawn, the line cools from the light's gold to a quiet hairline */
-@keyframes gate-frame-settle {
-  to {
-    stroke: rgba(232, 196, 170, 0.22);
-    filter: none;
-  }
-}
-
-.gate__card.condense > .gate__frame,
-.gate__card.is-ok > .gate__frame {
-  animation: none;
-}
-
-.gate__card.draws > :not(.gate__frame) {
-  animation-delay: calc(var(--leave-ms, 550ms) + var(--draw-ms, 1100ms) - 150ms + var(--i, 0) * var(--stagger, 120ms));
-}
-
-/* (the right answer leaves at once, whatever the drawing delayed) */
-.gate__card.draws.is-ok > :not(.gate__frame) {
-  animation-delay: calc((3 - var(--i, 0)) * 70ms);
-}
-
-.gate__card.draws::before {
-  animation-delay: calc(var(--leave-ms, 550ms) + var(--draw-ms, 1100ms) - 300ms);
-}
-
-.gate__card.is-ok .gate__frame {
-  transition: opacity 0.4s ease;
-  opacity: 0;
+/* no light to write with (no WebGL, reduced motion): the words simply rise */
+.gate__card.is-plain > * {
+  animation: gate-condense var(--card-ms, 900ms) var(--ease-out) both;
+  animation-delay: calc(var(--i, 0) * var(--stagger, 260ms));
 }
 
 @keyframes gate-condense {
@@ -226,25 +221,9 @@
   }
 }
 
-@keyframes gate-pool {
-  from {
-    opacity: 0.9;
-    scale: 1.45;
-  }
-  to {
-    opacity: 0;
-    scale: 0.9;
-  }
-}
-
-[data-reduce] .gate__card.condense > * {
+[data-reduce] .gate__card.is-plain > * {
   animation-duration: 260ms;
   animation-delay: 0ms;
-}
-
-[data-reduce] .gate__card.condense::before {
-  animation: none;
-  opacity: 0;
 }
 
 .gate__title {
@@ -253,64 +232,186 @@
 
 .gate__field {
   position: relative;
-  width: 100%;
+  width: min(330px, 84%);
+  display: grid;
+  justify-items: center;
+}
+
+/* What she types sits on a thin rule of light, not in a box. The rule is drawn by the
+   light as it passes (scaleX from the left), and it warms when the field has focus — so a
+   keyboard still shows where it is. */
+.gate__field::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 10px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(241, 211, 214, 0.75) 18%, rgba(241, 211, 214, 0.75) 82%, transparent);
+  transform-origin: left center;
+  transition: filter 0.4s, opacity 0.4s;
+}
+
+.gate__card.is-written[data-wrote='none'] .gate__field::after,
+.gate__card.is-written[data-wrote='words'] .gate__field::after {
+  transform: scaleX(0);
+}
+
+.gate__card.is-written[data-wrote='line'] .gate__field::after,
+.gate__card.is-written[data-wrote='done'] .gate__field::after {
+  animation: gate-rule var(--line-ms, 600ms) var(--ease-out) both;
+}
+
+@keyframes gate-rule {
+  from {
+    transform: scaleX(0);
+    opacity: 0.4;
+  }
+  to {
+    transform: scaleX(1);
+    opacity: 1;
+  }
+}
+
+.gate__field:focus-within::after {
+  filter: drop-shadow(0 0 7px rgba(241, 211, 214, 0.65));
 }
 
 .gate__input {
   width: 100%;
-  height: 58px;
-  padding: 0 64px 0 26px;
-  border-radius: 999px;
-  border: 1px solid rgba(241, 211, 214, 0.28);
-  background: rgba(20, 10, 14, 0.55);
+  height: 54px;
+  padding: 0 44px 0 0;
+  border: 0;
+  background: transparent;
   color: var(--text);
   font-family: var(--serif);
-  font-size: 22px;
-  letter-spacing: 0.18em;
+  font-size: 25px;
+  letter-spacing: 0.3em;
   text-align: center;
-  text-indent: 38px;
+  text-indent: 0.3em;
   outline: none;
-  transition: border-color 0.4s, box-shadow 0.4s, background 0.4s;
 }
 
 .gate__input::placeholder {
   color: var(--text-faint);
-  letter-spacing: 0.16em;
-}
-
-.gate__input:focus {
-  border-color: rgba(241, 211, 214, 0.7);
-  box-shadow: 0 0 0 4px rgba(212, 154, 165, 0.12), 0 0 40px rgba(212, 154, 165, 0.15);
-  background: rgba(20, 10, 14, 0.75);
+  letter-spacing: 0.22em;
 }
 
 .gate__input[aria-invalid='true'] {
-  border-color: rgba(230, 150, 165, 0.8);
+  color: #f3c3c9;
 }
 
+/* Eight slots under the rule, one per digit of the date. Each lights as its digit lands —
+   and a star falls into it from where the heart hangs above. */
+.gate__slots {
+  position: absolute;
+  bottom: 0px;
+  display: flex;
+  gap: 11px;
+  pointer-events: none;
+}
+
+.gate__slot {
+  position: relative;
+  display: block;
+  width: 5px;
+  height: 5px;
+}
+
+.gate__slot[data-gap] {
+  margin-right: 13px;
+}
+
+.gate__slot i {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: rgba(241, 211, 214, 0.34);
+  box-shadow: 0 0 5px rgba(241, 211, 214, 0.18);
+  transition: background 0.35s var(--ease-out), box-shadow 0.35s var(--ease-out);
+}
+
+.gate__slot.is-lit i {
+  background: rgba(255, 229, 212, 0.95);
+  box-shadow: 0 0 12px 3px rgba(255, 206, 186, 0.45);
+}
+
+.gate__slot.is-lit::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 4px;
+  height: 4px;
+  margin: -2px 0 0 -2px;
+  border-radius: 50%;
+  background: #fff3e8;
+  box-shadow: 0 0 10px 3px rgba(255, 214, 190, 0.7);
+  animation: star-fall var(--spark-ms, 620ms) var(--ease-out) both;
+}
+
+/* from the heart, which hangs above the writing */
+@keyframes star-fall {
+  from {
+    opacity: 0;
+    transform: translate(6px, -230px) scale(0.5);
+  }
+  25% {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+    transform: none;
+  }
+}
+
+/* a wrong answer: the stars start, scatter like fireflies, and come back */
+.gate__field.shake .gate__slot i {
+  animation: slot-scatter 0.9s var(--ease-in-out) both;
+  animation-delay: calc(var(--i, 0) * 40ms);
+}
+
+@keyframes slot-scatter {
+  30% {
+    transform: translate(-7px, -9px) scale(0.8);
+    opacity: 0.5;
+  }
+  60% {
+    transform: translate(9px, 5px) scale(0.9);
+    opacity: 0.8;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+/* no chip, no disc: the arrow is drawn in the same light as the rule it sits on */
 .gate__submit {
   position: absolute;
-  right: 6px;
-  top: 6px;
-  width: 46px;
-  height: 46px;
+  right: -6px;
+  bottom: 6px;
+  width: 42px;
+  height: 42px;
   border-radius: 50%;
   border: 0;
-  background: var(--blush);
-  color: var(--burgundy);
+  background: transparent;
+  color: rgba(241, 211, 214, 0.75);
   display: grid;
   place-items: center;
   cursor: pointer;
-  transition: background 0.3s, opacity 0.3s, transform 0.3s var(--ease-out);
+  transition: color 0.3s, opacity 0.3s, transform 0.3s var(--ease-out), filter 0.3s;
 }
 
-.gate__submit:hover:not(:disabled) {
-  background: var(--glow);
-  transform: translateX(2px);
+.gate__submit:hover:not(:disabled),
+.gate__submit:focus-visible {
+  color: #fff1e6;
+  filter: drop-shadow(0 0 8px rgba(255, 214, 190, 0.6));
+  transform: translateX(3px);
 }
 
 .gate__submit:disabled {
-  opacity: 0.35;
+  opacity: 0.22;
   cursor: default;
 }
 

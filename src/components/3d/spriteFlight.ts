@@ -62,6 +62,7 @@ export interface Leg {
 const easeInOut = (x: number) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2);
 export const easeOutCubic = (x: number) => 1 - Math.pow(1 - x, 3);
 export const easeInCubic = (x: number) => x * x * x;
+export const easeInOutCubic = (x: number) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2);
 export const linear = (x: number) => x;
 
 /** Uniforms the flock shader reads (shared object: LightSprite builds its material on it). */

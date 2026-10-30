@@ -3,7 +3,7 @@ import { useFrame, type ThreeEvent } from '@react-three/fiber';
 import { Html } from '@react-three/drei';
 import * as THREE from 'three';
 import { useShader } from './useShader';
-import { HAND_GLSL, SPRITE_GLSL, handUniforms, sprite, spriteWake } from './lightSprite';
+import { HAND_GLSL, SPRITE_GLSL, handUniforms, sprite, spriteWake } from './spriteFlight';
 import { roomHand, handNear } from './sceneStore';
 import { Rope, RopeTube } from './verlet';
 import { birthdayConfig } from '../../config/birthday';

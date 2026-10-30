@@ -43,7 +43,8 @@ try {
     await page.waitForTimeout(700);
   }
   await page.locator('#bday').waitFor({ timeout: 8000 });
-  await page.waitForTimeout(1500);
+  // the light writes the words before the field takes focus — wait for the caret, not a guess
+  await page.waitForFunction(() => document.activeElement?.id === 'bday', null, { timeout: 15000 });
   console.log('• gate focus:', await focused());
   await page.keyboard.type(password.replace(/\D/g, ''));
   await page.keyboard.press('Enter');

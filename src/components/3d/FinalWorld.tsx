@@ -5,7 +5,7 @@ import { SURPRISE_PHASES, type FinalePhase } from '../../types';
 import { MemoryCelestial, type MemoryCelestialHandle } from './MemoryCelestial';
 import { ParticleField } from './ParticleField';
 import { CameraRig, rebaseCamera } from './CameraRig';
-import { sprite } from './lightSprite';
+import { sprite } from './spriteFlight';
 import { finaleArrivalScript } from './spriteScripts';
 import { usePointerOrbit } from '../../hooks/usePointerOrbit';
 import { Glow } from './Glow';

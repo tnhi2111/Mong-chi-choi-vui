@@ -8,6 +8,18 @@
  * 120–200 ms, and nothing ever lands at the same moment as anything else.
  */
 
+/**
+ * ONE KNOB FOR THE WHOLE PACE. 1.0 is the pace this site is written at; 1.2 makes every
+ * change of scene a fifth longer, 0.8 a fifth shorter. Every duration below goes through
+ * `t()` (seconds) or `ms()` (milliseconds), so the knob reaches all of them.
+ *
+ * Why a knob at all: the owner watches this a hundred times and his wife will watch it
+ * once. What is "slow" for him is the first time for her.
+ */
+const TEMPO = 1.0;
+const t = (seconds: number) => Math.round(seconds * TEMPO * 1000) / 1000;
+const ms = (milliseconds: number) => Math.round(milliseconds * TEMPO);
+
 /** The curves the page uses (CSS `transition-timing-function`). */
 export const ease = {
   /** Out: starts fast, settles — for anything arriving. */
@@ -17,33 +29,46 @@ export const ease = {
 };
 
 export const motion = {
+  /** The pace knob above, so code that computes its own timings can use it too. */
+  tempo: TEMPO,
+
   /**
    * A — the third touch: the heart opens, and the password card condenses out of its light.
    * Seconds, measured from the touch. The heart never leaves the frame.
    */
   unlock: {
-    /** The breath in: the heart contracts and holds. */
-    anticipate: 0.15,
+    /** The breath in: the heart contracts and holds (long enough to be a held beat). */
+    anticipate: t(0.38),
     /** How much it contracts (fraction of its size). */
-    contract: 0.055,
-    /** Threads of light spiral out of the heart and come home. */
-    release: 1.05,
-    /** How far they travel (world units, scaled by the heart's size). */
-    reach: 0.62,
-    /** The camera leans into the core while the light is out: lens narrows by this many degrees. */
+    contract: 0.06,
+    /** The heart opens like a flower and closes again: petals out, petals home. */
+    release: t(2.1),
+    /** How far the light travels (world units, scaled by the heart's size). */
+    reach: 0.72,
+    /** Petals: how many the light opens into, and how far round each one twists as it opens. */
+    petals: 6,
+    petalTwist: 0.9,
+    /** How long one petal waits behind the one before (fraction of the bloom). */
+    petalStagger: 0.22,
+    /** The camera leans into the core while the heart is open: lens narrows by this much. */
     lensIn: 7,
     /** …and comes this much closer (fraction of its distance). */
     push: 0.12,
+    /** It also arcs round the heart by this much (radians ≈ 41°) and cranes down from above. */
+    arc: 0.72,
+    craneUp: 0.5,
     /** The heart shrinks and drifts to the place it keeps on the password screen. */
-    settle: 1.0,
-    /** When the password card starts to condense (App switches the stage here). */
-    gateAt: 2.0,
-    /** How long the card takes to condense out of the light (ms — CSS reads this). */
-    cardMs: 760,
+    settle: t(1.5),
+    /** When the words begin to be written (App switches the stage here). */
+    gateAt: t(3.75),
+    /** How long each line takes to condense out of the light (ms — CSS reads this). */
+    cardMs: ms(900),
     /** Each line of the card follows the one before by this long (ms). */
-    cardStaggerMs: 120,
+    cardStaggerMs: ms(260),
+    /** A star falling from the heart into a slot as she types (ms). */
+    sparkMs: ms(620),
     /** Reduced motion: the whole thing, told quickly. */
-    quick: { release: 0.3, settle: 0.35, gateAt: 0.75 },
+    quick: { release: t(0.45), settle: t(0.4), gateAt: t(0.95) },
   },
 
   /**
@@ -79,7 +104,7 @@ export const motion = {
   },
   /**
    * D — the light sprite: a flock with a leader, born from the heart, that leads the camera
-   * through every change of world (`lightSprite.ts`, `LightSprite.tsx`). Seconds / metres.
+   * through every change of world (`spriteFlight.ts`, `LightSprite.tsx`). Seconds / metres.
    *
    * Why a leader: motion with an intention and a character reads as alive; a cloud that
    * moves all at once reads as an effect. The flock trails the leader with its own lag per
@@ -109,8 +134,10 @@ export const motion = {
     /** …sampled this far back along the path (s). */
     wakeLags: [0, 0.3, 0.7, 1.2] as const,
 
-    /** Heart → password: the leader leaves the heart and draws the card's frame. */
-    card: { leave: 0.55, draw: 1.1, home: 0.7, depth: 1.35 },
+    /** Heart → password: the leader leaves the heart, WRITES the words (a stroke that runs
+     *  left to right under them, which the writing is revealed along), underlines the place
+     *  she types, and goes home. */
+    card: { leave: t(0.95), write: t(1.5), line: t(0.6), home: t(0.9), depth: 1.35 },
     /** Welcome → room: out of the heart into the corridor (until the room is ready), then
      *  the tour round the room, then up into the orb. */
     room: { leave: 1.4, tour: 5.0, rise: 1.3, entryZ: 2.8 },

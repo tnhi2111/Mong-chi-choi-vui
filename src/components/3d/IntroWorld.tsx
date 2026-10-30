@@ -12,9 +12,9 @@ import { HeartVortex } from './HeartVortex';
 import { LightDog } from './LightDog';
 import { heartTipY } from './heartShape';
 import { birthdayConfig } from '../../config/birthday';
-import { sprite } from './lightSprite';
-import { cardFrame, cardScript, leaveHeartScript } from './spriteScripts';
-import { gateRect } from '../../lib/gateRect';
+import { sprite } from './spriteFlight';
+import { screenStroke, writeScript, leaveHeartScript } from './spriteScripts';
+import { gateMarks } from '../../lib/gateMarks';
 
 interface Props {
   stage: Stage;
@@ -123,6 +123,33 @@ export function IntroWorld({
       : 6.6 * dist;
   if (stage !== 'intro') orbit.tZoom = 1;
 
+  /**
+   * While the heart is open the camera arcs round it (≈41°) and cranes down from above —
+   * the one moment the hero is seen from a moving point of view, so the light reads as a
+   * thing with volume instead of a picture. The ring of words below passes across the lens
+   * on the way down, which is where the parallax comes from.
+   */
+  const arcing = unlockPhase === 'open' || unlockPhase === 'hold';
+  const arcFrom = useRef(0);
+  useEffect(() => {
+    if (!arcing || reducedMotion) return;
+    arcFrom.current = orbit.tYaw;
+    const U = MOTION.unlock;
+    let raf = 0;
+    const t0 = performance.now();
+    const span = (U.anticipate + U.release) * 1000;
+    const step = () => {
+      const k = Math.min(1, (performance.now() - t0) / span);
+      const e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2; // in-out: it leans away and settles
+      orbit.tYaw = arcFrom.current + U.arc * e;
+      orbit.tPitch = U.craneUp * Math.sin(Math.PI * e); // up, then back down to her eye line
+      orbit.lastInput = performance.now();
+      if (k < 1) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [arcing, reducedMotion, orbit]);
+
   // when the light gathers, the camera glides round to meet the heart face to face
   const gathering = awake && stage === 'intro';
   useEffect(() => {
@@ -137,13 +164,17 @@ export function IntroWorld({
   const drawnCard = useRef(-1);
   useFrame(({ camera, size }, dt) => {
     orbit.step(Math.min(dt, 0.05));
-    if (stage === 'gate' && !reducedMotion && gateRect.rect && gateRect.version !== drawnCard.current && holder.current) {
-      drawnCard.current = gateRect.version;
+    if (stage === 'gate' && !reducedMotion && gateMarks.marks && gateMarks.version !== drawnCard.current && holder.current) {
+      drawnCard.current = gateMarks.version;
       holder.current.getWorldPosition(heartAt);
       const cam = camera as THREE.PerspectiveCamera;
-      // the frame hangs at the heart's distance, so the light flies at the heart's depth
+      // the writing hangs at the heart's distance, so the light writes at the heart's depth
       const depth = cam.position.distanceTo(heartAt);
-      sprite.play(cardScript(heartAt, cardFrame(gateRect.rect, cam, size, depth)), heartAt);
+      const m = gateMarks.marks;
+      sprite.play(
+        writeScript(heartAt, screenStroke(m.write, cam, size, depth, 14, -6), screenStroke(m.line, cam, size, depth, 4)),
+        heartAt,
+      );
     }
     if (stage !== 'intro') {
       // the gate and the welcome are read head-on: glide back to the front

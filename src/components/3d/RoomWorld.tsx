@@ -7,7 +7,7 @@ import { MemoryCelestial } from './MemoryCelestial';
 import { Gift3D } from './Gift3D';
 import { ParticleField } from './ParticleField';
 import { CameraRig, rebaseCamera } from './CameraRig';
-import { handUniforms, sprite } from './lightSprite';
+import { handUniforms, sprite } from './spriteFlight';
 import { story } from '../../lib/story';
 import { roomTourScript, windowScript } from './spriteScripts';
 import { getFloorTexture, getShadowTexture } from './glowTexture';

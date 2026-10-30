@@ -2,7 +2,7 @@ import { useEffect, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useShader } from './useShader';
-import { HAND_GLSL, SPRITE_GLSL, handUniforms, spriteWake } from './lightSprite';
+import { HAND_GLSL, SPRITE_GLSL, handUniforms, spriteWake } from './spriteFlight';
 import { roomHand } from './sceneStore';
 import { getHeartGeometry } from './heartShape';
 

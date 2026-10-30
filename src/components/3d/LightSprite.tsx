@@ -3,11 +3,11 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useShader } from './useShader';
 import { motion } from '../../config/motion';
-import { HIST, sprite, spriteUniforms } from './lightSprite';
+import { HIST, sprite, spriteUniforms } from './spriteFlight';
 import { getGlowTexture } from './glowTexture';
 
 /**
- * The light sprite, drawn (storyboard D). The brain is `lightSprite.ts`; this is one points
+ * The light sprite, drawn (storyboard D). The brain is `spriteFlight.ts`; this is one points
  * draw for the whole flock plus two sprites for the leader's core.
  *
  * Every mote is somewhere back along the leader's recorded path (`aLag` seconds ago), so the

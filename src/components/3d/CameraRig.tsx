@@ -2,7 +2,7 @@ import { useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { OrbitInput } from '../../hooks/usePointerOrbit';
-import { sprite } from './lightSprite';
+import { sprite } from './spriteFlight';
 import { motion as MOTION } from '../../config/motion';
 
 interface Props {
@@ -22,7 +22,7 @@ interface Props {
   nudge?: THREE.Vector3;
 }
 
-// (the spring lives in its own module so the light sprite can share it — see lightSprite)
+// (the spring lives in its own module so the light sprite can share it — see spriteFlight)
 export { Spring } from './spring';
 import { Spring } from './spring';
 
