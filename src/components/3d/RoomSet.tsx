@@ -2213,7 +2213,7 @@ export function RoomSet({ floorY: stageY, rx, rz, heart, reducedMotion, hoverFx,
       <Stage y={stageY} rug={floorU.uRug.value} stageMat={stageMat} bandMat={bandMat} />
       <RoomProps floorY={floorY} windowAngle={WINDOW_ANGLE} wallR={WALL_R} candleVec={candleVec} candleCount={candles.length} heart={heart} motion={motion} />
       {dogSpot && <Petals spot={dogSpot} y={stageY} motion={motion} />}
-      <group position={cakeAt} scale={0.82} ref={(g) => void (cutGroups.current[1] = g)} userData={{ anchor: LAYOUT.cake }}>
+      <group position={cakeAt} scale={1} ref={(g) => void (cutGroups.current[1] = g)} userData={{ anchor: LAYOUT.cake }}>
         <BuildGate at={[cakeAt[0], cakeAt[2]]} pivot={[0, 0, 0]} mode="rise" grow={1.1}>
         <Cake
           at={[0, 0, 0]}

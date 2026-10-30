@@ -649,7 +649,7 @@ export const cakeFragment = /* glsl */ `
     ao *= mix(0.62, 1.0, smoothstep(0.0, 0.045, vY));
     ao *= mix(0.75, 1.0, smoothstep(0.26, 0.29, vY) + step(vY, 0.255) * 1.0);
     // (the stand and the plate: no tier-foot darkening — only a soft shade right at the cake's foot)
-    if (k > 8.5) ao = vAO * mix(0.72, 1.0, smoothstep(0.34, 0.4, length(vWorld.xz - uCenter.xz) / 0.82));
+    if (k > 8.5) ao = vAO * mix(0.72, 1.0, smoothstep(0.34, 0.4, length(vWorld.xz - uCenter.xz)));
     // buttercream: the palette knife's marks — swept bands round the sides, a slow spiral on
     // the tops where it was turned on the stand; a faint warmth where light passes through
     if (k < 0.5) {
