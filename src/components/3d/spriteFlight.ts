@@ -106,13 +106,29 @@ export const SPRITE_GLSL = /* glsl */ `
     }
     return vec3(1.0, 0.78, 0.55) * g;
   }
+  /**
+   * 0 where the room is NOT THERE YET, 1 where the leader has already flown past. Empty
+   * means not drawn — the surface is discarded, not dimmed (the owner: "trống nghĩa là
+   * không vẽ"). The edge is broken up by a little noise so the room comes in along a torn
+   * line of light instead of a clean wipe.
+   */
   float spriteBuilt(vec3 P) {
     if (uBuild.z < 0.5) return 1.0;
     float a = atan(P.x, -P.z);
     // the middle of the room (the stage) is built with the last part of the sweep
     float r = length(P.xz);
     float reach = uBuild.y - mix(0.0, 0.6, smoothstep(2.2, 0.6, r));
-    return smoothstep(a - 0.3, a + 0.1, reach);
+    // a ragged edge — but a SOFT one: a hash on a grid broke the wall into visible cubes,
+    // so the line is waved by a few smooth sines instead (no grid, no blocks)
+    float n = sin(P.y * 2.7 + P.x * 1.9) * 0.5 + sin(P.z * 3.3 - P.y * 1.3) * 0.35 + sin(P.x * 5.1 + P.z * 4.7) * 0.15;
+    float edge = smoothstep(a - 0.38, a + 0.08, reach + n * 0.1);
+    // and it keeps coming up to full brightness for a moment after it arrives
+    return edge;
+  }
+
+  /** Call first in a room fragment shader: nothing of the room exists before the light. */
+  void spriteGate(vec3 P) {
+    if (uBuild.z > 0.5 && spriteBuilt(P) < 0.5) discard;
   }
 `;
 
@@ -143,7 +159,7 @@ class SpriteController {
   private stars = new Spring(0);
   private targets = { intensity: 0, corridor: 0, stars: 0 };
   /** Build angle reached (room tour). */
-  private build = { active: false, start: -Math.PI, reach: -Math.PI, finishing: false };
+  private build = { active: false, pending: false, start: -Math.PI, reach: -Math.PI, finishing: false };
 
   /** What CameraRig reads. `weight` eases in and out so taking over never jumps. */
   readonly cam = {
@@ -186,6 +202,7 @@ class SpriteController {
     this.cam.target = 0;
     this.cam.mode = 'off';
     this.build.active = false;
+    this.build.pending = false;
     spriteWake.uBuild.value.z = 0;
   }
 
@@ -203,6 +220,7 @@ class SpriteController {
     this.cam.target = 0;
     this.cam.mode = 'off';
     if (this.build.active) this.build.finishing = true;
+    else this.build.pending = false;
     for (const L of rest) {
       L.onEnd?.();
       if (L.signal) this.signal(L.signal);
@@ -232,9 +250,26 @@ class SpriteController {
     story.signal(name);
   }
 
+  /**
+   * A tour is coming. The room mounts (and compiles) a moment before the flight reaches it,
+   * so without this its things would be drawn for those frames and then vanish as the gate
+   * closed. From here on nothing of the room is drawn until the light passes it.
+   */
+  expectBuild() {
+    this.build.pending = true;
+    this.build.reach = this.build.start;
+  }
+
+  /** QA (?debug): how far round the room the build has reached. */
+  debugBuild() {
+    return this.build.active || this.build.pending
+      ? { reach: +this.build.reach.toFixed(2), start: +this.build.start.toFixed(2), active: this.build.active }
+      : null;
+  }
+
   /** 0..1: has the build sweep passed this angle (atan(x, -z)) yet? (1 when no tour is running.) */
   builtAt(angle: number) {
-    if (!this.build.active) return 1;
+    if (!this.build.active) return this.build.pending ? 0 : 1;
     // (the same ramp as spriteBuilt in the shader: it wakes as the leader comes up to it)
     return THREE.MathUtils.smoothstep(this.build.reach, angle - 0.3, angle + 0.1);
   }
@@ -379,6 +414,7 @@ class SpriteController {
       spriteWake.uBuild.value.set(this.build.start, this.build.reach, 1);
       if (this.build.finishing && this.build.reach >= Math.PI + 0.75) {
         this.build.active = false;
+        this.build.pending = false;
         spriteWake.uBuild.value.z = 0;
       }
     }

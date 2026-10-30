@@ -121,14 +121,16 @@ export interface RoomMarks {
 export function roomTourScript(m: RoomMarks, onHome: () => void): { entry: THREE.Vector3; legs: Leg[] } {
   const R = S.room;
   const entry = V(-0.3, 1.25, R.entryZ);
+  // (k < 1 pulls a mark in toward the middle of the room: the flight passes INSIDE the
+  //  furniture, so the camera behind it always has the room in frame, never a wall)
   const toward = (p: THREE.Vector3, k: number) => p.clone().multiplyScalar(k).setY(p.y);
   const tour = curve([
     entry,
     V(-2.5, 1.15, 1.6),
-    toward(m.window, 0.72).setY(m.window.y + 0.1),
-    toward(m.sign, 0.78).setY(m.sign.y - 0.1),
-    toward(m.balloons, 0.78),
-    toward(m.cake, 0.72).setY(m.cake.y + 0.55),
+    toward(m.window, 0.62).setY(m.window.y + 0.25),
+    toward(m.sign, 0.66).setY(m.sign.y - 0.05),
+    toward(m.balloons, 0.66),
+    toward(m.cake, 0.6).setY(m.cake.y + 0.7),
     V(3.4, 1.0, -0.6),
     // round the front-right (the seating corner), so the flight ends facing the room the way
     // she will see it: the camera is let go close to its own framing, not behind the cake
@@ -140,7 +142,9 @@ export function roomTourScript(m: RoomMarks, onHome: () => void): { entry: THREE
     legs: [
       // (a follower a little lower than the leader: more lit floor and things, less of the dark
       // above the walls — the room has no ceiling)
-      { curve: tour, duration: R.tour, ease: (x) => x, camera: { mode: 'follow', back: 1.35, up: 0.05 }, corridor: 0, build: 'sweep', intensity: 1 },
+      // (the camera keeps further back than a follower normally would: what she is being
+      //  shown is the room coming into being, not the light itself)
+      { curve: tour, duration: R.tour, ease: (x) => x, camera: { mode: 'follow', back: 2.25, up: 0.35 }, corridor: 0, build: 'sweep', intensity: 1 },
       {
         curve: rise,
         duration: R.rise,

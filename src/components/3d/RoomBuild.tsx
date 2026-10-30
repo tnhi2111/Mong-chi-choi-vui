@@ -45,6 +45,16 @@ const SWEEP_FLY = 1.0;
  */
 export function sampleRoom(root: THREE.Object3D, limit = 15000, sweep = false): BuildPoints | null {
   const parts: { mesh: THREE.Mesh; tris: number; weight: number }[] = [];
+  // Anything waiting for the light (BuildGate) is scaled to nothing right now — sampling it
+  // as it stands would pile all of its points on one spot. Open every gate for the moment
+  // it takes to read the vertices, then shut them again.
+  const gates: { o: THREE.Object3D; s: THREE.Vector3 }[] = [];
+  root.traverse((o) => {
+    if (o.userData?.buildGate) {
+      gates.push({ o, s: o.scale.clone() });
+      o.scale.setScalar(1);
+    }
+  });
   root.updateWorldMatrix(true, true);
   root.traverse((o) => {
     const m = o as THREE.Mesh;
@@ -59,7 +69,11 @@ export function sampleRoom(root: THREE.Object3D, limit = 15000, sweep = false): 
     // puppy has twenty thousand).
     parts.push({ mesh: m, tris, weight: Math.sqrt(tris) * size });
   });
-  if (!parts.length) return null;
+  const restore = () => gates.forEach(({ o, s: v }) => o.scale.copy(v));
+  if (!parts.length) {
+    restore();
+    return null;
+  }
   const sum = parts.reduce((n, p) => n + p.weight, 0);
 
   const pos: number[] = [];
@@ -92,6 +106,7 @@ export function sampleRoom(root: THREE.Object3D, limit = 15000, sweep = false): 
       pos.push(a.x, a.y, a.z);
     }
   }
+  restore();
   const n = pos.length / 3;
   if (n < 32) return null;
 

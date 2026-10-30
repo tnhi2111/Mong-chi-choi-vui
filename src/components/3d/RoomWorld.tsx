@@ -14,6 +14,7 @@ import { getFloorTexture, getShadowTexture } from './glowTexture';
 import { usePointerOrbit } from '../../hooks/usePointerOrbit';
 import { useDive } from '../../hooks/useDive';
 import { RoomBuild, sampleRoom, type BuildPoints } from './RoomBuild';
+import { BuildGate } from './BuildGate';
 import { motion as MOTION } from '../../config/motion';
 import { giftRing, hoverLight, roomHand, roomLights } from './sceneStore';
 import { RoomSet, SIGN_PLACEMENT, STAGE_STEP, WALL_R, WINDOW_ANGLE } from './RoomSet';
@@ -189,6 +190,14 @@ export function RoomWorld({
    */
   const ledIn = drawIn && !reducedMotion;
   const [touring, setTouring] = useState(ledIn);
+  // the room is about to be built by the light: nothing of it is drawn until then.
+  // (once, before the first frame — not on every render, or the end of the tour would
+  // arm it again and the finished room would disappear)
+  const expected = useRef(false);
+  if (ledIn && !expected.current) {
+    expected.current = true;
+    sprite.expectBuild();
+  }
 
   // a hidden moment in progress (the cake or the sign) — see below
   const [moment, setMoment] = useState<Moment | null>(null);
@@ -670,6 +679,9 @@ export function RoomWorld({
         />
         <Floor rx={rx} rz={rz} />
         <group position={[0, ORB_Y, 0]}>
+          {/* …and the orb last of all: the leader rises into the middle of the room and
+              becomes it (BuildGate `last`), so the flight ends ON the thing it made */}
+          <BuildGate at={[0, 0]} last grow={1.1}>
           {/* the centerpiece: a little universe of their memories, kept in glass. Touch
               plays its constellation reveal; once every memory is open, the touch also
               leads on to the finale (as the heart did), while the orb opens */}
@@ -683,10 +695,11 @@ export function RoomWorld({
             reducedMotion={reducedMotion}
             scale={portrait ? 0.7 : 0.86}
           />
+          </BuildGate>
         </group>
         {gifts.map((g, i) => (
+          <BuildGate key={g.id} at={[ring[i].pos[0], ring[i].pos[2]]} grow={0.7}>
           <Gift3D
-            key={g.id}
             gift={g}
             index={i}
             home={ring[i].pos}
@@ -709,6 +722,7 @@ export function RoomWorld({
             onOpened={onOpened}
             onHover={onHover}
           />
+          </BuildGate>
         ))}
         {moment === 'cake' && (
           <Html

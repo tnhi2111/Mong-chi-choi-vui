@@ -191,3 +191,30 @@ Accessibility: the real `<input>` is still the input — the rule, the slots and
 a drawing of it. It takes focus as soon as the light reaches the words (and after 1.6 s
 whatever happens to the flight), so a keyboard never waits for an animation. Without WebGL
 or with reduced motion the words simply rise (`is-plain`).
+
+---
+
+## H. The room is not there until the light brings it (≈11 s)
+
+The owner: *"phòng phải BAN ĐẦU TRỐNG HOÀN TOÀN, chỉ hiện dần theo đường bay của ánh sáng."*
+Empty means **not drawn** — not dimmed. Timings in `motion.sprite.room`.
+
+| t (s) | Frame | What is happening |
+|---|---|---|
+| 0.0–1.6 | the welcome, then dark | The light leaves the heart, dives away and opens a corridor; the room is mounted and compiled behind it but **nothing of it is drawn**. |
+| 1.6–2.5 | the corridor | It flies on, waiting for the room to be ready. The screen is the light, its flock, and the dark. |
+| 2.5–4.5 | the first surfaces | The flight enters the room. Where the leader has passed, the floor and the stage exist; where it has not, the shader **discards** the fragment. The edge is waved by a few smooth sines, so the room comes in along a torn line of light. |
+| 4.5–7 | the left side, then the window | The bookcase corner, the armchair, the rug; then the arched window with the moon behind it. Each standing thing (`BuildGate`) waits for the leader to reach ITS angle, then grows into place with a touch of overshoot. |
+| 7–9.5 | the back wall, the sign, the balloons, the cake | The garland lights along the leader's path; the HAPPY BIRTHDAY sign comes up under it; the candles catch **near the end**, so the room's warmth arrives after its shapes and there is never a dark beat. |
+| 9.5–11 | the gifts and the orb | The five gifts appear round the ring, and the leader rises into the middle of the room and **becomes the orb** — the flight ends on the thing it made. |
+| 11–12.5 | the whole room | The camera pulls back and hands control to her. |
+
+Measured (`qa-output/tmp/tour.mjs`, which counts the room's standing things as it films):
+at 10 % of the tour **1 of 25**, at 30 % **3 of 25**, at 50 % 6, at 70 % 15, at 100 % 25.
+
+Trade-off, stated plainly: every surface uses ONE sweep (a discard by angle) and every
+standing thing one gate. The individually authored choreography in the brief — planks
+unrolling one by one, the wall rising like a curtain, the window frame drawn before its
+glass fills with night, balloons inflating from their knots, the cake rising tier by tier,
+the gifts falling as seeds — is **not** built. That is a piece per element, and the sweep is
+what makes the room build itself in the time available.

@@ -140,7 +140,7 @@ export const motion = {
     card: { leave: t(0.95), write: t(1.5), line: t(0.6), home: t(0.9), depth: 1.35 },
     /** Welcome → room: out of the heart into the corridor (until the room is ready), then
      *  the tour round the room, then up into the orb. */
-    room: { leave: 1.4, tour: 5.0, rise: 1.3, entryZ: 2.8 },
+    room: { leave: t(1.6), tour: t(6.2), rise: t(1.5), entryZ: 3.4 },
     /** Room → finale: out of the orb to the arched window and through it; the finale is
      *  swapped in when the camera is `swapAt` m from the glass (the night fills the frame). */
     window: { reach: 2.3, through: 1.0, swapAt: 0.45 },

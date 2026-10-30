@@ -809,7 +809,10 @@ export const ROOM_LIGHT = /* glsl */ `
     light += vec3(0.28, 0.38, 0.75) * max(dot(n, uMoonDir), 0.0) * 0.16;
     light *= mix(0.55, 1.0, smoothstep(0.0, 0.14, P.y - uFloorY));
     // the light sprite: dim until it has flown past, and a warm flare where it passes
-    light = light * mix(0.62, 1.0, spriteBuilt(P)) + spriteGlow(P) * 1.3 + handGlow(P);
+    // nothing of the room exists before the light has flown past it
+    float built = spriteBuilt(P);
+    if (uBuild.z > 0.5 && built < 0.5) discard;
+    light = light * (0.55 + 0.45 * built) + spriteGlow(P) * 1.3 + handGlow(P);
     return light;
   }
 `;

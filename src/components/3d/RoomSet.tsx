@@ -4,6 +4,7 @@ import { Html } from '@react-three/drei';
 import * as THREE from 'three';
 import { useShader } from './useShader';
 import { HAND_GLSL, SPRITE_GLSL, handUniforms, sprite, spriteWake } from './spriteFlight';
+import { BuildGate } from './BuildGate';
 import { roomHand, handNear } from './sceneStore';
 import { Rope, RopeTube } from './verlet';
 import { birthdayConfig } from '../../config/birthday';
@@ -276,7 +277,10 @@ const floorFragment = /* glsl */ `
     col = haze(col, vWorld);
     // the light sprite: what it has flown past is awake, what it has not waits at 62 % light,
     // and where it passes the surface flares and settles (storyboard D)
-    col = col * mix(0.62, 1.0, spriteBuilt(vWorld)) + spriteGlow(vWorld) * (0.06 + col * 1.4);
+    // nothing of the room exists before the light has flown past it
+    float built = spriteBuilt(vWorld);
+    if (uBuild.z > 0.5 && built < 0.5) discard;
+    col = col * (0.55 + 0.45 * built) + spriteGlow(vWorld) * (0.06 + col * 1.4);
     // her hand: a warm pool under it, and beside it the soft shadow of a hand held above
     vec2 hf = handFloor(vWorld);
     col = col * (1.0 - 0.28 * hf.y) * (1.0 + 0.5 * hf.x) + vec3(1.0, 0.72, 0.48) * 0.035 * hf.x;
@@ -372,7 +376,10 @@ const stageFragment = /* glsl */ `
     col = haze(col, vWorld);
     // the light sprite: what it has flown past is awake, what it has not waits at 62 % light,
     // and where it passes the surface flares and settles (storyboard D)
-    col = col * mix(0.62, 1.0, spriteBuilt(vWorld)) + spriteGlow(vWorld) * (0.06 + col * 1.4);
+    // nothing of the room exists before the light has flown past it
+    float built = spriteBuilt(vWorld);
+    if (uBuild.z > 0.5 && built < 0.5) discard;
+    col = col * (0.55 + 0.45 * built) + spriteGlow(vWorld) * (0.06 + col * 1.4);
     gl_FragColor = vec4(col, 1.0);
   }
 `;
@@ -402,7 +409,10 @@ const bandFragment = /* glsl */ `
     col = haze(col, vWorld);
     // the light sprite: what it has flown past is awake, what it has not waits at 62 % light,
     // and where it passes the surface flares and settles (storyboard D)
-    col = col * mix(0.62, 1.0, spriteBuilt(vWorld)) + spriteGlow(vWorld) * (0.06 + col * 1.4);
+    // nothing of the room exists before the light has flown past it
+    float built = spriteBuilt(vWorld);
+    if (uBuild.z > 0.5 && built < 0.5) discard;
+    col = col * (0.55 + 0.45 * built) + spriteGlow(vWorld) * (0.06 + col * 1.4);
     gl_FragColor = vec4(col, 1.0);
   }
 `;
@@ -587,7 +597,10 @@ const wallFragment = /* glsl */ `
     // and where it passes the surface flares and settles (storyboard D)
     // (the pane flares far less: the leader flies straight through it, and a lit night sky
     //  filling the frame was the brightest frame of the room → finale change)
-    col = col * mix(0.62, 1.0, spriteBuilt(vWorld)) + spriteGlow(vWorld) * (0.06 + col * 1.4) * (1.0 - inWin * 0.8);
+    // nothing of the room exists before the light has flown past it
+    float built = spriteBuilt(vWorld);
+    if (uBuild.z > 0.5 && built < 0.5) discard;
+    col = col * (0.55 + 0.45 * built) + spriteGlow(vWorld) * (0.06 + col * 1.4) * (1.0 - inWin * 0.8);
     gl_FragColor = vec4(col, 1.0);
   }
 `;
@@ -621,7 +634,10 @@ const ceilingFragment = /* glsl */ `
     // the cornice line where it meets the wall
     col *= 1.0 - smoothstep(0.12, 0.0, ${WALL_R.toFixed(1)} - r) * 0.4;
     col *= light * 1.6;
-    col = col * mix(0.62, 1.0, spriteBuilt(vWorld)) + spriteGlow(vWorld) * (0.04 + col * 1.2);
+    // nothing of the room exists before the light has flown past it
+    float built = spriteBuilt(vWorld);
+    if (uBuild.z > 0.5 && built < 0.5) discard;
+    col = col * (0.55 + 0.45 * built) + spriteGlow(vWorld) * (0.04 + col * 1.2);
     gl_FragColor = vec4(col, uInside);
   }
 `;
@@ -2084,15 +2100,20 @@ export function RoomSet({ floorY: stageY, rx, rz, heart, reducedMotion, hoverFx,
       </mesh>
       <Ceiling floorY={floorY} lamps={floorU.uLamps} />
       {candles.map((c, i) => (
-        <mesh
-          key={i}
-          position={[c.x, floorY + c.h / 2, c.z]}
-          rotation={[Math.sin(c.seed * 3.1) * 0.035, 0, Math.cos(c.seed * 1.7) * 0.035]}
-          geometry={candleGeometry(c)}
-          material={waxMat}
-        />
+        <BuildGate key={i} at={[c.x, c.z]} seed={c.seed * 0.08} grow={0.4}>
+          <mesh
+            position={[c.x, floorY + c.h / 2, c.z]}
+            rotation={[Math.sin(c.seed * 3.1) * 0.035, 0, Math.cos(c.seed * 1.7) * 0.035]}
+            geometry={candleGeometry(c)}
+            material={waxMat}
+          />
+        </BuildGate>
       ))}
-      <points geometry={flames} material={flameMat} frustumCulled={false} />
+      {/* the flames come near the end: the room's shapes first, then its warmth — but
+          before the light leaves, so the room is never dark between the two */}
+      <BuildGate at={[0, 0]} angle={1.5} grow={0.9}>
+        <points geometry={flames} material={flameMat} frustumCulled={false} />
+      </BuildGate>
       <Dust candles={candles} candleVec={candleVec} floorY={floorY} count={portrait ? 90 : 170} motion={motion} />
       {/* the window pane, as something to touch */}
       <mesh
@@ -2110,17 +2131,24 @@ export function RoomSet({ floorY: stageY, rx, rz, heart, reducedMotion, hoverFx,
         <planeGeometry args={[1.9, 2.0]} />
         <meshBasicMaterial transparent opacity={0} depthWrite={false} colorWrite={false} />
       </mesh>
-      <Garland floorY={floorY} />
+      <BuildGate at={[0, -WALL_R]} grow={0.8}>
+        <Garland floorY={floorY} />
+      </BuildGate>
       <group ref={(g) => void (cutGroups.current[4] = g)} userData={{ anchor: WINDOW_ANGLE }}>
-        <ArchedWindow floorY={floorY} motion={motion} />
+        <BuildGate at={[Math.sin(WINDOW_ANGLE) * WALL_R, -Math.cos(WINDOW_ANGLE) * WALL_R]} grow={0.7}>
+          <ArchedWindow floorY={floorY} motion={motion} />
+        </BuildGate>
       </group>
       <group ref={(g) => void (cutGroups.current[0] = g)} userData={{ anchor: 0 }}>
-        <BirthdaySign floorY={floorY} {...SIGN_PLACEMENT[portrait ? 'portrait' : 'landscape']} heart={heart} motion={motion} focused={focus === 'sign'} onTap={onMoment && (() => onMoment('sign'))} />
+        <BuildGate at={[0, -SIGN_PLACEMENT[portrait ? 'portrait' : 'landscape'].radius]} grow={0.75}>
+          <BirthdaySign floorY={floorY} {...SIGN_PLACEMENT[portrait ? 'portrait' : 'landscape']} heart={heart} motion={motion} focused={focus === 'sign'} onTap={onMoment && (() => onMoment('sign'))} />
+        </BuildGate>
       </group>
       <Stage y={stageY} rug={floorU.uRug.value} stageMat={stageMat} bandMat={bandMat} />
       <RoomProps floorY={floorY} windowAngle={WINDOW_ANGLE} wallR={WALL_R} candleVec={candleVec} candleCount={candles.length} heart={heart} motion={motion} />
       {dogSpot && <Petals spot={dogSpot} y={stageY} motion={motion} />}
       <group position={cakeAt} scale={0.82} ref={(g) => void (cutGroups.current[1] = g)} userData={{ anchor: LAYOUT.cake }}>
+        <BuildGate at={[cakeAt[0], cakeAt[2]]} grow={0.8}>
         <Cake
           at={[0, 0, 0]}
           outward={cakeAt}
@@ -2130,10 +2158,13 @@ export function RoomSet({ floorY: stageY, rx, rz, heart, reducedMotion, hoverFx,
           focused={focus === 'cake'}
           onTap={onMoment && ((wish) => onMoment('cake', wish))}
         />
+        </BuildGate>
       </group>
       <group ref={(g) => void (cutGroups.current[2] = g)} userData={{ anchor: LAYOUT.sideboard }}>
         {balloons.map((b, i) => (
-          <Balloon key={i} {...b} motion={motion} hoverFx={hoverFx} />
+          <BuildGate key={i} at={[b.at[0], b.at[2]]} seed={i * 0.05} grow={0.55}>
+            <Balloon {...b} motion={motion} hoverFx={hoverFx} />
+          </BuildGate>
         ))}
       </group>
     </group>
