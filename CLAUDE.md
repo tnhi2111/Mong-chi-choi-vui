@@ -834,7 +834,9 @@ node scripts/qa.mjs --gpu --size=390x844 --mobile
 node scripts/qa.mjs --gpu --size=1440x900 --reduced
 node scripts/qa.mjs --size=1440x900 --nogl
 node scripts/qa-visual.mjs --gpu [--only=heart] [--size=390x844 --mobile]  # hero/ring/room shots
-node scripts/qa-keyboard.mjs
+node scripts/qa-keyboard.mjs --gpu   # (without --gpu: swiftshader, ~2 fps — it can time out)
+node scripts/qa-handoff.mjs --gpu    # K: every gift's sheet → page handoff, measured
+node scripts/qa-return.mjs --gpu     # J1: back to the room from the finale, N times
 node scripts/qa-qr.mjs
 node scripts/qa-perf.mjs --gpu                       # entering the room must not stall
 node scripts/qa-transitions.mjs --gpu                # frame strips of every change of world
