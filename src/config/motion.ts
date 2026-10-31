@@ -200,18 +200,32 @@ export const motion = {
     //  (a phone stands far back: level, it would look through the orb's light — a little down)
     //  (W4: the cake moment frames the whole table; the camera stands a little above its top
     //  and looks down only slightly)
-    elev: { cake: [0.16, 0.2], sign: [-0.06, 0.2] },
+    //  (Y: the cake — the camera ~0.85 m above the table's top (a person standing by it),
+    //  looking down ~8.6°; scripts/qa-cake-table.mjs holds it to -8°…-14°)
+    elev: { cake: [0.15, 0.15], sign: [-0.06, 0.2] },
     /** The words appear only once the camera has arrived (s after the touch). */
     textAfter: t(1.6),
     /** The subject's area and where its words sit: [landscape, portrait]. */
     cake: {
+      /** Y: its own lens (deg, [landscape, portrait]). (The frame is fitted to the cake's and
+       *  table's real vertices — RoomWorld `frameBox(…, pts)` — not their world box, which at
+       *  the table's 45° was √2 too wide and stood the camera ~1 m too far back and high.) */
+      fov: [40, 56],
+      /** How much of the table is framed under its top (m): the cloth and part of the column
+       *  — the frame's lower edge cuts the column, so most of the floor stays out (≤ 25 %). */
+      below: 0.5,
+      // (Y: y reaches below the frame on purpose — with `fill` the box shrinks about the
+      //  area's centre, and this puts its lower edge, `below` under the top, right on the
+      //  frame's edge. On a phone the frame is tall and the table must fit its width: the
+      //  camera stands further back (~2 m up) and the words sit above the cake; putting them
+      //  under it brought the camera down but filled 33–41 % of the frame with floor.)
       area: [
-        { x: [-0.94, 0.22], y: [-0.9, 0.86] },
-        { x: [-0.92, 0.92], y: [-0.86, 0.3] },
+        { x: [-0.94, 0.22], y: [-1.1, 0.8] },
+        { x: [-0.95, 0.95], y: [-1.0, 0.6] },
       ],
       text: [
         [0.6, 0.05],
-        [0, 0.6],
+        [0, 0.5],
       ],
     },
     /** The sign: its words under it, the band they need measured from the words (px). */

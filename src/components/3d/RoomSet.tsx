@@ -83,6 +83,7 @@ export const SIGN_PLACEMENT = {
   landscape: { radius: 5.95, scale: 0.74, drop: 0 },
   portrait: { radius: 4.55, scale: 0.55, drop: 0 },
 }; // a small private room (the camera stands outside it: see CUT)
+const DEBUG = typeof location !== 'undefined' && new URLSearchParams(location.search).has('debug');
 const WALL_H = 6.2;
 /** Direction of the window: back-left, so the HAPPY BIRTHDAY installation owns the centre. */
 export const WINDOW_ANGLE = -0.78; // measured as atan(x, -z)
@@ -1121,47 +1122,166 @@ function CakeTopper({ y, outward, explode, onTap }: { y: number; outward: THREE.
   );
 }
 
-/** W4: the cake's table (pre-warmed with the room: `roomWarmShaders`). */
+/**
+ * Y: the cake's table (pre-warmed with the room: `roomWarmShaders`). A round pedestal table in
+ * honey chestnut — a turned column on a wide domed foot — under a cream cloth that falls a
+ * third of the way to the floor in soft folds with an uneven hem, so it reads as a table from
+ * across the dark room (W4's four thin walnut legs disappeared into the floor). Everything on
+ * it (wood, cloth, the vase, the flower, the wine in the glasses) is ONE opaque program
+ * (`tableVertex`/`tableFragment`, a colour + a few knobs), lit by the cake's candles.
+ */
 const TABLE_H = 0.76;
 const TABLE_R = 0.6;
-const tableWoodFragment = /* glsl */ `
-  varying float vY;
+/** how far the cloth falls over the edge (m) */
+const CLOTH_DROP = 0.3;
+const tableVertex = /* glsl */ `
+  varying vec3 vW;
   varying vec3 vN;
+  varying float vV;
   void main() {
-    // walnut, lit softly from above, its turned-away side in shade
-    vec3 c = vec3(0.2, 0.11, 0.065) * (0.55 + 0.3 * vY);
-    gl_FragColor = vec4(c * (0.6 + 0.4 * max(vN.y, 0.0) + 0.25 * abs(vN.x)), 1.0);
+    vec4 w = modelMatrix * vec4(position, 1.0);
+    vW = w.xyz;
+    vN = normalize(mat3(modelMatrix) * normal);
+    vV = uv.y;
+    gl_Position = projectionMatrix * viewMatrix * w;
   }
 `;
-const tableClothFragment = /* glsl */ `
-  varying float vY;
+const tableFragment = /* glsl */ `
+  uniform vec3 uColor;
+  uniform vec3 uLight;   // the candles (world)
+  uniform float uLit;    // candles lit (0..1)
+  uniform float uGrain;  // 1 = turned wood
+  uniform float uSoft;   // 1 = cloth (wrapped light, a weave, a darker hem)
+  uniform float uSheen;
+  varying vec3 vW;
   varying vec3 vN;
+  varying float vV;
   void main() {
-    // the cloth's drape: cream, warmer toward the top where the candlelight reaches
-    vec3 c = mix(vec3(0.42, 0.33, 0.28), vec3(0.8, 0.7, 0.6), 0.3 + 0.7 * vY);
-    gl_FragColor = vec4(c * (0.72 + 0.28 * abs(vN.x)), 1.0);
+    vec3 N = normalize(vN);
+    if (!gl_FrontFacing) N = -N;
+    vec3 V = normalize(cameraPosition - vW);
+    vec3 toL = uLight - vW;
+    float d = length(toL);
+    vec3 L = toL / d;
+    float nl = dot(N, L);
+    float diff = mix(max(nl, 0.0), nl * 0.5 + 0.5, uSoft);
+    // the candles: warm, falling off with distance (they are close)
+    vec3 candle = vec3(1.0, 0.76, 0.52) * diff * (0.5 + 0.5 * uLit) * 0.8 / (1.0 + d * d * 1.6);
+    // the room: a dim warm fill from above, a rose bounce from the heart's side
+    vec3 fill = vec3(0.26, 0.19, 0.16) * (0.55 + 0.45 * N.y) + vec3(0.12, 0.05, 0.07) * (0.5 - 0.5 * N.y);
+    vec3 c = uColor;
+    if (uGrain > 0.5) {
+      // turned chestnut: fine rings round the column, a slower figure
+      float g = sin(vW.y * 210.0 + sin(vW.x * 23.0 + vW.z * 17.0) * 2.5);
+      c *= 0.9 + 0.1 * g + 0.06 * sin(vW.y * 31.0);
+    }
+    if (uSoft > 0.5) {
+      // linen: a faint weave; the hem a little darker where the cloth turns under
+      c *= 0.97 + 0.03 * sin(vW.x * 700.0) * sin(vW.z * 700.0 + vW.y * 700.0);
+      c *= mix(0.78, 1.0, smoothstep(0.0, 0.12, vV));
+    }
+    // (light things — cloth, porcelain — take more of the room's light: they must read cream,
+    //  not tan, in the dark)
+    vec3 light = fill * (1.25 + 0.6 * uSoft) + candle * (1.0 - 0.3 * uSoft);
+    // (cream linen stays cream: its light is a little less coloured than the room's)
+    light = mix(light, vec3(dot(light, vec3(0.3333))), 0.4 * uSoft);
+    vec3 col = c * light;
+    // a soft sheen (lacquer on the wood, glaze on the vase)
+    vec3 H = normalize(L + V);
+    col += vec3(1.0, 0.78, 0.55) * pow(max(dot(N, H), 0.0), 40.0) * uSheen * 0.6 / (1.0 + d * d);
+    // the edge toward the room catches a little rose light — a silhouette against the dark
+    col += vec3(0.3, 0.12, 0.14) * pow(1.0 - abs(dot(N, V)), 3.0) * 0.5;
+    gl_FragColor = vec4(col, 1.0);
   }
 `;
-const clothTopVertex = /* glsl */ `
-  varying vec2 vP;
+/** The glasses: thin clear glass — a bright rim where it turns away, almost nothing face on. */
+const fluteFragment = /* glsl */ `
+  uniform vec3 uLight;
+  varying vec3 vW;
+  varying vec3 vN;
+  varying float vV;
   void main() {
-    vP = position.xy;
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    vec3 N = normalize(vN);
+    vec3 V = normalize(cameraPosition - vW);
+    float rim = pow(1.0 - abs(dot(N, V)), 2.5);
+    vec3 L = normalize(uLight - vW);
+    float spec = pow(max(dot(reflect(-L, N), V), 0.0), 60.0);
+    vec3 col = vec3(1.0, 0.86, 0.72) * (rim * 0.32 + spec * 0.9) + vec3(0.03, 0.025, 0.03);
+    gl_FragColor = vec4(col, 1.0);
   }
 `;
-const clothTopFragment = /* glsl */ `
-  varying vec2 vP;
-  void main() {
-    // soft cream linen: a faint weave, a warm pool of candlelight round the cake, cooler
-    // toward the edge where it falls over
-    float r = length(vP) / ${TABLE_R.toFixed(2)};
-    float weave = 0.97 + 0.03 * sin(vP.x * 900.0) * sin(vP.y * 900.0);
-    vec3 c = vec3(0.62, 0.54, 0.47) * weave;
-    c += vec3(0.32, 0.18, 0.08) * exp(-r * r * 3.2);
-    c *= 1.0 - 0.18 * smoothstep(0.75, 1.0, r);
-    gl_FragColor = vec4(c, 1.0);
+
+type TableGeos = Record<'top' | 'column' | 'skirt' | 'clothTop' | 'flute' | 'wine' | 'vase' | 'stem' | 'bloom', THREE.BufferGeometry>;
+let tableGeos: TableGeos | null = null;
+/** The table and what stands on it (built once, kept: the room is pre-warmed). */
+function getTableGeos(): TableGeos {
+  if (tableGeos) return tableGeos;
+  const lathe = (pts: [number, number][], seg = 40) => new THREE.LatheGeometry(pts.map(([r, y]) => new THREE.Vector2(r, y)), seg);
+  // the column on its domed foot, up to the apron under the top
+  const column = lathe([
+    [0.0, 0.0], [0.3, 0.0], [0.312, 0.012], [0.305, 0.03], [0.27, 0.05], [0.18, 0.075], [0.1, 0.1], [0.07, 0.13],
+    [0.062, 0.17], [0.078, 0.25], [0.083, 0.32], [0.072, 0.4], [0.052, 0.48], [0.046, 0.55], [0.062, 0.59], [0.064, 0.61],
+    [0.047, 0.635], [0.05, 0.66], [0.15, 0.68], [0.17, 0.7], [0.17, 0.722], [0.0, 0.723],
+  ]);
+  const top = new THREE.CylinderGeometry(TABLE_R - 0.01, TABLE_R - 0.025, 0.035, 48);
+  top.translate(0, TABLE_H - 0.0225, 0);
+  // the cloth's drape: rows from the table's edge down to an uneven hem; folds grow toward
+  // the hem and it flares out a little, as linen does
+  const C = 144;
+  const R = 22;
+  const pos: number[] = [];
+  const uv: number[] = [];
+  for (let j = 0; j <= R; j++) {
+    const t = j / R;
+    for (let i = 0; i <= C; i++) {
+      const a = (i / C) * Math.PI * 2;
+      const drop = CLOTH_DROP * (1 + 0.07 * Math.sin(3 * a + 1.1) + 0.04 * Math.sin(5 * a + 0.4));
+      const fold = Math.sin(18 * a + 0.8 * Math.sin(4 * a)) * 0.6 + Math.sin(29 * a + 2.0) * 0.4;
+      // over the edge: a rounded roll (first rows), then it hangs
+      const roll = Math.sin(Math.min(t * 7, 1) * Math.PI * 0.5);
+      const r = TABLE_R + 0.004 + 0.012 * roll + 0.05 * Math.pow(t, 1.5) + 0.02 * Math.pow(t, 1.15) * fold;
+      const y = TABLE_H + 0.004 - drop * t - 0.006 * (1 - roll);
+      pos.push(Math.cos(a) * r, y, -Math.sin(a) * r);
+      uv.push(i / C, 1 - t);
+    }
   }
-`;
+  const idx: number[] = [];
+  for (let j = 0; j < R; j++)
+    for (let i = 0; i < C; i++) {
+      const a = j * (C + 1) + i;
+      const b = a + C + 1;
+      idx.push(a, b, a + 1, a + 1, b, b + 1);
+    }
+  const skirt = new THREE.BufferGeometry();
+  skirt.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  skirt.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  skirt.setIndex(idx);
+  skirt.computeVertexNormals();
+  const clothTop = new THREE.CircleGeometry(TABLE_R + 0.008, 64);
+  clothTop.rotateX(-Math.PI / 2);
+  clothTop.translate(0, TABLE_H + 0.004, 0);
+  // a champagne flute (glass) and the wine in it
+  const flute = lathe([[0.0, 0.0], [0.034, 0.0], [0.035, 0.004], [0.006, 0.01], [0.004, 0.1], [0.012, 0.11], [0.026, 0.14], [0.031, 0.19], [0.032, 0.235]], 24);
+  const wine = lathe([[0.0, 0.112], [0.011, 0.113], [0.024, 0.14], [0.028, 0.18], [0.0, 0.18]], 24);
+  // a little porcelain bud vase, a stem and one rose
+  const vase = lathe([[0.0, 0.0], [0.03, 0.0], [0.042, 0.03], [0.04, 0.07], [0.016, 0.11], [0.013, 0.13], [0.018, 0.14], [0.0, 0.14]], 24);
+  const stem = new THREE.CylinderGeometry(0.0035, 0.004, 0.13, 6);
+  stem.translate(0, 0.19, 0);
+  const petals: THREE.BufferGeometry[] = [];
+  for (let k = 0; k < 9; k++) {
+    const ring = k < 3 ? 0 : k < 6 ? 1 : 2;
+    const sp = new THREE.SphereGeometry(0.034 - ring * 0.006, 10, 8, 0, Math.PI * 2, 0, Math.PI * 0.62);
+    sp.scale(1, 0.75, 0.55);
+    sp.rotateX(-0.5 + ring * 0.35);
+    sp.translate(0, 0, 0.009 + ring * 0.004);
+    sp.rotateY((k % 3) * ((Math.PI * 2) / 3) + ring * 0.9);
+    sp.translate(0, 0.27 - ring * 0.006, 0);
+    petals.push(sp.toNonIndexed());
+  }
+  const bloom = mergeGeometries(petals)!;
+  tableGeos = { top, column, skirt, clothTop, flute, wine, vase, stem, bloom };
+  return tableGeos;
+}
 
 function Cake({
   at,
@@ -1183,12 +1303,25 @@ function Cake({
   /** a touch on the cake: first the camera leans in; touched again, she makes a wish */
   onTap?: (wish: boolean | 'play') => void;
 }) {
-  // W4: a real little round table — walnut top on four splayed legs with a stretcher ring,
-  // under a soft cream cloth with a short drape; the candles' light pools on the cloth
-  const noUniforms = useMemo(() => ({}), []);
-  const wood = useShader(waxVertex, tableWoodFragment, noUniforms, { opaque: true });
-  const cloth = useShader(waxVertex, tableClothFragment, noUniforms, { opaque: true });
-  const clothTop = useShader(clothTopVertex, clothTopFragment, noUniforms, { opaque: true });
+  // Y: the pedestal table under its cloth, and the little things on it — one program, each
+  // part its own colour; all lit by the cake's candles (`tableLight`, set every frame)
+  const tableLight = useMemo(() => ({ uLight: { value: new THREE.Vector3() }, uLit: { value: 1 } }), []);
+  const part = (color: string, grain: number, soft: number, sheen: number) => ({
+    uColor: { value: new THREE.Color(color) },
+    uLight: tableLight.uLight,
+    uLit: tableLight.uLit,
+    uGrain: { value: grain },
+    uSoft: { value: soft },
+    uSheen: { value: sheen },
+  });
+  const geos = useMemo(getTableGeos, []);
+  const wood = useShader(tableVertex, tableFragment, useMemo(() => part('#a8653a', 1, 0, 0.8), []), { opaque: true }); // eslint-disable-line react-hooks/exhaustive-deps
+  const cloth = useShader(tableVertex, tableFragment, useMemo(() => part('#f4e6d4', 0, 1, 0.05), []), { opaque: true, side: THREE.DoubleSide }); // eslint-disable-line react-hooks/exhaustive-deps
+  const porcelain = useShader(tableVertex, tableFragment, useMemo(() => part('#f6f1ea', 0, 0.6, 1.2), []), { opaque: true }); // eslint-disable-line react-hooks/exhaustive-deps
+  const stemMat = useShader(tableVertex, tableFragment, useMemo(() => part('#3f5a2a', 0, 1, 0), []), { opaque: true }); // eslint-disable-line react-hooks/exhaustive-deps
+  const bloomMat = useShader(tableVertex, tableFragment, useMemo(() => part('#f08a9c', 0, 1, 0.1), []), { opaque: true, side: THREE.DoubleSide }); // eslint-disable-line react-hooks/exhaustive-deps
+  const wineMat = useShader(tableVertex, tableFragment, useMemo(() => part('#f0c070', 0, 1, 1.5), []), { opaque: true }); // eslint-disable-line react-hooks/exhaustive-deps
+  const glassMat = useShader(tableVertex, fluteFragment, useMemo(() => ({ uLight: tableLight.uLight }), []), { side: THREE.DoubleSide }); // eslint-disable-line react-hooks/exhaustive-deps
 
   const top = TABLE_H + 0.008; // (on the cloth)
   // the cake model (built once); its flames are where its candles' wicks are
@@ -1328,6 +1461,8 @@ function Cake({
     // the cake: lit by its own flames (in the world), a touch warmer when she's close
     cakeU.uTime.value = t * motion;
     cakeU.uLit.value = lit * (1 + 0.12 * flare.current);
+    tableLight.uLit.value = lit;
+    if (body.current) body.current.localToWorld(tableLight.uLight.value.set(0, CAKE_LIFT + 0.62, 0));
     cakeU.uWarm.value = Math.max(hover.current, focusAmt.current);
     cakeU.uKey.value = focusAmt.current * MOTION.moment.cakeKey;
     // R2: the cream under her finger: a soft spring — it gives, then springs back past and settles
@@ -1421,38 +1556,30 @@ function Cake({
 
   return (
     <group position={at} userData={{ cakePart: true }}>
-      {/* W4: the little round table — four splayed legs, a stretcher ring, a walnut top,
-          and a cream cloth with a short drape (all of it is `frame: 'cake'`: the moment frames
-          table and cake together) */}
+      {/* Y: the pedestal table — a turned column on a domed foot, a chestnut top under a cream
+          cloth falling in folds — and on it two flutes of champagne and one rose, set behind
+          and beside the cake so they never stand in front of it (the camera looks along
+          `outward`). `frame: 'cake'` = what the moment frames (RoomWorld trims the foot off). */}
       <group userData={{ frame: 'cake', cakeTable: true }}>
-        {[0, 1, 2, 3].map((i) => {
-          const a = Math.PI / 4 + (i * Math.PI) / 2;
-          const foot = 0.47;
-          const head = 0.38;
-          const len = Math.hypot(TABLE_H - 0.04, foot - head);
-          const lean = Math.atan2(foot - head, TABLE_H - 0.04);
-          return (
-            <group key={i} rotation-y={-a}>
-              {/* (+4 mm: the tilted cylinder's rim would dip under the floor) */}
-              <mesh position={[(foot + head) / 2, (TABLE_H - 0.04) / 2 + 0.004, 0]} rotation-z={lean} material={wood} userData={{ frame: 'cake' }}>
-                <cylinderGeometry args={[0.024, 0.016, len, 10]} />
-              </mesh>
-            </group>
-          );
-        })}
-        <mesh position={[0, 0.24, 0]} rotation-x={Math.PI / 2} material={wood} userData={{ frame: 'cake' }}>
-          <torusGeometry args={[0.44, 0.011, 6, 40]} />
-        </mesh>
-        <mesh position={[0, TABLE_H - 0.03, 0]} material={wood} userData={{ frame: 'cake' }}>
-          <cylinderGeometry args={[TABLE_R - 0.02, TABLE_R - 0.04, 0.035, 40]} />
-        </mesh>
-        {/* the cloth falls a hand's width over the edge */}
-        <mesh position={[0, TABLE_H - 0.07, 0]} material={cloth} userData={{ frame: 'cake' }}>
-          <cylinderGeometry args={[TABLE_R + 0.005, TABLE_R + 0.03, 0.15, 48, 1, true]} />
-        </mesh>
-        <mesh position={[0, TABLE_H + 0.004, 0]} rotation-x={-Math.PI / 2} material={clothTop} userData={{ frame: 'cake' }}>
-          <circleGeometry args={[TABLE_R + 0.006, 48]} />
-        </mesh>
+        <mesh geometry={geos.column} material={wood} userData={{ frame: 'cake', tablePart: 'column' }} />
+        <mesh geometry={geos.top} material={wood} userData={{ frame: 'cake', tablePart: 'top' }} />
+        <mesh geometry={geos.skirt} material={cloth} userData={{ frame: 'cake', tablePart: 'cloth' }} />
+        <mesh geometry={geos.clothTop} material={cloth} userData={{ frame: 'cake', tablePart: 'clothTop', tableTop: TABLE_H + 0.004 }} />
+        {/* (a pair, side by side at the back right — beside the cake as the camera sees it) */}
+        {[
+          [0.3, 0.44],
+          [0.08, 0.5],
+        ].map(([o, a], k) => (
+          <group key={k} position={[out.x * o + along.x * a, TABLE_H + 0.004, out.y * o + along.y * a]} userData={{ tablePart: 'flute' }}>
+            <mesh geometry={geos.wine} material={wineMat} />
+            <mesh geometry={geos.flute} material={glassMat} renderOrder={2} />
+          </group>
+        ))}
+        <group position={[-out.x * 0.12 - along.x * 0.49, TABLE_H + 0.004, -out.y * 0.12 - along.y * 0.49]} userData={{ tablePart: 'vase' }}>
+          <mesh geometry={geos.vase} material={porcelain} />
+          <mesh geometry={geos.stem} material={stemMat} />
+          <mesh geometry={geos.bloom} material={bloomMat} />
+        </group>
       </group>
       {/* the table's own contact shadow on the floor */}
       <mesh position={[0, 0.006, 0]} rotation-x={-Math.PI / 2} renderOrder={1}>
@@ -1518,8 +1645,8 @@ function Cake({
         <points geometry={smoke} material={smokeMat} frustumCulled={false} />
       </group>
 
-      {/* the secret: a little glowing letter leaning against the table leg, on the far side */}
-      <group position={[along.x * 0.45 + out.x * 0.3, 0.09, along.y * 0.45 + out.y * 0.3]} rotation={[-0.25, Math.atan2(along.x, along.y), 0.08]}>
+      {/* the secret: a little glowing letter leaning against the cloth's hem, on the far side */}
+      <group position={[along.x * 0.62 + out.x * 0.42, 0.09, along.y * 0.62 + out.y * 0.42]} userData={{ secretLetter: true }} rotation={[-0.25, Math.atan2(along.x, along.y), 0.08]}>
         <mesh
           ref={letter}
           onClick={(e) => {
@@ -2156,6 +2283,13 @@ export function RoomSet({ floorY: stageY, rx, rz, heart, reducedMotion, hoverFx,
   // the dolls'-house cut for the set pieces: whatever stands between the camera and the
   // room (when she walks round it) steps out of the way, like the wall behind it
   const cutGroups = useRef<(THREE.Object3D | null)[]>([]);
+  // Y: the build lift's state lives HERE, not in `userData` — the JSX passes a new `userData`
+  // object on every render, which wiped it, and the next frame took the already-lowered
+  // height as the base: three renders during the tour sank every set piece 3 × 0.35 m (the
+  // cake's table vanished under the floor). `last` = the height this loop wrote; if the
+  // group's y differs, React placed it anew (floorY changed) and that is the new base.
+  const lift = useRef(new WeakMap<THREE.Object3D, { y0: number; b: number; last: number }>());
+  const warned = useRef(false);
   useFrame(({ camera: cam }, rawDt) => {
     const cx = cam.position.x;
     const cz = cam.position.z;
@@ -2168,13 +2302,25 @@ export function RoomSet({ floorY: stageY, rx, rz, heart, reducedMotion, hoverFx,
       // built by the light sprite as it flies past (storyboard D): it rises into its place
       // — a builder's order, one piece after the next. (Only a lift: several of these groups
       // hold pieces laid out in world space, so scaling them would pull them to the middle.)
-      const u = g.userData as { b?: number; y0?: number };
-      u.y0 ??= g.position.y;
       const want = sprite.builtAt(a);
+      let u = lift.current.get(g);
+      if (!u) lift.current.set(g, (u = { y0: g.position.y, b: want, last: NaN }));
+      else if (g.position.y !== u.last) u.y0 = g.position.y;
       // (only the rising is animated: when a tour begins, what is not built yet simply is not)
-      u.b = want < (u.b ?? want) ? want : (u.b ?? want) + (want - (u.b ?? want)) * k;
+      u.b = want < u.b ? want : u.b + (want - u.b) * k;
       const e = u.b * u.b * (3 - 2 * u.b);
-      g.position.y = u.y0 - (1 - e) * 0.35;
+      g.position.y = u.last = u.y0 - (1 - e) * 0.35;
+      if (DEBUG) Object.assign(g.userData, { y0: u.y0, b: u.b });
+      // Y: once built, the cake's table stands ON the floor (it once sank 1.05 m under it, and
+      // only the cake showed — "the cake is on the floor"). Loud in dev and in ?debug.
+      if ((DEBUG || import.meta.env.DEV) && g === cutGroups.current[1] && u.b > 0.999) {
+        const off = g.position.y - cakeAt[1];
+        if (Math.abs(off) > 0.01 && !warned.current) {
+          warned.current = true;
+          console.error(`[room] the cake's table is ${off.toFixed(3)} m off the floor`);
+        }
+        (window as unknown as { __cakeOffFloor?: number }).__cakeOffFloor = off;
+      }
     }
   });
 
@@ -2203,7 +2349,7 @@ export function RoomSet({ floorY: stageY, rx, rz, heart, reducedMotion, hoverFx,
 
   return (
     <group ref={root}>
-      <mesh rotation-x={-Math.PI / 2} position-y={floorY - 0.002} material={floorMat} renderOrder={-4}>
+      <mesh rotation-x={-Math.PI / 2} position-y={floorY - 0.002} material={floorMat} renderOrder={-4} userData={{ seg: 'floor' }}>
         <circleGeometry args={[WALL_R, 96]} />
       </mesh>
       <mesh position-y={floorY + WALL_H / 2} material={wallMat} renderOrder={-5}>
@@ -2263,7 +2409,9 @@ export function RoomSet({ floorY: stageY, rx, rz, heart, reducedMotion, hoverFx,
           <BirthdaySign floorY={floorY} {...SIGN_PLACEMENT[portrait ? 'portrait' : 'landscape']} heart={heart} motion={motion} focused={focus === 'sign'} onTap={onMoment && (() => onMoment('sign'))} />
         </BuildGate>
       </group>
-      <Stage y={stageY} rug={floorU.uRug.value} stageMat={stageMat} bandMat={bandMat} />
+      <group userData={{ seg: 'floor' }}>
+        <Stage y={stageY} rug={floorU.uRug.value} stageMat={stageMat} bandMat={bandMat} />
+      </group>
       <RoomProps floorY={floorY} windowAngle={WINDOW_ANGLE} wallR={WALL_R} candleVec={candleVec} candleCount={candles.length} heart={heart} motion={motion} />
       {dogSpot && <Petals spot={dogSpot} y={stageY} motion={motion} />}
       <group position={cakeAt} scale={1} ref={(g) => void (cutGroups.current[1] = g)} userData={{ anchor: LAYOUT.cake }}>
@@ -2307,8 +2455,8 @@ export function roomWarmShaders(): [string, string, THREE.Side, boolean][] {
     [glassVertex, glassFragment, THREE.FrontSide, true],
     [glassVertexW, glassFragmentW, THREE.FrontSide, false],
     [moonVertex, moonFragment, THREE.DoubleSide, false],
-    [waxVertex, tableWoodFragment, THREE.FrontSide, true],
-    [waxVertex, tableClothFragment, THREE.FrontSide, true],
-    [clothTopVertex, clothTopFragment, THREE.FrontSide, true],
+    [tableVertex, tableFragment, THREE.FrontSide, true],
+    [tableVertex, tableFragment, THREE.DoubleSide, true],
+    [tableVertex, fluteFragment, THREE.DoubleSide, false],
   ];
 }

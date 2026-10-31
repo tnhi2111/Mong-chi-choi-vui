@@ -89,6 +89,9 @@ function frameBox(
   elev: number,
   area: { x: readonly number[]; y: readonly number[] },
   fill: number,
+  /** (Y) the subject's real points: a world AABB seen at 45° is √2 too wide and too deep,
+   *  which stood the camera back ~1 m too far (and so too high) */
+  pts?: readonly THREE.Vector3[],
 ) {
   const tanV = Math.tan(THREE.MathUtils.degToRad(fovDeg) / 2);
   const tanH = tanV * aspect;
@@ -103,8 +106,10 @@ function frameBox(
   let h = 0;
   let near = 0;
   const v = new THREE.Vector3();
-  for (let i = 0; i < 8; i++) {
-    v.set(i & 1 ? box.max.x : box.min.x, i & 2 ? box.max.y : box.min.y, i & 4 ? box.max.z : box.min.z).sub(c);
+  const n = pts ? pts.length : 8;
+  for (let i = 0; i < n; i++) {
+    if (pts) v.copy(pts[i]).sub(c);
+    else v.set(i & 1 ? box.max.x : box.min.x, i & 2 ? box.max.y : box.min.y, i & 4 ? box.max.z : box.min.z).sub(c);
     w = Math.max(w, Math.abs(v.dot(right)));
     h = Math.max(h, Math.abs(v.dot(up)));
     near = Math.max(near, -v.dot(fwd));
@@ -281,7 +286,7 @@ export function RoomWorld({
   // J2/J3: the close framing of a moment, fitted to the subject's real bounds on this screen,
   // and where its words go (screen px) — measured when the moment starts, and on a resize
   const size = useThree((st) => st.size);
-  const [frame, setFrame] = useState<{ look: [number, number, number]; offset: [number, number, number]; text: [number, number]; maxW: number } | null>(null);
+  const [frame, setFrame] = useState<{ look: [number, number, number]; offset: [number, number, number]; fov?: number; text: [number, number]; maxW: number } | null>(null);
   const [whisper, setWhisper] = useState(false);
   useEffect(() => {
     setFrame(null);
@@ -293,18 +298,43 @@ export function RoomWorld({
       if (o.userData.frame === moment) box.expandByObject(o);
     });
     if (box.isEmpty()) return;
-    const M = MOTION.moment;
+    // (QA, ?debug: `window.__cakeFrame = { fov, elev, below, area }` tries a framing)
+    const qa = new URLSearchParams(location.search).has('debug') ? (window as unknown as { __cakeFrame?: Partial<{ fov: number; elev: number; below: number; area: { x: number[]; y: number[] } }> }).__cakeFrame : undefined;
+    const M = qa && moment === 'cake' ? { ...MOTION.moment, cake: { ...MOTION.moment.cake, ...(qa.fov ? { fov: [qa.fov, qa.fov] } : {}), ...(qa.below ? { below: qa.below } : {}), ...(qa.area ? { area: [qa.area, qa.area] } : {}) }, elev: { ...MOTION.moment.elev, ...(qa.elev ? { cake: [qa.elev, qa.elev] } : {}) } } : MOTION.moment;
     const aspect = size.width / Math.max(1, size.height);
-    const fov = portrait ? 50 : 40;
+    const fov = moment === 'cake' ? M.cake.fov[portrait ? 1 : 0] : portrait ? 50 : 40;
+    const pts: THREE.Vector3[] = [];
+    if (moment === 'cake') {
+      // Y: frame the cake, the table's top, its cloth and part of its column — not its foot
+      // (the floor round it is what filled the old frame)
+      let topY = -Infinity;
+      const at = new THREE.Vector3();
+      g.traverse((o) => {
+        if (o.userData.tableTop !== undefined) topY = o.getWorldPosition(at).y + o.userData.tableTop;
+      });
+      if (Number.isFinite(topY)) box.min.y = Math.max(box.min.y, topY - M.cake.below);
+      // its real surface (a few thousand of its vertices), cut at the same height
+      const v = new THREE.Vector3();
+      g.traverse((o) => {
+        if (o.userData.frame !== moment || !(o as THREE.Mesh).isMesh) return;
+        const pos = (o as THREE.Mesh).geometry.attributes.position;
+        const stride = Math.max(1, Math.floor(pos.count / 1500));
+        for (let i = 0; i < pos.count; i += stride) {
+          v.fromBufferAttribute(pos, i).applyMatrix4(o.matrixWorld);
+          if (v.y >= box.min.y) pts.push(v.clone());
+        }
+      });
+      box.setFromPoints(pts);
+    }
     const dir =
       moment === 'cake' ? new THREE.Vector3(cakeAt[0], 0, cakeAt[2]).normalize() : new THREE.Vector3(0, 0, -1);
     if (moment === 'cake') {
       const pi = portrait ? 1 : 0;
-      const f = frameBox(box, dir, fov, aspect, M.elev.cake[pi], M.cake.area[pi], M.fill);
+      const f = frameBox(box, dir, fov, aspect, M.elev.cake[pi], M.cake.area[pi], M.fill, pts);
       const [tx, ty] = M.cake.text[pi];
       // beside the cake its words have the right third; above it, the whole width
       const maxW = portrait ? Math.min(size.width * 0.84, 560) : Math.min(size.width * 0.34, 520);
-      setFrame({ look: f.look, offset: f.offset, text: [((tx + 1) / 2) * size.width, ((1 - ty) / 2) * size.height], maxW });
+      setFrame({ look: f.look, offset: f.offset, fov, text: [((tx + 1) / 2) * size.width, ((1 - ty) / 2) * size.height], maxW });
       if (new URLSearchParams(location.search).has('debug')) Object.assign(window, { __frame: { box: box.clone(), ...f } });
     } else {
       // the words go under the sign, in a band as tall as they will really be
@@ -676,6 +706,7 @@ export function RoomWorld({
     camPos = frame && momentNear
       ? [camLook[0] + frame.offset[0], camLook[1] + frame.offset[1], camLook[2] + frame.offset[2]]
       : [camLook[0], camLook[1] + MOMENT.far.lift[pi], camLook[2] + MOMENT.far.back[pi]];
+    if (frame && momentNear) camFov = frame.fov ?? MOTION.moment.cake.fov[pi];
   } else if (moment === 'sign') {
     camLook = frame && momentNear ? frame.look : [0, ground + 2.0 - safeDrop(sign.scale, sign.drop) + MOMENT.sign.lookOffset, -sign.radius];
     camPos = frame && momentNear

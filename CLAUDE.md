@@ -849,7 +849,8 @@ sign's root has `userData.signPart`.
   `TABLE_R` 0.6) on four splayed legs + stretcher ring, a cream cloth with a short drape and a
   candle pool (`clothTop`), its own floor shadow; all of it `userData.frame = 'cake'` (the
   moment frames table + cake), root `userData.cakePart`, table group `cakeTable`. Cake moment
-  `elev.cake` 0.16 / 0.2 (just above the table, looking down a little).
+  `elev.cake` 0.16 / 0.2 (just above the table, looking down a little). **Replaced in stage Y**
+  — and it was never seen by the owner: after the tour it lay under the floor (see Y1).
 - **W1 — the sign above every gift.** `SIGN_SAFE_FLOOR` 2.25 m (its lowest glyph ≥ 0.35 m
   above the tallest gift at the top of its bob with her hand lifting it), `SIGN_PLACEMENT`
   scale 0.74 / 0.55. To fit, the room grew: crown moulding 3.45–3.6 m, `CEIL_H` 3.6, alcove top
@@ -885,6 +886,49 @@ sign's root has `userData.signPart`.
   intermittent ~3 s main-thread stall was seen once during its performance (not reproduced
   with a long-task/program probe: `qa-output/dogstall.mjs`); a ~0.2 s long frame when the
   letter page mounts.
+
+## Stage Y — the cake on its table; the letter as light as a feather (`reference/qa/Y/`)
+
+**Y1 — the cake stands on a table (owner's 3rd report: "the cake is on the floor, 2/3 of the
+frame is empty floor").** Root cause, measured: RoomSet's build lift (the loop over
+`cutGroups` that raises each set piece as the light sprite passes) kept its state in
+`g.userData` (`y0`, `b`) — but the JSX passes a NEW `userData` object on every render, which
+R3F assigns, wiping it; the next frame took the already-lowered height as the base. During the
+tour RoomSet rendered 3 times → every set piece (cake + table, sign, balloons, sideboard,
+window target) sat 3 × 0.35 = 1.05 m too low. The table vanished under the floor and only the
+top of the cake showed; the moment then framed that buried box from far above. Only the led-in
+path did this — every earlier QA (and W4's "on a real table") resumed in the room. Fix: the
+lift's state lives in a `WeakMap` (`lift` ref), and a change of the group's y that the loop did
+not write (React placed it anew) becomes the new base. **Rule: never keep per-frame state in a
+JSX-passed `userData`.** Dev/`?debug` assert: `[room] the cake's table is … off the floor`
+(`window.__cakeOffFloor`).
+- **The table** (`getTableGeos`, `tableVertex`/`tableFragment`, one opaque program for every
+  part + `fluteFragment` for the glass): a pedestal table in honey chestnut — turned column on a
+  domed foot (lathe) — top at `TABLE_H` 0.76 (`TABLE_R` 0.6; the cake + stand = 67 % of it), a
+  cream cloth (`skirt`: 22 rows × 144, falls `CLOTH_DROP` 0.3 m with folds that grow toward an
+  uneven hem, rounded over the edge, flaring), lit by the cake's candles (`tableLight.uLight`,
+  set each frame from the cake body; `uLit` follows blowing out). On it: two champagne flutes
+  (back right) and a rose in a porcelain bud vase (front left) — beside the cake as the camera
+  sees it, never in front. Parts tagged `userData.tablePart`, the cloth top `tableTop`. The
+  secret letter leans by the hem (`userData.secretLetter`).
+- **The cake moment's frame** (RoomWorld): `frameBox(…, pts)` fits the cake's and table's REAL
+  vertices (≤ 1500 per mesh) — a world AABB of a round table seen at 45° is √2 too wide/deep
+  and stood the camera ~1 m too far and too high. The frame is cut `motion.moment.cake.below`
+  (0.5 m) under the table's top; own lens `cake.fov` [40, 56]; `elev.cake` 0.15 (−8.6°);
+  `cake.area` puts that cut on the frame's lower edge. Desktop: camera 1.6 m up, floor 10–11 %
+  of the frame; phone: the table must fit the narrow width, camera ~2 m up, floor 23 %, words
+  above the cake (words under it brought the camera down but 33–41 % floor). `?debug`
+  `window.__cakeFrame = { fov, elev, below, area }` tries a framing live
+  (`qa-output/tmp/frametry.mjs`).
+- **Floor ≤ 25 % of the frame is a hard limit.** `npm run qa:cake-table`
+  (`scripts/qa-cake-table.mjs [--ledin] [--sizes] [--steps]`, shared page code in
+  `scripts/lib/cake-seg.mjs`): ID renders at one instant (floor + stage flat green, cake red,
+  table blue, the rest real materials minus additive light; then cake + table alone): floor
+  ≤ 25 %, 0 hidden cake/table px (floor-coloured = a contact), cake margin ≥ 6 %, cake
+  supported within 2 cm, top 0.72–0.78 m, foot on the floor, cake 55–75 % of the top, pitch
+  −8…−14°, camera ≤ 1.7 m (phone 2.2), 5 openings: same camera (0 cm), same picture, 0 %
+  near-white — at 1440×900, 1920×1080, 390×844 × 36 ring turns, resumed AND led in.
+  `qa-plausible.mjs` checks both ways in too.
 
 ## Design references (`reference/`)
 
