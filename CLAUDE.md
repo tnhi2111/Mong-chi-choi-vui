@@ -929,6 +929,30 @@ peeks, then "There's more?") or straight to `reveal` → 10.5 s → `waiting` (s
   every gift open, runs to the waiting scene; `again` re-enters the finale and checks it does not
   run twice). `scripts/qa-keyboard.mjs` walks it by keyboard (and now waits for the iris, not `.veil`).
 
+## The QR card (`/qr.html` — `src/qr/`)
+
+A page to print / share that leads to the site. **Untouchable rules** (`src/qr/code.ts` header):
+URL only from `birthdayConfig.siteUrl`; dark modules (`INK` #2a1118) on light (`PAPER`
+#fffaf6), contrast 17 : 1 (≥ 7); error correction H; quiet zone `QUIET` = 4 modules; nothing
+drawn over the code or its quiet zone; the code always flat and square (the plate only
+translates — after condensing `.is-ready` drops every filter/transform).
+- `code.ts` — the ONE generator: `qrModules()` → `codeSvg()` (exact vector path), `drawCode()`
+  (integer pixels per module, smoothing off), `contrast()`. Page, PNG, SVG and print all use it.
+- `heart.ts` — the heart of light in Canvas 2D: points on the implicit 3D heart (shell + soft
+  core), gather from a scatter, sway (never edge-on), lub-dub beat, halo, 'lighter' sprites.
+- `main.ts` — planes: sky + bokeh, heart, the plate (shadow, thickness edge shown by parallax,
+  dark gap ring, rose rim, bevel), foreground dust that skips the plate's rect. Parallax from
+  pointer / device tilt (`DEPTH`). Intro `T`: motes gather (2.6 s) → plate condenses → code.
+  A click skips; reduced motion = the last frame, still; paused when the tab is hidden; fewer
+  points on phones. Exports: PNG 2048 × 2560 (dark or light ground — light has an engraved
+  heart), SVG (vector poster, code as the exact path), Print (`@media print`: A5 cream sheet,
+  engraved heart, code 42 mm). `window.__qr = { png, svg, contrast, codeRect, skip }`.
+- QA `npm run qa:qr -- --gpu` (jsQR, decoded in the page — shipping pixels to node ran it out of
+  memory): PNG dark/light at 300/600/2048 px × 0/15/45°, blurred; SVG; print sheet + its mm
+  size; contrast; every pixel of code + quiet zone on the live page is ink/paper over 6 frames
+  with the pointer moving (1440 and 390); a screenshot of the card decodes. Only a decoder —
+  no real phone camera has scanned it in QA.
+
 ## Running & testing
 
 ```bash
