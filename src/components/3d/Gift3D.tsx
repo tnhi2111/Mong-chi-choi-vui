@@ -40,6 +40,12 @@ interface Props {
   quiet?: boolean;
   /** The room is being left: the floating name goes first (see RoomWorld). */
   hideLabel?: boolean;
+  /**
+   * W1b/W4b — a hidden moment (the cake, the sign) has the room: the gift sinks into the floor
+   * and shrinks away (~0.8 s), so from no turn of the ring does it stand in front of the
+   * subject; it rises back when the moment ends.
+   */
+  ducked?: boolean;
   glass: boolean;
   reducedMotion: boolean;
   /** Fine pointer present: hover sparkles, tilt and sound. */
@@ -1225,6 +1231,7 @@ export function Gift3D({
   focused,
   quiet = false,
   hideLabel = false,
+  ducked = false,
   glass,
   reducedMotion,
   hoverFx,
@@ -1249,6 +1256,7 @@ export function Gift3D({
   const titleCard = useRef<THREE.Mesh>(null);
   const titleIn = useMemo(() => new Spring(0), []);
   const recede = useMemo(() => new Spring(0), []);
+  const duck = useMemo(() => new Spring(0), []);
   const label = useRef<HTMLDivElement>(null);
   const progress = useRef(0);
   const hover = useRef(0);
@@ -1420,7 +1428,7 @@ export function Gift3D({
     // hovered, it comes a little toward her
     toCam.copy(state.camera.position).sub(homeV).setY(0).normalize().multiplyScalar(isDog ? 0 : 0.14 * h);
     // the whole ring may be turning a little under her sweep (it springs back): turn home with it
-    const ringTurn = giftRing.spin;
+    const ringTurn = giftRing.spin + giftRing.qaTurn;
     const cs = Math.cos(ringTurn);
     const sn = Math.sin(ringTurn);
     tmp.set(homeV.x * cs + homeV.z * sn, (isDog ? floorY : homeV.y) + bob + up, -homeV.x * sn + homeV.z * cs);
@@ -1472,6 +1480,14 @@ export function Gift3D({
     const back = recede.step(disabled && !opening && !isDog ? 1 : 0, 5, dt);
     r.position.y -= back * 0.06;
     r.scale.setScalar(size * (isDog ? 1 : 1 + kick + e * 0.12 - back * 0.07));
+    // a moment has the room: it sinks into the floor as it shrinks away (ω 6 ≈ 0.8 s to settle)
+    const dk = THREE.MathUtils.clamp(duck.step(ducked && !opening && !giftRing.qaNoDuck ? 1 : 0, reducedMotion ? 14 : 6, dt), 0, 1);
+    if (dk > 0.001) {
+      const away = dk * dk * (3 - 2 * dk);
+      r.position.y -= away * (r.position.y - floorY + 0.3);
+      r.scale.multiplyScalar(Math.max(1e-4, 1 - away));
+    }
+    r.visible = dk < 0.995;
 
     // the product shot: the pedestal rises in under it (a sprung scale, a slow turn), and its
     // own colour washes in behind it — the room falls away without going dark or white
@@ -1541,7 +1557,7 @@ export function Gift3D({
       const height = isDog ? 0 : Math.max(0, r.position.y - floorY);
       shadow.current.position.set(r.position.x, floorY + 0.005, r.position.z);
       shadow.current.scale.setScalar(size * (isDog ? 0.85 : 0.9 + height * 0.35));
-      (shadow.current.material as THREE.MeshBasicMaterial).opacity = (0.7 / (1 + height * 0.9)) * (1 - e * 0.6);
+      (shadow.current.material as THREE.MeshBasicMaterial).opacity = (0.7 / (1 + height * 0.9)) * (1 - e * 0.6) * (1 - dk);
     }
 
     // labels of gifts on the far side of the ring step back
@@ -1870,7 +1886,7 @@ export function Gift3D({
           </mesh>
         </group>
         {hoverFx && !reducedMotion && <HoverSparkles on={hover} />}
-        {!opening && !hideLabel && (
+        {!opening && !hideLabel && !ducked && (
           <ScreenLabel
             position={[0, isDog ? -0.34 : -0.7, 0]}
             labelRef={label}

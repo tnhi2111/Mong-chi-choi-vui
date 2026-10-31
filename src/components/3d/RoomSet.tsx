@@ -78,8 +78,10 @@ export const SIGN_PLACEMENT = {
   // (the drop is a wish: BirthdaySign's safe area may hang it higher — `safeDrop`)
   // S: hung 0.25 m higher on longer cables — the music box and the gifts used to stand in
   // front of its lower lines; its arch still clears the alcove's crown and the ceiling
-  landscape: { radius: 5.95, scale: 0.95, drop: 0.07 },
-  portrait: { radius: 4.55, scale: 0.68, drop: 0.5 },
+  // W1a: the words hang above the tallest gift (SIGN_SAFE_FLOOR), a little smaller, under a
+  // crown that was raised to 3.45 m to keep their arch clear of it
+  landscape: { radius: 5.95, scale: 0.74, drop: 0 },
+  portrait: { radius: 4.55, scale: 0.55, drop: 0 },
 }; // a small private room (the camera stands outside it: see CUT)
 const WALL_H = 6.2;
 /** Direction of the window: back-left, so the HAPPY BIRTHDAY installation owns the centre. */
@@ -454,14 +456,15 @@ const wallFragment = /* glsl */ `
     float sw = (a + ${WINDOW_ANGLE.toFixed(3)}) * ${WALL_R.toFixed(1)}; // along the wall from its centre (the sign)
     float nearWin = 1.0 - step(1.45, abs(s));
 
-    // a room of human height: walnut wainscot to 0.95, plaster above, a crown moulding
-    // at 3.05 and the shadowy ceiling cove above it
+    // a room of generous height: walnut wainscot to 0.95, plaster above, a crown moulding
+    // at 3.45–3.6 (W: raised from 3.0 so the sign can hang clear above every gift) and the
+    // shadowy ceiling cove above it
     vec3 plaster = vec3(0.2, 0.145, 0.135) * (0.93 + 0.07 * hash2(floor(vec2(sw, h) * 40.0)));
     vec3 col = plaster;
     // the feature wall: an arched alcove for the HAPPY BIRTHDAY installation
     float aw = 2.5;
     // (S: raised with the sign, so it keeps its air under the alcove's arch)
-    float alcTop = 2.45 + sqrt(max(0.0, 1.0 - (sw / aw) * (sw / aw))) * 0.5;
+    float alcTop = 2.95 + sqrt(max(0.0, 1.0 - (sw / aw) * (sw / aw))) * 0.5;
     // (a full-height niche: no rail or wainscot runs behind the lettering, so from no
     //  angle does a horizontal border cross the words)
     float inAlc = step(abs(sw), aw) * step(h, alcTop);
@@ -483,9 +486,9 @@ const wallFragment = /* glsl */ `
     panel += vec3(0.08, 0.05, 0.03) * pedge * pinset;
     col = mix(panel, col, max(smoothstep(0.93, 0.97, h), inAlc));
     // the crown moulding and the ceiling cove above
-    float crown = smoothstep(2.98, 3.0, h) * (1.0 - smoothstep(3.12, 3.14, h));
+    float crown = smoothstep(3.43, 3.45, h) * (1.0 - smoothstep(3.58, 3.6, h));
     col = mix(col, vec3(0.3, 0.22, 0.19), crown);
-    col *= 1.0 - smoothstep(3.14, 3.5, h) * 0.6;
+    col *= 1.0 - smoothstep(3.6, 3.95, h) * 0.6;
 
     // warm light from the candles below, climbing the wall (over a warm room ambient)
     vec3 light = vec3(0.16, 0.11, 0.12);
@@ -500,9 +503,9 @@ const wallFragment = /* glsl */ `
     // hidden architectural light: a warm wash rising in the alcove from a cove at its foot,
     // and a soft uplight along the crown moulding
     light += vec3(1.0, 0.7, 0.45) * 0.5 * inAlc * exp(-max(h - 0.6, 0.0) * 1.1);
-    light += vec3(1.0, 0.72, 0.48) * 0.22 * exp(-(h - 2.95) * (h - 2.95) * 30.0) * step(h, 3.0);
+    light += vec3(1.0, 0.72, 0.48) * 0.22 * exp(-(h - 3.4) * (h - 3.4) * 30.0) * step(h, 3.45);
     // the sign's champagne halo on the alcove behind it
-    light += vec3(1.0, 0.78, 0.52) * 0.6 * exp(-sw * sw * 0.2 - (h - 2.0) * (h - 2.0) * 0.4);
+    light += vec3(1.0, 0.78, 0.52) * 0.6 * exp(-sw * sw * 0.2 - (h - 2.55) * (h - 2.55) * 0.4);
     // the lamps: warm pools on the wall, brightest just above and below a shade
     for (int i = 0; i < 8; i++) {
       vec3 lw = vWorld - uLamps[i].xyz;
@@ -658,7 +661,7 @@ const ceilingFragment = /* glsl */ `
     gl_FragColor = vec4(col, uInside);
   }
 `;
-const CEIL_H = 3.14;
+const CEIL_H = 3.6;
 function Ceiling({ floorY, lamps }: { floorY: number; lamps: THREE.IUniform }) {
   const u = useMemo(() => ({ ...spriteWake, uLamps: lamps, uInside: { value: 0 } }), [lamps]);
   const mat = useShader(wallVertex, ceilingFragment, u, { additive: false, side: THREE.DoubleSide });
@@ -1118,6 +1121,48 @@ function CakeTopper({ y, outward, explode, onTap }: { y: number; outward: THREE.
   );
 }
 
+/** W4: the cake's table (pre-warmed with the room: `roomWarmShaders`). */
+const TABLE_H = 0.76;
+const TABLE_R = 0.6;
+const tableWoodFragment = /* glsl */ `
+  varying float vY;
+  varying vec3 vN;
+  void main() {
+    // walnut, lit softly from above, its turned-away side in shade
+    vec3 c = vec3(0.2, 0.11, 0.065) * (0.55 + 0.3 * vY);
+    gl_FragColor = vec4(c * (0.6 + 0.4 * max(vN.y, 0.0) + 0.25 * abs(vN.x)), 1.0);
+  }
+`;
+const tableClothFragment = /* glsl */ `
+  varying float vY;
+  varying vec3 vN;
+  void main() {
+    // the cloth's drape: cream, warmer toward the top where the candlelight reaches
+    vec3 c = mix(vec3(0.42, 0.33, 0.28), vec3(0.8, 0.7, 0.6), 0.3 + 0.7 * vY);
+    gl_FragColor = vec4(c * (0.72 + 0.28 * abs(vN.x)), 1.0);
+  }
+`;
+const clothTopVertex = /* glsl */ `
+  varying vec2 vP;
+  void main() {
+    vP = position.xy;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`;
+const clothTopFragment = /* glsl */ `
+  varying vec2 vP;
+  void main() {
+    // soft cream linen: a faint weave, a warm pool of candlelight round the cake, cooler
+    // toward the edge where it falls over
+    float r = length(vP) / ${TABLE_R.toFixed(2)};
+    float weave = 0.97 + 0.03 * sin(vP.x * 900.0) * sin(vP.y * 900.0);
+    vec3 c = vec3(0.62, 0.54, 0.47) * weave;
+    c += vec3(0.32, 0.18, 0.08) * exp(-r * r * 3.2);
+    c *= 1.0 - 0.18 * smoothstep(0.75, 1.0, r);
+    gl_FragColor = vec4(c, 1.0);
+  }
+`;
+
 function Cake({
   at,
   outward = at,
@@ -1138,32 +1183,14 @@ function Cake({
   /** a touch on the cake: first the camera leans in; touched again, she makes a wish */
   onTap?: (wish: boolean | 'play') => void;
 }) {
-  const TABLE_H = 0.72;
-  const wood = useMemo(() => new THREE.MeshBasicMaterial({ color: '#2c170d' }), []);
-  const cloth = useShader(
-    waxVertex,
-    /* glsl */ `
-      varying float vY;
-      varying vec3 vN;
-      void main() {
-        // an ivory tablecloth, warmer where the candlelight falls from above
-        vec3 c = mix(vec3(0.34, 0.26, 0.24), vec3(0.78, 0.66, 0.58), 0.35 + 0.65 * vY);
-        gl_FragColor = vec4(c * (0.7 + 0.3 * abs(vN.x)), 1.0);
-      }
-    `,
-    useMemo(() => ({}), []),
-    { opaque: true },
-  );
-  const icing = useMemo(() => new THREE.MeshBasicMaterial({ color: '#fbe6ea' }), []);
-  useEffect(
-    () => () => {
-      wood.dispose();
-      icing.dispose();
-    },
-    [wood, icing],
-  );
+  // W4: a real little round table — walnut top on four splayed legs with a stretcher ring,
+  // under a soft cream cloth with a short drape; the candles' light pools on the cloth
+  const noUniforms = useMemo(() => ({}), []);
+  const wood = useShader(waxVertex, tableWoodFragment, noUniforms, { opaque: true });
+  const cloth = useShader(waxVertex, tableClothFragment, noUniforms, { opaque: true });
+  const clothTop = useShader(clothTopVertex, clothTopFragment, noUniforms, { opaque: true });
 
-  const top = TABLE_H + 0.02;
+  const top = TABLE_H + 0.008; // (on the cloth)
   // the cake model (built once); its flames are where its candles' wicks are
   const cake = useMemo(getCake, []);
   useEffect(() => () => cake.geometry.dispose(), [cake]);
@@ -1393,19 +1420,44 @@ function Cake({
   const along = new THREE.Vector2(-out.y, out.x);
 
   return (
-    <group position={at}>
-      {/* the little round table with its cloth */}
-      <mesh position={[0, TABLE_H / 2, 0]} material={wood}>
-        <cylinderGeometry args={[0.05, 0.1, TABLE_H, 12]} />
-      </mesh>
-      <mesh position={[0, 0.02, 0]} material={wood}>
-        <cylinderGeometry args={[0.28, 0.32, 0.04, 24]} />
-      </mesh>
-      <mesh position={[0, TABLE_H - 0.1, 0]} material={cloth}>
-        <cylinderGeometry args={[0.55, 0.62, 0.24, 40, 1, true]} />
-      </mesh>
-      <mesh position={[0, TABLE_H + 0.015, 0]} rotation-x={-Math.PI / 2} material={icing}>
-        <circleGeometry args={[0.56, 40]} />
+    <group position={at} userData={{ cakePart: true }}>
+      {/* W4: the little round table — four splayed legs, a stretcher ring, a walnut top,
+          and a cream cloth with a short drape (all of it is `frame: 'cake'`: the moment frames
+          table and cake together) */}
+      <group userData={{ frame: 'cake', cakeTable: true }}>
+        {[0, 1, 2, 3].map((i) => {
+          const a = Math.PI / 4 + (i * Math.PI) / 2;
+          const foot = 0.47;
+          const head = 0.38;
+          const len = Math.hypot(TABLE_H - 0.04, foot - head);
+          const lean = Math.atan2(foot - head, TABLE_H - 0.04);
+          return (
+            <group key={i} rotation-y={-a}>
+              {/* (+4 mm: the tilted cylinder's rim would dip under the floor) */}
+              <mesh position={[(foot + head) / 2, (TABLE_H - 0.04) / 2 + 0.004, 0]} rotation-z={lean} material={wood} userData={{ frame: 'cake' }}>
+                <cylinderGeometry args={[0.024, 0.016, len, 10]} />
+              </mesh>
+            </group>
+          );
+        })}
+        <mesh position={[0, 0.24, 0]} rotation-x={Math.PI / 2} material={wood} userData={{ frame: 'cake' }}>
+          <torusGeometry args={[0.44, 0.011, 6, 40]} />
+        </mesh>
+        <mesh position={[0, TABLE_H - 0.03, 0]} material={wood} userData={{ frame: 'cake' }}>
+          <cylinderGeometry args={[TABLE_R - 0.02, TABLE_R - 0.04, 0.035, 40]} />
+        </mesh>
+        {/* the cloth falls a hand's width over the edge */}
+        <mesh position={[0, TABLE_H - 0.07, 0]} material={cloth} userData={{ frame: 'cake' }}>
+          <cylinderGeometry args={[TABLE_R + 0.005, TABLE_R + 0.03, 0.15, 48, 1, true]} />
+        </mesh>
+        <mesh position={[0, TABLE_H + 0.004, 0]} rotation-x={-Math.PI / 2} material={clothTop} userData={{ frame: 'cake' }}>
+          <circleGeometry args={[TABLE_R + 0.006, 48]} />
+        </mesh>
+      </group>
+      {/* the table's own contact shadow on the floor */}
+      <mesh position={[0, 0.006, 0]} rotation-x={-Math.PI / 2} renderOrder={1}>
+        <planeGeometry args={[1.5, 1.5]} />
+        <meshBasicMaterial map={getShadowTexture()} color="#000000" transparent opacity={0.5} depthWrite={false} />
       </mesh>
       {/* the cake: two tiers, a cream rim, berries on top, candles */}
       {/* M: soft contact shadows — under the stand's foot, and under the little plate */}
@@ -1615,7 +1667,8 @@ function Garland({ floorY }: { floorY: number }) {
     const a = a0 + ((hk + u) / hooks) * (a1 - a0);
     const c = Math.cosh((u - 0.5) * 2.2);
     const sag = (Math.cosh(1.1) - c) / (Math.cosh(1.1) - 1);
-    return { x: Math.sin(a) * r, y: floorY + 2.9 - sag * 0.19, z: -Math.cos(a) * r, sag };
+    // (just under the crown moulding — W: raised with it, so it runs above the sign's words)
+    return { x: Math.sin(a) * r, y: floorY + 3.38 - sag * 0.19, z: -Math.cos(a) * r, sag };
   };
   const geo = useMemo(() => {
     const pts: number[] = [];
@@ -2254,5 +2307,8 @@ export function roomWarmShaders(): [string, string, THREE.Side, boolean][] {
     [glassVertex, glassFragment, THREE.FrontSide, true],
     [glassVertexW, glassFragmentW, THREE.FrontSide, false],
     [moonVertex, moonFragment, THREE.DoubleSide, false],
+    [waxVertex, tableWoodFragment, THREE.FrontSide, true],
+    [waxVertex, tableClothFragment, THREE.FrontSide, true],
+    [clothTopVertex, clothTopFragment, THREE.FrontSide, true],
   ];
 }

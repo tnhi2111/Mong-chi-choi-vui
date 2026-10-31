@@ -188,8 +188,12 @@ export const motion = {
     /** How far above the subject the camera looks down from (radians), [landscape, portrait].
      *  (On a phone the camera stands far back from the sign, so it rises and looks OVER the
      *  orb — level, it would look through the orb's light.) */
-    // (S: the sign camera stands higher than the gifts, so none of them is in front of it)
-    elev: { cake: [0.3, 0.3], sign: [0.15, 0.26] },
+    // (W: the gifts sink away during a moment, and the sign hangs above them — its camera
+    //  looks up at it a little, as one looks at a sign on a wall)
+    //  (a phone stands far back: level, it would look through the orb's light — a little down)
+    //  (W4: the cake moment frames the whole table; the camera stands a little above its top
+    //  and looks down only slightly)
+    elev: { cake: [0.16, 0.2], sign: [-0.06, 0.2] },
     /** The words appear only once the camera has arrived (s after the touch). */
     textAfter: t(1.6),
     /** The subject's area and where its words sit: [landscape, portrait]. */

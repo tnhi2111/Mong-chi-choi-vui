@@ -567,7 +567,7 @@ export function RoomWorld({
           {
             orb: new THREE.Vector3(0, ORB_Y, 0),
             window: new THREE.Vector3(Math.sin(WINDOW_ANGLE) * (WALL_R - 0.6), FLOOR_Y + 1.6, -Math.cos(WINDOW_ANGLE) * (WALL_R - 0.6)),
-            sign: new THREE.Vector3(0, FLOOR_Y + 2.2, -lay.radius + 0.4),
+            sign: new THREE.Vector3(0, FLOOR_Y + 2.6, -lay.radius + 0.4),
             balloons: new THREE.Vector3(1.9, FLOOR_Y + 2.3, -lay.radius + 0.5),
             cake: new THREE.Vector3(cakeAt[0], ground + 0.6, cakeAt[2]),
           },
@@ -661,9 +661,10 @@ export function RoomWorld({
   );
 
   // Framing: a raised three-quarter view that shows the floor and the whole ring.
+  // (W: the sign hangs higher now; the look rose with it so it keeps clear of the room's title)
   const base = portrait
-    ? { pos: [0, 6.9, 7.4] as [number, number, number], look: [0, -0.45, 0.35] as [number, number, number], fov: 50 }
-    : { pos: [0, 3.0, 8.4] as [number, number, number], look: [0, -0.4, 0] as [number, number, number], fov: 40 };
+    ? { pos: [0, 6.9, 7.4] as [number, number, number], look: [0, 0.05, 0.35] as [number, number, number], fov: 50 }
+    : { pos: [0, 3.0, 8.4] as [number, number, number], look: [0, 0.05, 0] as [number, number, number], fov: 40 };
   let camPos = base.pos;
   let camLook = base.look;
   let camFov = base.fov;
@@ -804,6 +805,7 @@ export function RoomWorld({
             quiet={allOpened}
             // the names step away while the camera dives into the orb
             hideLabel={leaving}
+            ducked={!!moment}
             glass={glass}
             reducedMotion={reducedMotion}
             hoverFx={hoverFx}

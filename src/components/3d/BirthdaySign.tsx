@@ -61,10 +61,13 @@ export const SIGN_LINES: { text: string; style: Style; h: number; cap: number; t
 ];
 /**
  * The lettering's safe area: the lowest line's letters always keep this much air (m above
- * the floor) — clear of the alcove's foot and the chair rail at 0.95 m. The sign rises by
- * itself if a placement would bring them lower (see `safeDrop`).
+ * the floor). The sign rises by itself if a placement would bring them lower (see `safeDrop`).
+ * W1a: the tallest thing standing in front of it is a gift on the ring — ≤ 1.74 m above the
+ * floor at the top of its bob (±8 cm) with her hand lifting it (+10 cm) — so the words start
+ * ≥ 0.35 m above that, wherever the ring turns (`qa-plausible` measures it).
+ * (Accents and descenders reach ~8 cm below the line's cap box, hence the margin.)
  */
-export const SIGN_SAFE_FLOOR = 1.22;
+export const SIGN_SAFE_FLOOR = 2.25;
 /** The sign's own pivot height (its middle), and how its scale is applied. */
 const PIVOT_H = 2.0;
 const INNER_SCALE = 0.9;

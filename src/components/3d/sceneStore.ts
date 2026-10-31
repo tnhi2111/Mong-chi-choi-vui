@@ -72,6 +72,10 @@ export const giftRing = {
   spin: 0,
   spinVel: 0,
   count: 5,
+  /** QA only (`__giftRing.qaTurn`): an extra turn of the whole ring, so tests can sweep it. */
+  qaTurn: 0,
+  /** QA only: keep the gifts standing during a moment (shows what the duck prevents). */
+  qaNoDuck: false,
 };
 
 // QA (?debug): window.__giftRing
