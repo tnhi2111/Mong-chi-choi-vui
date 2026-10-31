@@ -11,6 +11,9 @@ it for their wife. Live at **https://tnhi2111.github.io/Mong-chi-choi-vui/**.
   once it is tested. There are no feature branches.
 - Don't stop at "it compiles": build, open it in a browser, look at screenshots,
   compare with the reference images the owner sends, fix, re-test.
+- **Latest (owner): no screenshots sent to the owner and none saved in the repo** (QA shots
+  stay in the git-ignored `qa-output/`). Finish the work, run the tests, then commit and push
+  to `main` straight away — the owner tests on the live site.
 - Content (names, birthday password, letter, photos) is still placeholder text —
   don't invent it; the owner will provide it. Password is `01/01/2000` for now.
 
@@ -830,7 +833,7 @@ alcove raised, sign-moment `elev` higher. QA: `node scripts/qa-cake.mjs --gpu [-
 Debug: `window.__THREE` (for raycasts in QA), gift root groups are named `gift:<id>`, the
 sign's root has `userData.signPart`.
 
-## Stage W — four fixes judged by pictures (`reference/qa/W/` has the before/after shots)
+## Stage W — four fixes judged by pictures
 
 - **W3 — the cake burnt white.** Not reproduced as "worse on the 2nd opening" (6 flows tried:
   Esc / a wish / a touch elsewhere / phone / after opening gifts / after finale → back, plus
@@ -887,7 +890,7 @@ sign's root has `userData.signPart`.
   with a long-task/program probe: `qa-output/dogstall.mjs`); a ~0.2 s long frame when the
   letter page mounts.
 
-## Stage Y — the cake on its table; the letter as light as a feather (`reference/qa/Y/`)
+## Stage Y — the cake on its table; the letter as light as a feather
 
 **Y1 — the cake stands on a table (owner's 3rd report: "the cake is on the floor, 2/3 of the
 frame is empty floor").** Root cause, measured: RoomSet's build lift (the loop over

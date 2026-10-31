@@ -4,3 +4,4 @@ dist
 *.local
 qa-output
 tsconfig.tsbuildinfo
+reference/qa/
