@@ -34,8 +34,9 @@ const vertex = /* glsl */ `
     return t;
   }
   void main() {
-    float delay = at(aNote) + fract(aSeed * 7.13) * 0.28;
-    float dur = 1.15 + fract(aSeed * 3.7) * 0.45;
+    float delay = at(aNote) + fract(aSeed * 7.13) * 0.18;
+    // (V: quick — they catch the sheet within the first part of its flight)
+    float dur = 0.55 + fract(aSeed * 3.7) * 0.3;
     float u = clamp((uT - delay) / dur, 0.0, 1.0);
     float e = u * u * (3.0 - 2.0 * u);
     vec3 target = (uSheet * vec4(aTarget, 0.0, 1.0)).xyz;

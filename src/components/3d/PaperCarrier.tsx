@@ -46,10 +46,12 @@ export interface CarrierPose {
   fall: number;
   /** Q: how much of it exists yet, from its middle outward (1 = all of it) */
   reveal: number;
+  /** V: faint lines of writing on it while it flies (it is a letter, not a blank sheet) */
+  lines: number;
 }
 
 export function newCarrierPose(): CarrierPose {
-  return { show: false, pos: new THREE.Vector3(), quat: new THREE.Quaternion(), height: 0.3, fold: 1, foldB: 1, flutter: 0, wind: 0, curl: 0, rim: 0, edge: 0, warm: 0, motes: 0, fall: 0, reveal: 1 };
+  return { show: false, pos: new THREE.Vector3(), quat: new THREE.Quaternion(), height: 0.3, fold: 1, foldB: 1, flutter: 0, wind: 0, curl: 0, rim: 0, edge: 0, warm: 0, motes: 0, fall: 0, reveal: 1, lines: 0 };
 }
 
 const MODES = { none: 0, tri: 1, half: 2, roll: 3, page: 4 } as const;
@@ -130,6 +132,7 @@ const fragment = /* glsl */ `
   uniform float uWarm;
   uniform float uAspect;
   uniform float uReveal;
+  uniform float uLines;
   varying vec2 vUv;
   varying vec3 vView;
   float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -148,9 +151,10 @@ const fragment = /* glsl */ `
       if (r + (hash(floor(vUv * 160.0)) - 0.5) * 0.08 > uReveal * 1.15) discard;
     }
     vec3 n = normalize(cross(dFdx(vView), dFdy(vView)));
-    vec3 V = normalize(-vView);
-    float facing = abs(dot(n, V));
     // facing her squarely, it is exactly the page's paper; turned away, a little shaded
+    // (against the lens's axis, not the ray to each point: a big sheet close to the lens
+    //  would otherwise darken toward its edges, and the page — evenly lit — would not match)
+    float facing = abs(n.z);
     float lit = mix(0.8, 1.0, smoothstep(0.2, 0.97, facing));
     if (!gl_FrontFacing) lit *= 0.93;
     // fibres: a laid paper — a soft grain longer along the sheet, a little tooth across it
@@ -162,6 +166,19 @@ const fragment = /* glsl */ `
     if (uMode > 0.5 && uMode < 1.5) c = crease(vUv.y, 1.0 / 3.0) + crease(vUv.y, 2.0 / 3.0);
     else if (uMode > 1.5 && uMode < 2.5) c = crease(vUv.y, 0.5);
     vec3 col = uPaper * lit * grain * (1.0 - c * 0.09) * (1.0 + 0.05 * uWarm);
+    // V: lines of handwriting in gilt ink — strokes of different lengths in the page's margins,
+    // an image of writing (the real words are on the page), gone by the handoff
+    if (uLines > 0.001) {
+      float row = floor((1.0 - vUv.y) * 26.0);
+      float inRow = fract((1.0 - vUv.y) * 26.0);
+      float len = 0.55 + 0.4 * hash(vec2(row, 3.1));
+      float x0 = 0.12;
+      float on = step(2.0, row) * step(row, 23.0) * step(x0, vUv.x) * step(vUv.x, x0 + len * 0.76);
+      on *= smoothstep(0.42, 0.5, inRow) * (1.0 - smoothstep(0.56, 0.64, inRow));
+      // the pen lifts between words
+      on *= step(0.18, fract(vUv.x * 9.0 + hash(vec2(row, 7.0)) * 3.0));
+      col = mix(col, vec3(0.62, 0.45, 0.3), on * 0.55 * uLines);
+    }
     // P: how far this point is from the edge (in units of the sheet's height, both ways)
     vec2 d2 = min(vUv, 1.0 - vUv) * vec2(uAspect, 1.0);
     float e = min(d2.x, d2.y);
@@ -229,6 +246,7 @@ export function PaperCarrier({ pose, mode, aspect, paper = '#f6ede3' }: { pose: 
       uEdge: { value: 0 },
       uWarm: { value: 0 },
       uReveal: { value: 1 },
+      uLines: { value: 0 },
       uTime: { value: 0 },
       uAspect: { value: aspect },
       // (sRGB, written straight to the screen — the same number as the page's --paper)
@@ -241,6 +259,7 @@ export function PaperCarrier({ pose, mode, aspect, paper = '#f6ede3' }: { pose: 
   uniforms.uAspect.value = aspect;
   const material = useShader(vertex, fragment, uniforms, { opaque: true, side: THREE.DoubleSide });
   const corner = useMemo(() => new THREE.Vector3(), []);
+  const lastAt = useRef(0);
   const moteGeo = useMemo(() => {
     const n = 48;
     const g = new THREE.BufferGeometry();
@@ -272,6 +291,7 @@ export function PaperCarrier({ pose, mode, aspect, paper = '#f6ede3' }: { pose: 
     uniforms.uEdge.value = p.edge;
     uniforms.uWarm.value = p.warm;
     uniforms.uReveal.value = p.reveal;
+    uniforms.uLines.value = p.lines;
     uniforms.uTime.value = state.clock.elapsedTime;
     moteU.uMotes.value = carrier.handed ? 0 : p.motes;
     moteU.uFall.value = carrier.handed ? 0 : p.fall;
@@ -298,6 +318,16 @@ export function PaperCarrier({ pose, mode, aspect, paper = '#f6ede3' }: { pose: 
           corner.set(x, y, 0).applyMatrix4(m.matrixWorld).project(camera);
           return [(corner.x * 0.5 + 0.5) * w, (-corner.y * 0.5 + 0.5) * h];
         }) as Quad;
+        // (and how fast its corners are moving on screen, px/s — the page carries that on)
+        const now = performance.now();
+        const prev = carrier.quad;
+        const dtq = (now - lastAt.current) / 1000;
+        if (prev && dtq > 0.001 && dtq < 0.2) {
+          const v = q.map(([x, y], i) => [(x - prev[i][0]) / dtq, (y - prev[i][1]) / dtq]) as Quad;
+          const o2 = carrier.vel;
+          carrier.vel = o2 ? (v.map(([x, y], i) => [o2[i][0] * 0.5 + x * 0.5, o2[i][1] * 0.5 + y * 0.5]) as Quad) : v;
+        }
+        lastAt.current = now;
         carrier.quad = q;
       }}
     >

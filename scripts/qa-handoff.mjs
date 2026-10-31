@@ -51,20 +51,14 @@ for (const n of only) {
     const shot = async (tag) => p.screenshot({ path: `${dir}/f-${String(i++).padStart(2, '0')}_${String(Date.now() - t0).padStart(5, '0')}ms-${tag}.png` });
     await p.locator('.gift-nav__btn').nth(n - 1).click();
     let straight = null;
-    let waitAt = null;
     while (Date.now() - t0 < 16000) {
       await shot('open');
       const st = await p.evaluate(() => ({ leaf: !!document.querySelector('.leaf'), inked: !!document.querySelector('.leaf.is-inked'), wait: !!window.__carrier?.waiting }));
-      // P: it floats and waits — film 3 s of the float, then touch it
-      if (st.wait && waitAt === null) waitAt = Date.now();
-      if (st.wait && Date.now() - waitAt > 3000) {
-        await shot('touch');
-        await p.locator('.letter-prompt[data-on="true"]').click({ force: true }).catch(() => {});
-      }
+
       if (st.inked && straight === null) straight = Date.now() - t0;
       if (straight !== null && Date.now() - t0 > straight + 700) break;
     }
-    results.push({ gift: n, straightMs: straight, waitedMs: waitAt === null ? null : waitAt - t0 });
+    results.push({ gift: n, straightMs: straight });
     if (straight === null) problems.push(`gift ${n}: the page never stood straight`);
     await p.waitForTimeout(400);
     await shot('page');
@@ -82,9 +76,6 @@ for (const n of only) {
     const { ctx, p } = await room();
     await p.evaluate(() => (window.__leafHold = true));
     await p.locator('.gift-nav__btn').nth(n - 1).click();
-    await p.locator('.letter-prompt[data-on="true"]').waitFor({ timeout: 15000 });
-    await p.waitForTimeout(400);
-    await p.locator('.letter-prompt[data-on="true"]').click({ force: true });
     await p.locator('.leaf').waitFor({ timeout: 15000 });
     await p.waitForTimeout(250);
     const quad = await p.evaluate(() => window.__carrier?.quad);
@@ -92,6 +83,7 @@ for (const n of only) {
     const b = `${out}/hand-${n}-sheet.png`;
     // the page's dark is still coming in: hide it in both shots so only the paper differs
     await p.addStyleTag({ content: '.sheet::before, .sheet__bar { display: none !important; }' });
+    await p.waitForTimeout(600);
     await p.waitForTimeout(80);
     await p.screenshot({ path: a });
     await p.evaluate(() => {

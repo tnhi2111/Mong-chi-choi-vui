@@ -99,7 +99,7 @@ export const motion = {
     /** The opening, per shape (the App's safety net is read from here too). */
     // (K3: the owner found the box slow. Press → the page standing straight is now ≈ 3.5–4.5 s:
     //  the opening, then `carry.pageMs` while the page straightens out of the sheet.)
-    open: { box: t(3.0), capsule: t(3.0), star: t(3.1), orb: t(4.4), envelope: t(5.4) },
+    open: { box: t(3.0), capsule: t(3.0), star: t(3.1), orb: t(3.0), envelope: t(5.4) },
     /** A held beat before the thing inside comes out (the breath before it gives). */
     hold: t(0.5),
     /** The memory page grows out of the thing on screen (ms — CSS reads it). */
@@ -119,30 +119,30 @@ export const motion = {
   },
 
   /**
-   * P — the letter is a magic sheet: it flies out of the gift, then FLOATS in front of her and
-   * waits to be touched; only her touch (or Enter / Space) opens it — slowly, like a spell.
-   * Why: the owner found the letter and its words came out too fast. The gift's own
-   * mechanism stays quick; only the paper slows down. Seconds / fractions.
+   * V — ONE touch, one movement, from the gift to the page she reads. The sheet starts to come
+   * out while the gift is still opening (`start`, s of the gift's own opening), flies like
+   * paper in the wind on a half circle drawn in the camera's frame — out of the gift, out to
+   * the LEFT (`left`, NDC), up (`top`), and in to the middle — unrolling / unfolding as it
+   * flies (`unfold`, fractions of the flight), and arrives as the page: its place, its size,
+   * at `dist` m. The page takes it over at `hand` of the flight, still moving, and carries
+   * its speed on for `glide` ms. Why: the owner did not want to touch twice, nor any stop.
    */
-  letter: {
-    /** where it waits: distance in front of the lens (m), size (× the page's height) */
-    hoverDist: 1.75,
-    hoverSize: 0.34,
-    /** …and lifted by this share of the frame's height above the page's centre (the music
-     *  box's sheet is made in the air above the box: it floats higher, clear of it) */
-    hoverRise: 0.06,
-    hoverRiseAir: 0.2,
-    /** its float while it waits: a slow bob (Hz, × its height), a sway (degrees) */
-    bobHz: 0.6,
-    bobAmp: 0.025,
-    swayDeg: 2,
-    /** nobody touches it: it opens by itself after this long (s) — she is never stuck */
-    autoOpen: 10,
-    /** the opening: how long, and how far apart the two creases begin (s) */
-    open: 2.7,
-    creaseLag: 0.25,
-    /** each crease's own opening time (s, eased in and out, with a long tail) */
-    crease: 1.55,
+  flight: {
+    start: { box: t(0.85), capsule: t(0.55), star: t(0.7), orb: t(0.75), envelope: 0 },
+    dur: t(2.0),
+    hand: 0.9,
+    glide: ms(480),
+    /** closing: how much faster it flies back */
+    back: 1.5,
+    dist: 1.15,
+    left: [-0.66, -0.05],
+    top: [-0.14, 0.34],
+    /** the wind's wander (× distance) and the bank into the curve (rad) */
+    wind: 0.05,
+    roll: 0.32,
+    unfold: [0.14, 0.84],
+    /** the music box: its light becomes the sheet in the first part of the flight (s) */
+    condense: t(0.6),
   },
   /**
    * P3 — reading pace for the words on a page: a line takes clamp(base + chars × perChar,

@@ -70,17 +70,8 @@ try {
       await snap('gift-focus');
     }
     await page.keyboard.press('Enter');
-    // P: the letter floats and waits; focus comes to it — open it with the keyboard
-    let opened = false;
-    for (let t = 0; t < 120 && !(await page.locator('.sheet').count()); t++) {
-      if (!opened && (await page.evaluate(() => document.activeElement?.classList.contains('letter-prompt')))) {
-        await page.keyboard.press(i % 2 ? 'Space' : 'Enter');
-        opened = true;
-      }
-      await page.waitForTimeout(250);
-    }
-    if (!opened) problems.push(`gift ${i + 1}: the floating letter never took the keyboard focus`);
-    await page.locator('.sheet').waitFor({ timeout: 15000 });
+    // V: one touch — the sheet flies to her and becomes the page by itself
+    await page.locator('.sheet').waitFor({ timeout: 20000 });
     await page.waitForTimeout(900);
     const inSheet = await page.evaluate(() => !!document.activeElement?.closest('.sheet'));
     if (!inSheet) problems.push(`focus not moved into the sheet for gift ${i + 1}`);

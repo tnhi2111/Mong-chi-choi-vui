@@ -335,3 +335,26 @@ arch raised with it (2.45 + 0.5); the sign moment's camera looks down from highe
 (`motion.moment.elev.sign` 0.15 / 0.26), so the gifts and the music box fall below the frame.
 `scripts/qa-sign.mjs` casts rays from the camera to a 5 × 5 grid over the lettering in the
 default view and the moment, wide and tall: 25 / 25 seen in all four, no gift in front.
+
+## V. One touch, one movement from the gift to the page (replaces P's float and K's handoff)
+
+The owner: no second touch, no stop, no blank sheet waiting — the paper flies out like paper in
+the wind, on a half circle from the left into the middle, unrolls as it comes and IS the page.
+Numbers: `motion.flight`.
+
+| t (box) | What happens |
+|---|---|
+| 0 – 1.2 s | the gift opens with her press, quick as before |
+| 0.85 s → | the sheet starts to come out while the walls are still opening (`start` per gift: bottle 0.55, journal 0.7, music box 0.75, box 0.85; the puppy's letter once it is out of the envelope) |
+| 0.85 – 2.85 s | its flight (`dur` 2.0 s): a centripetal Catmull-Rom curve in the CAMERA's frame (gift mouth → NDC (−0.66, −0.05) → (−0.14, 0.34) → the page's centre at 1.15 m), sampled by arc length on an eased-in-and-out clock that never stops; a slow wind wander that dies down (× (1−k)^1.5); it turns to face her early and banks into the curve (≤ 0.32 rad); it grows into the page late in its flight (so it never leaves the frame at the top); it unfolds / unrolls WHILE it flies (`unfold` 0.14 → 0.84, the second crease 0.12 later), its edges stir, faint lines of gilt writing on it (an image of writing — never blank), motes fall in its wake |
+| 2.65 s (`hand` 0.9) | still moving, it is handed to the page (≤ 1.4 px); the page carries on with the sheet's own corner velocities (Hermite per corner, `glide` 480 ms) and comes to rest |
+| + 0.17 s | the page's layout fades in while it settles; the words then come at the reading pace |
+
+The music box's light condenses onto the sheet in the first 0.6 s of its flight (its notes come
+right after the lid, the motes are quick and land on the moving sheet). Closing flies the sheet
+back the same way (×1.5), and only then does the gift close (it used to start closing early and
+then jump back open when the sheet arrived). The room's dimmed edges (`.room-focus`) lift as the
+sheet grows into the page (`html[data-sheet=near]`): the page above them is not dimmed, and at
+the handoff the two must be lit alike — the sheet's own shading is taken against the lens's
+axis for the same reason (a big sheet close to the lens darkened toward its edges).
+Removed: the float, the "touch me" breath, `LetterPrompt`, the 10 s auto-open, `motion.letter`.

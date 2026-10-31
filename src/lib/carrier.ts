@@ -29,12 +29,8 @@ export const carrier = {
   handed: false,
   /** How the sheet is folded, so the page can keep its creases (CSS `data-fold`). */
   fold: 'none' as 'none' | 'tri' | 'half' | 'roll' | 'page',
-  /** P: the sheet floats in front of her, waiting to be touched (the DOM prompt shows). */
-  waiting: false,
-  /** P: she touched it (or pressed Enter / Space on the prompt): open it now. */
-  requestOpen: false,
-  /** P: her pointer is on it (it lifts a little and warms). */
-  hover: false,
+  /** V: how fast the sheet's corners move on screen (px/s) — the page carries it on. */
+  vel: null as Quad | null,
 };
 
 if (typeof location !== 'undefined' && new URLSearchParams(location.search).has('debug')) {

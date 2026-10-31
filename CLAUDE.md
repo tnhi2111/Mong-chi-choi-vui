@@ -803,6 +803,21 @@ See STORYBOARD P/Q; numbers in `motion.letter` / `motion.reading`.
 - **Q** (`CondenseMotes.tsx`): the music box's sheet condenses out of its tune's light (see
   STORYBOARD Q); `CARRY.orb` has no flight (`air`), `MUSIC_NOTES` come earlier, `open.orb` 4.4.
 
+## One touch, one movement (stage V — replaces P's float and K's handoff timing)
+
+See STORYBOARD V; numbers in `motion.flight`. Gift3D `flight` ref (real seconds into the arc;
+starts at `flight.start[shape]` of the gift's opening clock, the puppy's once its letter is
+out): a Catmull-Rom curve rebuilt every frame in the camera's frame (`cv.curve`, by arc
+length) from the gift's anchor to the page's centre and size at `flight.dist`; unfolding,
+wind, bank, gilt writing lines (`pose.lines`) during the flight; `onOpened` at
+`flight.hand` while still moving. `useLeaf` continues it with the sheet's corner velocities
+(`carrier.vel`, measured in PaperCarrier's `onBeforeRender`) on a per-corner Hermite over
+`flight.glide`; the layout shows at 35 % of the glide, the words once still. Closing: the
+flight runs back first (the gift's clock waits — `progress` is held, not decayed), then the
+gift closes. `html[data-sheet='near']` lifts `.room-focus`. QA: `qa-handoff.mjs` films the
+whole thing (no second touch) and measures the handoff with `__leafHold` (the flight freezes
+once handed). The P float / `LetterPrompt` / `motion.letter` are gone.
+
 ## The pink cake and the higher sign (stages R, S)
 
 See STORYBOARD R/S. R: `cakeModel.ts` pinks, soft tiers (`tier()` edge 0.058, dome, puff),
