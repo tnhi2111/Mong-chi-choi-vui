@@ -345,7 +345,7 @@ export default function App() {
     const shape = gifts.find((g) => g.id === openingId)?.shape ?? 'box';
     const secs = reducedMotion ? MOTION.gift.quick : (MOTION.gift.open as Record<string, number>)[shape] ?? 5.2;
     // (V: and the sheet's flight to her, which overlaps the opening)
-    const letter = reducedMotion ? 0 : MOTION.flight.dur + 1;
+    const letter = reducedMotion ? 0 : MOTION.paper.dur + 1;
     const id = setTimeout(() => void giftOpened(openingId), (secs + letter) * 1000 + 1200);
     return () => clearTimeout(id);
   }, [openingId, activeId, giftOpened, reducedMotion]);

@@ -127,27 +127,55 @@ export const motion = {
    * at `dist` m. The page takes it over at `hand` of the flight, still moving, and carries
    * its speed on for `glide` ms. Why: the owner did not want to touch twice, nor any stop.
    */
-  flight: {
-    // W2 (overrides V's pace): the lid is quick (~1 s), the sheet slips out from ~0.6 s and
-    // FLOATS — 4 s on the half circle, eased in and out, starting very slowly as it lifts off
-    // the gift; it lies flat by 85 % and is handed to the page at 92 %, still moving but slowly;
-    // the page settles over `glide` and its words start at `inkAt` of that settle.
-    // Touch → first line readable ≈ 6 s.
+  /**
+   * Y2 — the letter flies like a feather (overrides W2/X's pace and V's path): it leaves the
+   * gift as if a breath of air lifted it, and drifts 5–6.5 s on a half circle from the left to
+   * the middle of the screen — slow and even (strong air drag: any quick movement dies away),
+   * swaying like a pendulum (the tilt leads, the drift follows), bobbing, turning slowly in 3D,
+   * stirred by a soft low wind; always coming closer to the middle. It lies flat only in the
+   * last ~12 % and is handed to the page while still drifting, so slowly the seam cannot be
+   * seen. Touch → first line readable ≈ 8–9 s. Every curve is C² (quintic easing, sines).
+   */
+  paper: {
+    /** when the sheet leaves the gift (s into its opening; the lid takes ~1 s) */
     start: { box: t(0.6), capsule: t(0.6), star: t(0.6), orb: t(0.75), envelope: 0 },
-    dur: t(4.0),
-    hand: 0.92,
-    glide: ms(1000),
+    /** the flight (s) */
+    dur: t(6.4),
+    /** handed to the page at this fraction of the flight (still drifting — the page takes
+     *  ~0.35 s to mount, so it really takes over at ~96 %) */
+    hand: 0.9,
+    /** the page settles over this (ms); its words start at `inkAt` of it */
+    glide: ms(1300),
     inkAt: 0.7,
     /** closing: how much faster it flies back */
-    back: 1.5,
+    back: 2.2,
+    /** the page's distance in front of the lens (m); the half circle starts at `left` (NDC)
+     *  and comes over the top into the page's middle (`arc`: its height × its radius); the
+     *  sheet leaves the gift and blends into it over `lead` of the way */
     dist: 1.15,
-    left: [-0.66, -0.05],
-    top: [-0.14, 0.34],
-    /** the wind's wander (× distance) and the bank into the curve (rad) */
-    // (bank ≤ 0.13 rad + a 0.03 sway: never more than 10° of roll)
-    wind: 0.05,
-    roll: 0.13,
-    unfold: [0.04, 0.85],
+    left: [-0.62, -0.08],
+    arc: 0.8,
+    lead: 0.32,
+    /** its forward speed: built up over `lift` of the flight (air lifting it), even, then the
+     *  drag slows it from `dragFrom` to `terminal` × its cruise, and in the last `rest` it comes
+     *  softly to rest (a slow device that mounts the page late sees it settle, not brake) */
+    lift: 0.16,
+    dragFrom: 0.5,
+    terminal: 0.14,
+    rest: 0.04,
+    /** the pendulum: period (s), side-to-side (× screen width), bob (× the screen's shorter
+     *  side), the tilt that leads the drift (rad — ≤ 14°) */
+    sway: { period: t(2.0), amp: 0.042, bob: 0.014, roll: 0.22 },
+    /** slow turns in 3D (rad: yaw ≤ 70°, pitch ≤ 25°) */
+    turn: { yaw: 0.95, pitch: 0.32 },
+    /** the wind's slow wander (× the screen's shorter side) */
+    gust: 0.012,
+    /** the sway, turns and wind die down by here (fraction of the flight) */
+    settle: 0.86,
+    /** it unrolls while it flies; flat only by `unfold[1]` (the last ~12 %) */
+    unfold: [0.04, 0.88],
+    /** the trail: two paler sheets following its path (s behind, size, opacity) */
+    trail: { lag: [0.32, 0.64], size: [0.9, 0.8], alpha: [0.16, 0.08] },
     /** the music box: its light becomes the sheet in the first part of the flight (s) */
     condense: t(0.6),
   },

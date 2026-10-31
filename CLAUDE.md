@@ -930,6 +930,49 @@ JSX-passed `userData`.** Dev/`?debug` assert: `[room] the cake's table is … of
   near-white — at 1440×900, 1920×1080, 390×844 × 36 ring turns, resumed AND led in.
   `qa-plausible.mjs` checks both ways in too.
 
+**Y2 — the letter floats out like a feather** (overrides W2's / V's pace and path; `motion.paper`,
+was `motion.flight`). One touch, continuous, no crease (W2's loose roll kept — there is no stage X
+in this repo). Gift3D's flight block:
+- **Timing:** leaves the gift at `start` (lid ~1 s), flies `dur` 6.4 s, handed to the page at
+  `hand` 0.9 (the page mounts ~0.35 s later, so it really takes over at ~96 %, still drifting),
+  `glide` 1.3 s, words at `inkAt` 0.7. Touch → first line readable ≈ 8.1–8.3 s (puppy ≈ 10.6 s:
+  its delivery performance first).
+- **Path:** a real half circle ON SCREEN (round in px) from `left` over the top into the page's
+  middle (`arc` height), the sheet blending in from the gift's mouth over `lead`; depth comes
+  toward the lens from the start (`1 − (1−u)³` — at the gift's depth it passed behind the
+  puppy). Its start is held in the camera frame once it has left (`cv.left`), so neither the
+  gift rising nor the camera dragging it. Progress is measured along the arc's SCREEN length
+  (`cv.arc`, 49 samples) — 3D arc length let the stretch toward the lens race across the screen.
+- **Speed:** `paperProgress(k)` = integral of a C² speed: built up over `lift`, even, drag from
+  `dragFrom` to `terminal`, soft `rest` at the very end. `sm5` = quintic smoothstep (C²).
+- **Feather:** pendulum `sway` (period 2 s, 4.2 % of the width, the roll leads the drift by a
+  quarter turn, bob at twice the frequency by the shorter screen side), slow 3D `turn` (yaw ≤
+  54°, pitch ≤ 18°, roll ≤ 12.6°), a low `gust` (three sines, 0.13–0.34 Hz); all die by `settle`
+  0.86; flat by `unfold[1]` 0.88; full size at `hand`.
+- **Trail** (PaperCarrier): two paler sheets at `trail.lag` 0.32 / 0.64 s on the recorded path
+  (same program, `uGhost` = opacity), each with falling motes; drawn (alpha 1e-3) from the
+  sheet's first frame, programs linked on mount (`compileAsync`).
+- **Two bugs found on the way (keep them fixed):** (1) PaperCarrier's own `useFrame` runs BEFORE
+  its parent's (children subscribe first), so it drew every pose one frame late with the last
+  frame's camera — a jump after any long frame. Now the writer calls `pose.apply()` right after
+  writing the pose. (2) `onBeforeRender` was also called by other passes (a cube-camera capture
+  renders the scene 6× during an opening) and reported THEIR corners as `carrier.quad`; it now
+  only reports for the main camera. `carrier.at` = when the quad was measured.
+- A second touch = `hurryUp()` (×3.5, smooth): the flight's clock only runs forward.
+- QA `scripts/qa-handoff-flow.mjs [--size] [--mobile] [--only] [--nofilm]` (`npm run
+  qa:handoff-flow`): flight 5–6.5 s, touch → first line 7.6–9.4 s, top speed ≤ 0.36 × the
+  screen's longer side /s (timed by the flight's own clock, `__paper.t`; long frames reported
+  apart as `longFramesMs`), never < 5 % of it before settling, sway period 1.6–2.4 s (least-
+  squares-cubic detrend — a moving average biases toward short periods) and 3–8.5 % of the width
+  measured against the arc alone (`__paper.base`), dying down; turns within limits; handoff
+  ≤ 2 px with speed carried; no fold (≤ 25° between cells); a second touch hurries, never back;
+  a film per gift + `g<n>-sheet.jpg` (20 frames). Measured 1920×1080: peak 0.30–0.35 (W2:
+  0.42–0.52), sway 2.15 s at 4.3 % → 2.3 %, bend ≤ 8.3°, handoff 0 px. `qa-handoff.mjs` now
+  redraws the sheet by hand for its sheet-shot (the canvas rests once a page is open — since W2
+  that test compared against a stale frame and failed on every gift).
+- Known: intermittent 30–50 ms frames ~1.2–1.4 s into some openings, also with the trail off
+  (not from Y2); the puppy reads at ~10.6 s.
+
 ## Design references (`reference/`)
 
 - `reference/VIDEO_ANALYSIS.md` — the owner's reference videos, analysed (3 in the first

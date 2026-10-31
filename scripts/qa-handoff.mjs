@@ -89,6 +89,15 @@ for (const n of only) {
     await p.evaluate(() => {
       document.querySelector('.leaf').style.visibility = 'hidden';
       window.__carrier.handed = false;
+      // (the canvas rests while a page is open — W2 — so draw the sheet again by hand: one
+      //  frame, the sheet's paper on, the same camera)
+      window.__scene.traverse((o) => {
+        if (o.name === 'paper-carrier') {
+          o.material.colorWrite = true;
+          o.material.depthWrite = true;
+        }
+      });
+      window.__gl.render(window.__scene, window.__camera);
     });
     await p.waitForTimeout(250);
     await p.screenshot({ path: b });

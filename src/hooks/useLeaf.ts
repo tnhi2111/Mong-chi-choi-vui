@@ -43,7 +43,7 @@ export function useLeaf(closing: boolean, reducedMotion: boolean) {
     // V: the sheet is still moving when the page takes it over — the page carries its speed on
     // (a Hermite curve per corner: it starts at the sheet's corners WITH their velocity and
     // comes to rest on the page's own corners; no stop, no kick)
-    const dur = motion.flight.glide;
+    const dur = motion.paper.glide;
     const vel = (carrier.vel ?? from.map(() => [0, 0])) as Quad;
     const m0 = vel.map(([x, y]) => [(x * dur) / 1000, (y * dur) / 1000]);
     const at = (k: number): Quad => {
@@ -63,7 +63,7 @@ export function useLeaf(closing: boolean, reducedMotion: boolean) {
       el.style.transform = quadMatrix(r.width, r.height, at(k), r.left, r.top);
       if (k > 0.35) setShown(true);
       // W2: the words start while it is still settling (most of the way there)
-      if (k >= motion.flight.inkAt) setInked(true);
+      if (k >= motion.paper.inkAt) setInked(true);
       if (k < 1) raf.current = requestAnimationFrame(step);
       else el.style.transform = '';
     };

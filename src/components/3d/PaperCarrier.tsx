@@ -1,8 +1,9 @@
-import { useMemo, useRef } from 'react';
-import { useFrame } from '@react-three/fiber';
+import { useEffect, useMemo, useRef } from 'react';
+import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useShader } from './useShader';
 import { carrier, type Quad } from '../../lib/carrier';
+import { motion as MOTION } from '../../config/motion';
 
 /**
  * K / P — the sheet a gift lets out, which becomes the memory page (see `src/lib/carrier.ts`).
@@ -47,10 +48,14 @@ export interface CarrierPose {
   reveal: number;
   /** V: faint lines of writing on it while it flies (it is a letter, not a blank sheet) */
   lines: number;
+  /** Y2: the paler sheets and the light that follow its path (0..1) */
+  trail: number;
+  /** set by PaperCarrier: put this pose on the sheet now (call right after writing it) */
+  apply?: () => void;
 }
 
 export function newCarrierPose(): CarrierPose {
-  return { show: false, pos: new THREE.Vector3(), quat: new THREE.Quaternion(), height: 0.3, fold: 1, foldB: 1, flutter: 0, wind: 0, curl: 0, rim: 0, edge: 0, warm: 0, motes: 0, fall: 0, reveal: 1, lines: 0 };
+  return { show: false, pos: new THREE.Vector3(), quat: new THREE.Quaternion(), height: 0.3, fold: 1, foldB: 1, flutter: 0, wind: 0, curl: 0, rim: 0, edge: 0, warm: 0, motes: 0, fall: 0, reveal: 1, lines: 0, trail: 0 };
 }
 
 const MODES = { none: 0, tri: 1, half: 2, roll: 3, page: 4 } as const;
@@ -127,6 +132,7 @@ const fragment = /* glsl */ `
   uniform float uAspect;
   uniform float uReveal;
   uniform float uLines;
+  uniform float uGhost;
   varying vec2 vUv;
   varying vec3 vView;
   float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -181,7 +187,9 @@ const fragment = /* glsl */ `
     float rim = exp(-e * 120.0) * (0.55 + 0.45 * bead);
     col = mix(col, vec3(0.86, 0.6, 0.28) * (1.0 + 0.35 * bead), clamp(rim * uRim, 0.0, 1.0));
     col += vec3(1.0, 0.8, 0.5) * exp(-e * 30.0) * 0.06 * uRim;
-    gl_FragColor = vec4(col, 1.0);
+    // Y2: a trailing sheet (uGhost = its opacity): the same paper, warmer, see-through
+    if (uGhost > 0.0) col = mix(col, vec3(1.0, 0.86, 0.64), 0.3);
+    gl_FragColor = vec4(col, uGhost > 0.0 ? uGhost : 1.0);
   }
 `;
 
@@ -224,29 +232,40 @@ const moteFragment = /* glsl */ `
 export function PaperCarrier({ pose, mode, aspect, paper = '#f6ede3' }: { pose: { current: CarrierPose }; mode: keyof typeof MODES; aspect: number; paper?: string }) {
   const mesh = useRef<THREE.Mesh>(null);
   const geometry = useMemo(() => new THREE.PlaneGeometry(1, 1, 24, 48), []);
-  const uniforms = useMemo(
-    () => ({
-      uFold: { value: 1 },
-      uFoldB: { value: 1 },
-      uMode: { value: MODES[mode] },
-      uFlutter: { value: 0 },
-      uWind: { value: 0 },
-      uCurl: { value: 0 },
-      uRim: { value: 0 },
-      uEdge: { value: 0 },
-      uWarm: { value: 0 },
-      uReveal: { value: 1 },
-      uLines: { value: 0 },
-      uTime: { value: 0 },
-      uAspect: { value: aspect },
-      // (sRGB, written straight to the screen — the same number as the page's --paper)
-      uPaper: { value: new THREE.Vector3(...hexRGB(paper)) },
-    }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [],
-  );
-  uniforms.uMode.value = MODES[mode];
-  uniforms.uAspect.value = aspect;
+  const makeUniforms = () => ({
+    uFold: { value: 1 },
+    uFoldB: { value: 1 },
+    uMode: { value: MODES[mode] },
+    uFlutter: { value: 0 },
+    uWind: { value: 0 },
+    uCurl: { value: 0 },
+    uRim: { value: 0 },
+    uEdge: { value: 0 },
+    uWarm: { value: 0 },
+    uReveal: { value: 1 },
+    uLines: { value: 0 },
+    uTime: { value: 0 },
+    uAspect: { value: aspect },
+    // (sRGB, written straight to the screen — the same number as the page's --paper)
+    uPaper: { value: new THREE.Vector3(...hexRGB(paper)) },
+    uGhost: { value: 0 },
+  });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const uniforms = useMemo(makeUniforms, []);
+  // Y2: two paler sheets follow its path (the same program: only uGhost differs), each with a
+  // few motes of light falling from it — the trail drifts on the same rhythm and fades
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const ghostU = useMemo(() => [makeUniforms(), makeUniforms()], []);
+  const ghostMats = [
+    useShader(vertex, fragment, ghostU[0], { additive: false, side: THREE.DoubleSide }),
+    useShader(vertex, fragment, ghostU[1], { additive: false, side: THREE.DoubleSide }),
+  ];
+  const ghosts = useRef<(THREE.Mesh | null)[]>([]);
+  const history = useRef<{ t: number; pos: THREE.Vector3; quat: THREE.Quaternion; height: number; fold: number; curl: number; flutter: number; wind: number }[]>([]);
+  for (const u of [uniforms, ...ghostU]) {
+    u.uMode.value = MODES[mode];
+    u.uAspect.value = aspect;
+  }
   const material = useShader(vertex, fragment, uniforms, { opaque: true, side: THREE.DoubleSide });
   const corner = useMemo(() => new THREE.Vector3(), []);
   const lastAt = useRef(0);
@@ -262,12 +281,85 @@ export function PaperCarrier({ pose, mode, aspect, paper = '#f6ede3' }: { pose: 
     [uniforms],
   );
   const moteMat = useShader(moteVertex, moteFragment, moteU);
+  const ghostMoteU = useMemo(
+    () => ghostU.map((g) => ({ uTime: uniforms.uTime, uMotes: { value: 0 }, uFall: { value: 0 }, uPixelRatio: moteU.uPixelRatio, uAspect: g.uAspect })),
+    [ghostU, uniforms, moteU],
+  );
+  const ghostMoteMats = [useShader(moteVertex, moteFragment, ghostMoteU[0]), useShader(moteVertex, moteFragment, ghostMoteU[1])];
 
-  useFrame((state) => {
+  // Y2: its programs (the sheet, a trailing sheet, their motes) are linked when it mounts — with
+  // the room, under its veil — not the first time the sheet flies: the trail's first frame was
+  // a 36–46 ms stall in the middle of the flight
+  const gl = useThree((st) => st.gl);
+  const camera = useThree((st) => st.camera);
+  useEffect(() => {
+    const warm = new THREE.Scene();
+    warm.add(new THREE.Mesh(geometry, material), new THREE.Mesh(geometry, ghostMats[0]), new THREE.Points(moteGeo, moteMat), new THREE.Points(moteGeo, ghostMoteMats[0]));
+    void gl.compileAsync(warm, camera).catch(() => {});
+  }, [gl]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** Y2: the trail — each paler sheet is where the sheet was `lag` s ago, sinking a little. */
+  const trailFrame = (now: number, p: CarrierPose) => {
+    const T = MOTION.paper.trail;
+    const h = history.current;
+    if (p.show && !carrier.handed) {
+      const last = h[h.length - 1];
+      if (!last || now - last.t > 1 / 120) {
+        const e = h.length > 90 ? h.shift()! : { t: 0, pos: new THREE.Vector3(), quat: new THREE.Quaternion(), height: 0, fold: 0, curl: 0, flutter: 0, wind: 0 };
+        e.t = now;
+        e.pos.copy(p.pos);
+        e.quat.copy(p.quat);
+        e.height = p.height;
+        e.fold = p.fold;
+        e.curl = p.curl;
+        e.flutter = p.flutter;
+        e.wind = p.wind;
+        h.push(e);
+      }
+    } else h.length = 0;
+    ghosts.current.forEach((g, i) => {
+      if (!g) return;
+      const a = T.alpha[i] * p.trail;
+      const at = now - T.lag[i];
+      const j = h.findIndex((e) => e.t >= at);
+      // (drawn — all but invisible — from the sheet's first frame: its first draw belongs with
+      //  the sheet's, not in the middle of the flight, where it was a 35 ms frame)
+      g.visible = p.show && !carrier.handed;
+      if (!g.visible) return;
+      const e0 = j > 0 ? h[j - 1] : h[0];
+      const e1 = j > 0 ? h[j] : h[0];
+      if (!e0) {
+        g.visible = false;
+        return;
+      }
+      const f = (at - e0.t) / Math.max(1e-4, e1.t - e0.t);
+      g.position.lerpVectors(e0.pos, e1.pos, f);
+      g.position.y -= T.lag[i] * 0.05;
+      g.quaternion.slerpQuaternions(e0.quat, e1.quat, f);
+      const ht = (e0.height + (e1.height - e0.height) * f) * T.size[i];
+      g.scale.set(ht * aspect, ht, ht);
+      const u = ghostU[i];
+      u.uFold.value = e0.fold + (e1.fold - e0.fold) * f;
+      u.uFoldB.value = u.uFold.value;
+      u.uCurl.value = e0.curl;
+      u.uFlutter.value = e0.flutter;
+      u.uWind.value = e0.wind;
+      u.uTime.value = now - T.lag[i];
+      u.uGhost.value = j > 0 ? Math.max(1e-3, a) : 1e-3;
+      ghostMoteU[i].uFall.value = j > 0 ? Math.min(1, a * 5) : 0;
+    });
+  };
+
+  // Y2: the pose is applied by whoever writes it, the moment it is written (`pose.apply`) —
+  // this component's own frame callback runs BEFORE its parent's (children subscribe first),
+  // so on its own it drew every pose one frame late, with the last frame's camera: invisible
+  // while frames are even, a jump right after a long one
+  const apply = (now: number) => {
     const m = mesh.current;
     if (!m) return;
     const p = pose.current;
     m.visible = p.show;
+    trailFrame(now, p);
     if (!p.show) return;
     m.position.copy(p.pos);
     m.quaternion.copy(p.quat);
@@ -282,47 +374,62 @@ export function PaperCarrier({ pose, mode, aspect, paper = '#f6ede3' }: { pose: 
     uniforms.uWarm.value = p.warm;
     uniforms.uReveal.value = p.reveal;
     uniforms.uLines.value = p.lines;
-    uniforms.uTime.value = state.clock.elapsedTime;
+    uniforms.uTime.value = now;
     moteU.uMotes.value = carrier.handed ? 0 : p.motes;
     moteU.uFall.value = carrier.handed ? 0 : p.fall;
     // handed over: it still renders (so it keeps reporting where it is), but draws nothing
     material.colorWrite = !carrier.handed;
     material.depthWrite = !carrier.handed;
-  });
+  };
+  const clock = useThree((st) => st.clock);
+  pose.current.apply = () => apply(clock.elapsedTime);
+  // (and on its own frame, for a writer that does not call it)
+  useFrame((state) => apply(state.clock.elapsedTime));
 
   return (
-    <mesh
-      ref={mesh}
-      geometry={geometry}
-      material={material}
-      visible={false}
-      frustumCulled={false}
-      renderOrder={4}
-      onBeforeRender={(gl, _scene, camera) => {
-        const m = mesh.current;
-        if (!m) return;
-        const el = gl.domElement;
-        const w = el.clientWidth;
-        const h = el.clientHeight;
-        const q = ([[-0.5, 0.5], [0.5, 0.5], [0.5, -0.5], [-0.5, -0.5]] as const).map(([x, y]) => {
-          corner.set(x, y, 0).applyMatrix4(m.matrixWorld).project(camera);
-          return [(corner.x * 0.5 + 0.5) * w, (-corner.y * 0.5 + 0.5) * h];
-        }) as Quad;
-        // (and how fast its corners are moving on screen, px/s — the page carries that on)
-        const now = performance.now();
-        const prev = carrier.quad;
-        const dtq = (now - lastAt.current) / 1000;
-        if (prev && dtq > 0.001 && dtq < 0.2) {
-          const v = q.map(([x, y], i) => [(x - prev[i][0]) / dtq, (y - prev[i][1]) / dtq]) as Quad;
-          const o2 = carrier.vel;
-          carrier.vel = o2 ? (v.map(([x, y], i) => [o2[i][0] * 0.5 + x * 0.5, o2[i][1] * 0.5 + y * 0.5]) as Quad) : v;
-        }
-        lastAt.current = now;
-        carrier.quad = q;
-      }}
-    >
-      <points geometry={moteGeo} material={moteMat} frustumCulled={false} renderOrder={5} raycast={() => null} />
-    </mesh>
+    <>
+      <mesh
+        ref={mesh}
+        name="paper-carrier"
+        geometry={geometry}
+        material={material}
+        visible={false}
+        frustumCulled={false}
+        renderOrder={4}
+        onBeforeRender={(gl, _scene, cam) => {
+          const m = mesh.current;
+          // (only the view she sees: another pass — a capture with its own camera — would
+          //  report corners she never sees, and the page could take over from them)
+          if (!m || cam !== camera) return;
+          const el = gl.domElement;
+          const w = el.clientWidth;
+          const h = el.clientHeight;
+          const q = ([[-0.5, 0.5], [0.5, 0.5], [0.5, -0.5], [-0.5, -0.5]] as const).map(([x, y]) => {
+            corner.set(x, y, 0).applyMatrix4(m.matrixWorld).project(cam);
+            return [(corner.x * 0.5 + 0.5) * w, (-corner.y * 0.5 + 0.5) * h];
+          }) as Quad;
+          // (and how fast its corners are moving on screen, px/s — the page carries that on)
+          const now = performance.now();
+          const prev = carrier.quad;
+          const dtq = (now - lastAt.current) / 1000;
+          if (prev && dtq > 0.001 && dtq < 0.2) {
+            const v = q.map(([x, y], i) => [(x - prev[i][0]) / dtq, (y - prev[i][1]) / dtq]) as Quad;
+            const o2 = carrier.vel;
+            carrier.vel = o2 ? (v.map(([x, y], i) => [o2[i][0] * 0.5 + x * 0.5, o2[i][1] * 0.5 + y * 0.5]) as Quad) : v;
+          }
+          lastAt.current = now;
+          carrier.quad = q;
+          carrier.at = now;
+        }}
+      >
+        <points geometry={moteGeo} material={moteMat} frustumCulled={false} renderOrder={5} raycast={() => null} />
+      </mesh>
+      {ghostMats.map((gm, i) => (
+        <mesh key={i} ref={(g) => void (ghosts.current[i] = g)} geometry={geometry} material={gm} visible={false} frustumCulled={false} renderOrder={3} raycast={() => null}>
+          <points geometry={moteGeo} material={ghostMoteMats[i]} frustumCulled={false} renderOrder={5} raycast={() => null} />
+        </mesh>
+      ))}
+    </>
   );
 }
 

@@ -513,6 +513,31 @@ function openWarp(u: number): number {
 }
 /** QA (?debug): window.__giftHold shows which lid is being lifted, and how far. */
 const DEBUG = typeof location !== 'undefined' && new URLSearchParams(location.search).has('debug');
+/** quintic smoothstep: C² (no jolt where it starts or ends) */
+function sm5(a: number, b: number, x: number) {
+  const t = THREE.MathUtils.clamp((x - a) / (b - a), 0, 1);
+  return t * t * t * (t * (t * 6 - 15) + 10);
+}
+/**
+ * Y2 — how far along its arc the sheet is (0..1) at `k` of its flight: the integral of a smooth
+ * speed — built up over `lift` (the air lifting it), even, then slowed by drag from `dragFrom`
+ * to `terminal` × its cruise, coming softly to rest in the last `rest`. Tabled once.
+ */
+const paperTable = (() => {
+  const F = MOTION.paper;
+  const n = 512;
+  const v = (k: number) => sm5(0, F.lift, k) * (F.terminal + (1 - F.terminal) * (1 - sm5(F.dragFrom, 1, k))) * (1 - sm5(1 - F.rest, 1, k));
+  const out = new Float32Array(n + 1);
+  for (let i = 1; i <= n; i++) out[i] = out[i - 1] + v((i - 0.5) / n) / n;
+  for (let i = 0; i <= n; i++) out[i] /= out[n];
+  return out;
+})();
+function paperProgress(k: number) {
+  const x = THREE.MathUtils.clamp(k, 0, 1) * (paperTable.length - 1);
+  const i = Math.min(paperTable.length - 2, Math.floor(x));
+  return paperTable[i] + (paperTable[i + 1] - paperTable[i]) * (x - i);
+}
+
 
 function GiftBody({
   gift,
@@ -1336,7 +1361,13 @@ export function Gift3D({
       w2: new THREE.Vector3(),
       w3: new THREE.Vector3(),
       w4: new THREE.Vector3(),
-      curve: new THREE.CatmullRomCurve3([new THREE.Vector3(), new THREE.Vector3(0, 1, 0), new THREE.Vector3(1, 1, 0), new THREE.Vector3(1, 0, 0)], false, 'centripetal'),
+      qa: new THREE.Quaternion(),
+      qb: new THREE.Quaternion(),
+      /** where it left the gift (camera frame): held once it is out, so neither the gift rising
+       *  nor the camera moving drags it */
+      left: new THREE.Vector3(),
+      /** the arc's length on screen, sampled (so its speed on screen is the one asked for) */
+      arc: new Float32Array(49),
       srcW: 0.3,
       seen: false,
     }),
@@ -1589,14 +1620,15 @@ export function Gift3D({
     }
 
     // V: ONE touch, one movement. The sheet starts to come out while the gift is still
-    // opening, flies like paper in the wind on a half circle drawn in the CAMERA's frame
-    // (out of the gift, out to the left, up, and in to the middle — the same on screen
-    // whichever way the ring has turned), unrolls / unfolds while it flies, and arrives as
-    // the page itself: the page's place and size. The page takes it over while it is still
-    // moving (`flight.hand`) and carries its speed on. Closing flies it back the same way.
+    // opening and arrives as the page itself: the page's place and size, handed over while it
+    // is still moving (`hand`), its speed carried on. Closing flies it back the same way.
+    // Y2: it flies like a FEATHER — on a smooth half circle drawn in the CAMERA's frame (out
+    // of the gift, out to the left, up, in to the middle — the same on screen whichever way the
+    // ring has turned), slow and even, swaying like a pendulum, bobbing, turning slowly in 3D,
+    // stirred by a soft wind; all of it dies down before it lies flat (motion.paper).
     {
       const p = pose.current;
-      const F = MOTION.flight;
+      const F = MOTION.paper;
       const fl = flight.current;
       const src = markObj.current;
       if (src) {
@@ -1611,7 +1643,8 @@ export function Gift3D({
         cv.sp.y += 0.16;
       }
       // the arc's own clock: it starts during the opening (the movements overlap) — for the
-      // puppy, once its letter is out of the envelope. Real seconds, one movement.
+      // puppy, once its letter is out of the envelope. Seconds × pace (a second touch hurries
+      // it on smoothly to its end — never back).
       if (opening && cv.seen) {
         const go = isDog ? !!src : clockOpen.current >= (F.start as Record<string, number>)[gift.shape];
         // (QA: `__leafHold` keeps the sheet where the page took it over, to measure the handoff)
@@ -1640,53 +1673,112 @@ export function Gift3D({
           cv.tmp.copy(w).sub(cam.position);
           return out.set(cv.tmp.dot(cv.right), cv.tmp.dot(cv.up), cv.tmp.dot(cv.fwd));
         };
-        const atNdc = (x: number, y: number, d: number, out: THREE.Vector3) => out.set(x * d * tanH, y * d * tanV, d);
         // the page: its centre, at `dist` in front of the lens, its full size there
         const D = F.dist;
         const cx = ((lr.left + lr.width / 2) / W) * 2 - 1;
         const cy = -((lr.top + lr.height / 2) / H) * 2 + 1;
         const tH = (lr.height / H) * 2 * D * tanV;
-        // the half circle: the gift's mouth → out to the left → up → the middle (camera frame)
+        // the half circle, drawn ON SCREEN: from a point out on the left, over the top, down
+        // into the page's middle; the sheet leaves the gift's mouth and blends into it
+        // (`lead`), coming toward the lens as it goes. Smooth (C²) everywhere.
+        // (the mouth is followed while the sheet is still in it, then held where it left)
         const S = toLocal(cv.sp, cv.w0);
+        if (k < 0.02) cv.left.copy(S);
+        S.lerp(cv.left, sm5(0.02, 0.15, k));
+        const sx = S.x / (Math.max(0.05, S.z) * tanH);
+        const sy = S.y / (Math.max(0.05, S.z) * tanV);
         const ds = Math.max(D + 0.3, S.z);
-        atNdc(F.left[0], F.left[1], THREE.MathUtils.lerp(ds, D, 0.35), cv.w1);
-        atNdc(F.top[0], F.top[1], THREE.MathUtils.lerp(ds, D, 0.72), cv.w2);
-        atNdc(cx, cy, D, cv.w3);
-        cv.curve.points[0].copy(S);
-        cv.curve.points[1].copy(cv.w1);
-        cv.curve.points[2].copy(cv.w2);
-        cv.curve.points[3].copy(cv.w3);
-        cv.curve.updateArcLengths();
-        // eased in and out — it never stops on the way (and at the handoff it is still moving)
-        const e = 0.5 - 0.5 * Math.cos(Math.PI * k);
-        cv.curve.getPointAt(Math.min(1, e), cv.w4);
-        // the wind: a slow wander that dies down as it comes to her
-        const tt = state.clock.elapsedTime;
-        const calm = Math.pow(1 - k, 1.5);
-        cv.w4.x += (Math.sin(tt * 1.3 + 0.7) * 0.6 + Math.sin(tt * 2.9) * 0.4) * F.wind * cv.w4.z * calm;
-        cv.w4.y += (Math.sin(tt * 1.1 + 2.1) * 0.6 + Math.sin(tt * 2.3 + 1) * 0.4) * F.wind * cv.w4.z * calm;
+        // (the circle is round in pixels, not in NDC)
+        const Lx = F.left[0];
+        const Ly = F.left[1];
+        const mx = ((Lx + cx) / 2) * W;
+        const my = ((Ly + cy) / 2) * H;
+        const rx = ((cx - Lx) / 2) * W;
+        const ry = ((cy - Ly) / 2) * H;
+        const r = Math.hypot(rx, ry);
+        const a0 = Math.atan2(-ry, -rx);
+        const pathAt = (u: number, out: THREE.Vector3) => {
+          // over the top: from the left point (angle a0) round to the middle (a0 − π)
+          const th = a0 - Math.PI * sm5(0, 1, u);
+          const ax = (mx + Math.cos(th) * r) / W;
+          const ay = (my + Math.sin(th) * r * F.arc) / H;
+          const lead = sm5(0, F.lead, u);
+          const nx = sx + (ax - sx) * lead;
+          const ny = sy + (ay - sy) * lead;
+          // (it comes toward her from the start — at the gift's depth it would pass behind
+          //  whatever stands beside the gift: the puppy's tail hid it)
+          const z = ds + (D - ds) * (1 - (1 - u) ** 3);
+          return out.set(nx * z * tanH, ny * z * tanV, z);
+        };
+        // slow and even ON SCREEN: lifted off, a steady drift, then the air's drag slows it —
+        // its progress is measured along the arc as she sees it
+        let px0 = 0;
+        let py0 = 0;
+        for (let i = 0; i < cv.arc.length; i++) {
+          pathAt(i / (cv.arc.length - 1), cv.tmp);
+          const px1 = (cv.tmp.x / (cv.tmp.z * tanH)) * W * 0.5;
+          const py1 = (cv.tmp.y / (cv.tmp.z * tanV)) * H * 0.5;
+          cv.arc[i] = i ? cv.arc[i - 1] + Math.hypot(px1 - px0, py1 - py0) : 0;
+          px0 = px1;
+          py0 = py1;
+        }
+        const want = paperProgress(k) * cv.arc[cv.arc.length - 1];
+        let j = 1;
+        while (j < cv.arc.length - 1 && cv.arc[j] < want) j++;
+        const f = (want - cv.arc[j - 1]) / Math.max(1e-6, cv.arc[j] - cv.arc[j - 1]);
+        pathAt((j - 1 + THREE.MathUtils.clamp(f, 0, 1)) / (cv.arc.length - 1), cv.w4);
+        // (QA: where the arc alone would put it on screen, px — the sway is measured against it)
+        const base = DEBUG ? [(cv.w4.x / (cv.w4.z * tanH) + 1) * 0.5 * W, (1 - cv.w4.y / (cv.w4.z * tanV)) * 0.5 * H] : null;
+        // the pendulum: side to side (the tilt leads it by a quarter turn), bobbing up at both
+        // ends of its swing; a soft wind that wanders; all dying down as it comes to her
+        const ft = fl.t;
+        const ph = ((Math.PI * 2) / F.sway.period) * ft;
+        const env = sm5(0, 0.14, k) * (1 - sm5(0.3, F.settle, k));
+        const scrW = 2 * cv.w4.z * tanH;
+        // (the bob and the wind go by the screen's SHORTER side: on a tall phone, by its height
+        //  they were twice as large as on a desktop)
+        const scrS = Math.min(scrW, 2 * cv.w4.z * tanV);
+        cv.w4.x += F.sway.amp * scrW * env * Math.sin(ph);
+        cv.w4.y += F.sway.bob * scrS * env * -Math.cos(2 * ph);
+        const gust = sm5(0, 0.2, k) * (1 - sm5(0.5, F.settle, k)) * F.gust;
+        cv.w4.x += gust * scrS * (Math.sin(ft * 0.83 + 0.4) * 0.5 + Math.sin(ft * 1.37 + 2.1) * 0.3 + Math.sin(ft * 2.11 + 4) * 0.2);
+        cv.w4.y += gust * scrS * (Math.sin(ft * 0.71 + 1.3) * 0.5 + Math.sin(ft * 1.53 + 0.2) * 0.3 + Math.sin(ft * 2.37 + 3) * 0.2);
         p.pos.copy(cam.position).addScaledVector(cv.right, cv.w4.x).addScaledVector(cv.up, cv.w4.y).addScaledVector(cv.fwd, cv.w4.z);
-        // it turns to face her early in its flight, banking into the curve as it goes
-        const face = THREE.MathUtils.smoothstep(k, 0.02, 0.7);
+        // it turns to face her as it leaves the gift; on the way it turns slowly in 3D and
+        // rolls with its swing — flat and square to her before the page takes it over
+        const face = sm5(0.02, 0.6, k);
         p.quat.slerpQuaternions(cv.sq, cam.quaternion, face);
-        cv.sway.setFromAxisAngle(cv.fwd, -F.roll * Math.sin(Math.PI * 2 * Math.min(1, k * 1.05)) * (1 - k) + Math.sin(tt * 0.9) * 0.03 * calm);
-        p.quat.premultiply(cv.sway);
+        const envR = sm5(0.03, 0.2, k) * (1 - sm5(0.35, F.settle, k));
+        const turn = [F.turn.yaw * envR * Math.sin(ph * 0.47 + 0.6), F.turn.pitch * envR * Math.sin(ph * 0.61 + 1.9), -F.sway.roll * env * Math.cos(ph)];
+        cv.qa.setFromAxisAngle(cv.up, turn[0]);
+        cv.qb.setFromAxisAngle(cv.right, turn[1]);
+        cv.sway.setFromAxisAngle(cv.fwd, turn[2]);
+        p.quat.premultiply(cv.qa).premultiply(cv.qb).premultiply(cv.sway);
         // (it grows late in its flight: big while still high up it would leave the frame)
-        p.height = THREE.MathUtils.lerp(cv.srcW / asp, tH, THREE.MathUtils.smoothstep(k, 0.3, 0.97));
-        // it unrolls / unfolds WHILE it flies; its tail ripples, less and less
-        // (W2: one smooth roll that relaxes — large radius → flat — by `unfold[1]`)
-        p.fold = 1 - THREE.MathUtils.smoothstep(k, F.unfold[0], F.unfold[1]);
+        p.height = THREE.MathUtils.lerp(cv.srcW / asp, tH, sm5(0.18, F.hand, k));
+        // it unrolls WHILE it flies — its roll's radius grows all the way; flat only at the end
+        p.fold = 1 - sm5(F.unfold[0], F.unfold[1], k);
         p.foldB = p.fold;
-        p.curl = Math.sin(Math.PI * THREE.MathUtils.smoothstep(k, 0.1, 0.92)) * 0.4;
+        p.curl = Math.sin(Math.PI * sm5(0.1, 0.9, k)) * 0.4;
+        // its edges stir in the air and calm slowly
+        const calm = 1 - sm5(0.3, 0.92, k);
         p.flutter = calm;
         p.wind = calm;
-        p.rim = 0.5 * (1 - THREE.MathUtils.smoothstep(k, 0.5, 0.82));
-        p.edge = 1 - THREE.MathUtils.smoothstep(k, 0.7, 0.88);
+        p.rim = 0.5 * (1 - sm5(0.5, 0.85, k));
+        p.edge = 1 - sm5(0.72, 0.9, k);
         p.warm = 0;
         p.motes = 0;
-        p.fall = Math.sin(Math.PI * k) * (1 - THREE.MathUtils.smoothstep(k, 0.75, 0.88));
+        p.fall = Math.sin(Math.PI * k) * (1 - sm5(0.75, 0.9, k));
+        // the paler sheets and light that follow it
+        p.trail = sm5(0.06, 0.22, k) * (1 - sm5(0.55, 0.85, k));
         // (W2: never a blank sheet — its faint writing stays until the page takes it over)
-        p.lines = 1 - THREE.MathUtils.smoothstep(k, 0.8, F.hand);
+        p.lines = 1 - sm5(0.82, F.hand, k);
+        // QA (?debug): the opening sheet's turn against the camera, and its flight's clock
+        if (DEBUG && opening) {
+          cv.qa.copy(cam.quaternion).invert().multiply(p.quat);
+          const eu = new THREE.Euler().setFromQuaternion(cv.qa, 'YXZ');
+          Object.assign(window, { __paper: { t: fl.t, k, face, yaw: turn[0], pitch: turn[1], roll: turn[2], rel: [eu.y, eu.x, eu.z], base } });
+        }
         // Q: the music box's light condenses onto the sheet in the first 0.6 s of its flight
         p.reveal = air ? THREE.MathUtils.smoothstep(fl.t, 0, F.condense) : 1;
         if (air) {
@@ -1715,6 +1807,8 @@ export function Gift3D({
           condense.uReveal.value = 0;
         }
       }
+      // (the sheet takes this pose in THIS frame — see PaperCarrier `apply`)
+      p.apply?.();
       if (busy) {
         carrier.live = show;
         carrier.fold = carry.mode;

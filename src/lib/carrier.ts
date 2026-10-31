@@ -23,6 +23,8 @@ export type Quad = [Pt, Pt, Pt, Pt];
 export const carrier = {
   /** Where the 3D sheet is on screen (updated on every frame it is rendered). */
   quad: null as Quad | null,
+  /** When `quad` was measured (performance.now(), ms) — QA times its speed by this. */
+  at: 0,
   /** A sheet is out (in flight, or held for a page). */
   live: false,
   /** The page has taken over: the 3D sheet draws nothing (it still reports its quad). */
