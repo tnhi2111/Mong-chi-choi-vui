@@ -706,6 +706,16 @@ export const cakeFragment = /* glsl */ `
       vec3 R = reflect(-V, n);
       col += spec * 0.5 + vec3(1.0, 0.95, 0.9) * pow(max(dot(R, normalize(vec3(-0.3, 0.85, 0.4))), 0.0), 80.0) * 0.35 + base * rim * 0.06;
     }
+    // W3: a ceiling on its brightness. The colour goes to the screen as it is (no tone
+    // mapping), and the room light + the moment's warm key + six flames can add up past 1 —
+    // every channel then clips and the cream, the flowers and the candles merge into one white
+    // mass. The brightest channel rolls off smoothly toward 0.92 and the others are scaled with
+    // it, so a bright pink stays pink instead of turning white. (0.92, not 1: the candles' warm
+    // glow is still added on top of it.)
+    float peak = max(col.r, max(col.g, col.b));
+    const float KNEE = 0.7;
+    const float TOP = 0.92;
+    if (peak > KNEE) col *= (KNEE + (TOP - KNEE) * (1.0 - exp(-(peak - KNEE) / (TOP - KNEE)))) / peak;
     gl_FragColor = vec4(col, 1.0);
   }
 `;
