@@ -7,10 +7,9 @@ import { carrier, type Quad } from '../../lib/carrier';
 /**
  * K / P — the sheet a gift lets out, which becomes the memory page (see `src/lib/carrier.ts`).
  *
- * One finely subdivided plane (24 × 48), folded in its vertex shader:
- *  • `tri`  — a letter folded in three (C-fold): two creases, driven separately (`fold` the
- *             outer, top panel; `foldB` the inner) so they open a beat apart;
- *  • `half` — a note folded once (`fold`);
+ * One finely subdivided plane (24 × 48), shaped in its vertex shader:
+ *  • `tri` / `half` — a letter / a note in a loose roll (W2: never creased — one smooth curve,
+ *             `fold` 1 → 0 relaxes it flat; `foldB` rolls its top a little tighter);
  *  • `roll` — a scroll: what is not yet unrolled wraps round a small cylinder (`fold`);
  *  • `page` — a journal page lifting off its book, curled (`fold`).
  * P — it is a magic sheet: the air moves its edges (`wind`), it bows a little (`curl`, also
@@ -72,32 +71,25 @@ const vertex = /* glsl */ `
     float y = p.y;
     float z = 0.0;
     const float PI = 3.14159265;
-    if (uMode > 0.5 && uMode < 1.5) {
-      // letter fold in three: creases at ±1/6; the top panel lies outermost
-      float c = 1.0 / 6.0;
-      float aT = PI * uFold;
-      float aB = PI * uFoldB;
-      if (p.y > c) {
-        float d = p.y - c;
-        y = c + d * cos(aT);
-        z = d * sin(aT) + 0.01 * uFold;
-      } else if (p.y < -c) {
-        float d = p.y + c;
-        y = -c + d * cos(aB);
-        z = -d * sin(aB) + 0.005 * uFoldB;
-      }
-    } else if (uMode > 1.5 && uMode < 2.5) {
-      float a = PI * uFold;
-      if (p.y > 0.0) {
-        y = p.y * cos(a);
-        z = p.y * sin(a) + 0.006 * uFold;
+    if (uMode > 0.5 && uMode < 2.5) {
+      // W2: a letter / a note is never creased — it is one soft sheet in a loose roll that
+      // relaxes as it flies: the same curvature everywhere along it (a cylinder of radius
+      // 1/κ), κ falling smoothly to 0, so nowhere on it is there a fold or a corner.
+      // (rolled most of a turn round its middle row; a little more at its top edge so it reads
+      //  as a sheet rolled from the top, like a letter taken out of an envelope)
+      float k = uFold * (5.2 + 0.8 * uFoldB);
+      float yy = p.y + 0.12 * uFold;
+      if (k > 1e-3) {
+        y = sin(yy * k) / k - 0.12 * uFold;
+        z = (1.0 - cos(yy * k)) / k;
       }
     } else if (uMode > 2.5 && uMode < 3.5) {
       // a scroll: unrolled from the bottom; the rest is wound round a cylinder above it
+      // (W2: a loose roll — tight, its turns would read as folds)
       float s = p.y + 0.5;
       float lu = 1.0 - uFold;
       if (s > lu) {
-        float r = 0.028 / max(uAspect, 0.4);
+        float r = 0.07 / max(uAspect, 0.4);
         float phi = (s - lu) / r;
         float rr = r * (1.0 + phi * 0.012);
         y = lu - 0.5 + rr * sin(phi);
@@ -109,8 +101,10 @@ const vertex = /* glsl */ `
       z = uFold * 0.22 * u * u;
       p.x -= uFold * 0.06 * u * u;
     }
-    // a breath of air while it flies
-    z += uFlutter * 0.018 * sin(p.x * 4.0 + uTime * 5.0) * sin(y * 3.0 + uTime * 3.3);
+    // a breath of air while it flies: a slow wave running down to its trailing (lower) edge,
+    // stronger toward that edge — paper floating, not shaking
+    float tail = 0.35 + 0.65 * smoothstep(0.3, -0.5, p.y);
+    z += uFlutter * 0.022 * tail * sin(p.y * 5.0 - uTime * 2.1 + p.x * 1.5) * (0.7 + 0.3 * sin(p.x * 3.0 + uTime * 1.3));
     // P: the air at its edges (the middle holds still, the edges and corners stir)
     float edgeK = smoothstep(0.28, 0.5, max(abs(p.x), abs(y)));
     z += uWind * edgeK * (0.012 * sin(p.x * 9.0 + uTime * 3.7) * sin(y * 7.0 + uTime * 2.9) + 0.008 * sin(uTime * 1.9 + p.x * 3.0 + y * 2.0));
@@ -142,7 +136,6 @@ const fragment = /* glsl */ `
     f = f * f * (3.0 - 2.0 * f);
     return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + 1.0), f.x), f.y);
   }
-  float crease(float y, float at) { return exp(-pow((y - at) * 160.0, 2.0)); }
   void main() {
     // Q: condensing out of light — it exists from its middle outward, with a soft torn edge
     if (uReveal < 0.999) {
@@ -161,11 +154,8 @@ const fragment = /* glsl */ `
     float fib = vnoise(vUv * vec2(90.0, 260.0)) * 0.6 + vnoise(vUv * vec2(18.0, 50.0)) * 0.4;
     float tooth = vnoise(vUv * vec2(420.0, 560.0));
     float grain = 1.0 + (fib - 0.5) * 0.035 + (tooth - 0.5) * 0.012;
-    // creases where it was folded (they stay once it is flat)
-    float c = 0.0;
-    if (uMode > 0.5 && uMode < 1.5) c = crease(vUv.y, 1.0 / 3.0) + crease(vUv.y, 2.0 / 3.0);
-    else if (uMode > 1.5 && uMode < 2.5) c = crease(vUv.y, 0.5);
-    vec3 col = uPaper * lit * grain * (1.0 - c * 0.09) * (1.0 + 0.05 * uWarm);
+    // (W2: no creases — it was never folded, only rolled)
+    vec3 col = uPaper * lit * grain * (1.0 + 0.05 * uWarm);
     // V: lines of handwriting in gilt ink — strokes of different lengths in the page's margins,
     // an image of writing (the real words are on the page), gone by the handoff
     if (uLines > 0.001) {

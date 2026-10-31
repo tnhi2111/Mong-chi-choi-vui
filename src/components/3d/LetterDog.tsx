@@ -166,17 +166,18 @@ function flapGeometry(w: number, h: number): THREE.ExtrudeGeometry {
 const T_PRESENT = 0.8;
 const T_MOUTH = 1.3;
 const T_RELEASE = 1.65;
-const SETTLE = 0.35;
+const SETTLE = 0.25;
 /**
  * Storyboard I.5 / K.5: the letter, once it lies before her (seconds after SETTLE). The seal
  * warms, then cracks; the flap lifts; the letter slides out. From there the sheet itself
  * (Gift3D's carrier) rises toward her, opens its three folds and becomes the letter page.
  */
+// (W2: a little brisker — the page's own flight is slow now, and she should be reading by ~7 s)
 const LETTER = {
-  glow: [0, 0.35],
-  crack: [0.3, 0.6],
-  flap: [0.6, 0.6],
-  slide: [0.8, 1.3],
+  glow: [0, 0.25],
+  crack: [0.2, 0.45],
+  flap: [0.45, 0.45],
+  slide: [0.55, 1.0],
 } as const;
 /** gentle "paper" gravity: a letter drops, but air slows it */
 const GRAVITY = 3.4;
@@ -543,7 +544,9 @@ export function LetterDog({ opening, hover, aim, mats, reducedMotion, onDelivere
         sealed.current.unfolded = true;
         sound.paper(2, 260);
       }
-      if (markRef) markRef.current = slideK > 0.999 ? sh2 : null;
+      // (W2: the sheet's flight starts as the letter begins to slide out — the flight's first,
+      //  slowest moments ARE the slide: its start point is the letter, wherever it is now)
+      if (markRef) markRef.current = slideK > 0.001 ? sh2 : null;
     }
   });
 

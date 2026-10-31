@@ -128,19 +128,26 @@ export const motion = {
    * its speed on for `glide` ms. Why: the owner did not want to touch twice, nor any stop.
    */
   flight: {
-    start: { box: t(0.85), capsule: t(0.55), star: t(0.7), orb: t(0.75), envelope: 0 },
-    dur: t(2.0),
-    hand: 0.9,
-    glide: ms(480),
+    // W2 (overrides V's pace): the lid is quick (~1 s), the sheet slips out from ~0.6 s and
+    // FLOATS — 4 s on the half circle, eased in and out, starting very slowly as it lifts off
+    // the gift; it lies flat by 85 % and is handed to the page at 92 %, still moving but slowly;
+    // the page settles over `glide` and its words start at `inkAt` of that settle.
+    // Touch → first line readable ≈ 6 s.
+    start: { box: t(0.6), capsule: t(0.6), star: t(0.6), orb: t(0.75), envelope: 0 },
+    dur: t(4.0),
+    hand: 0.92,
+    glide: ms(1000),
+    inkAt: 0.7,
     /** closing: how much faster it flies back */
     back: 1.5,
     dist: 1.15,
     left: [-0.66, -0.05],
     top: [-0.14, 0.34],
     /** the wind's wander (× distance) and the bank into the curve (rad) */
+    // (bank ≤ 0.13 rad + a 0.03 sway: never more than 10° of roll)
     wind: 0.05,
-    roll: 0.32,
-    unfold: [0.14, 0.84],
+    roll: 0.13,
+    unfold: [0.04, 0.85],
     /** the music box: its light becomes the sheet in the first part of the flight (s) */
     condense: t(0.6),
   },

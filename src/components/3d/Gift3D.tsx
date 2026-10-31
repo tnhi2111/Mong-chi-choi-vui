@@ -1669,13 +1669,14 @@ export function Gift3D({
         // it turns to face her early in its flight, banking into the curve as it goes
         const face = THREE.MathUtils.smoothstep(k, 0.02, 0.7);
         p.quat.slerpQuaternions(cv.sq, cam.quaternion, face);
-        cv.sway.setFromAxisAngle(cv.fwd, -F.roll * Math.sin(Math.PI * 2 * Math.min(1, k * 1.05)) * (1 - k) + Math.sin(tt * 1.7) * 0.05 * calm);
+        cv.sway.setFromAxisAngle(cv.fwd, -F.roll * Math.sin(Math.PI * 2 * Math.min(1, k * 1.05)) * (1 - k) + Math.sin(tt * 0.9) * 0.03 * calm);
         p.quat.premultiply(cv.sway);
         // (it grows late in its flight: big while still high up it would leave the frame)
         p.height = THREE.MathUtils.lerp(cv.srcW / asp, tH, THREE.MathUtils.smoothstep(k, 0.3, 0.97));
         // it unrolls / unfolds WHILE it flies; its tail ripples, less and less
+        // (W2: one smooth roll that relaxes — large radius → flat — by `unfold[1]`)
         p.fold = 1 - THREE.MathUtils.smoothstep(k, F.unfold[0], F.unfold[1]);
-        p.foldB = 1 - THREE.MathUtils.smoothstep(k, F.unfold[0] + 0.12, F.unfold[1] + 0.05);
+        p.foldB = p.fold;
         p.curl = Math.sin(Math.PI * THREE.MathUtils.smoothstep(k, 0.1, 0.92)) * 0.4;
         p.flutter = calm;
         p.wind = calm;
@@ -1684,7 +1685,8 @@ export function Gift3D({
         p.warm = 0;
         p.motes = 0;
         p.fall = Math.sin(Math.PI * k) * (1 - THREE.MathUtils.smoothstep(k, 0.75, 0.88));
-        p.lines = 1 - THREE.MathUtils.smoothstep(k, 0.62, 0.84);
+        // (W2: never a blank sheet — its faint writing stays until the page takes it over)
+        p.lines = 1 - THREE.MathUtils.smoothstep(k, 0.8, F.hand);
         // Q: the music box's light condenses onto the sheet in the first 0.6 s of its flight
         p.reveal = air ? THREE.MathUtils.smoothstep(fl.t, 0, F.condense) : 1;
         if (air) {

@@ -460,6 +460,22 @@ export default function App() {
 
   // (while the page folds back into the gift the room is live again behind it)
   const overlayOpen = !!activeGift && !closingSheet;
+  // W2: the 3D world may rest under a page only once the page HAS its sheet. The page mounts a
+  // few frames after the gift hands it over; pausing the canvas at once froze the flying
+  // paper in mid-air for those frames (~0.25 s) — a dead stop right before the handoff.
+  const [canRest, setCanRest] = useState(false);
+  useEffect(() => {
+    setCanRest(false);
+    if (!overlayOpen) return;
+    let raf = 0;
+    const t0 = performance.now();
+    const look = () => {
+      if (carrier.handed || !carrier.live || performance.now() - t0 > 2500) setCanRest(true);
+      else raf = requestAnimationFrame(look);
+    };
+    raf = requestAnimationFrame(look);
+    return () => cancelAnimationFrame(raf);
+  }, [overlayOpen]);
   const sceneProps = {
     stage,
     gifts,
@@ -490,7 +506,7 @@ export default function App() {
                 onHeartTap={tapHeart}
                 focusId={focusId}
                 finalePhotos={finalePhotos}
-                paused={overlayOpen}
+                paused={overlayOpen && canRest}
                 tier={tier}
                 onTierChange={setTier}
                 portrait={portrait}

@@ -62,11 +62,10 @@ export function useLeaf(closing: boolean, reducedMotion: boolean) {
       const k = Math.min(1, (now - t0) / dur);
       el.style.transform = quadMatrix(r.width, r.height, at(k), r.left, r.top);
       if (k > 0.35) setShown(true);
+      // W2: the words start while it is still settling (most of the way there)
+      if (k >= motion.flight.inkAt) setInked(true);
       if (k < 1) raf.current = requestAnimationFrame(step);
-      else {
-        el.style.transform = '';
-        setInked(true);
-      }
+      else el.style.transform = '';
     };
     raf.current = requestAnimationFrame(step);
     return () => {
@@ -112,6 +111,7 @@ export function useLeaf(closing: boolean, reducedMotion: boolean) {
     inked,
     carried,
     className: `leaf${carried ? ' is-carried' : ''}${inked || shown ? ' is-inked' : ''}`,
-    fold: carried ? carrier.fold : 'none',
+    // (W2: the sheet is never creased, so neither is the page)
+    fold: 'none' as const,
   };
 }
