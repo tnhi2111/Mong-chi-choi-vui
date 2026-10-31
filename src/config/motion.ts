@@ -239,17 +239,18 @@ export const motion = {
        *  table's real vertices — RoomWorld `frameBox(…, pts)` — not their world box, which at
        *  the table's 45° was √2 too wide and stood the camera ~1 m too far back and high.) */
       fov: [40, 56],
-      /** How much of the table is framed under its top (m): the cloth and part of the column
-       *  — the frame's lower edge cuts the column, so most of the floor stays out (≤ 25 %). */
-      below: 0.5,
+      /** How much of the table is framed under its top (m): Z1 — the cloth, the whole column
+       *  and most of its foot (she wants to SEE the table); only the foot's last few cm are cut,
+       *  which keeps the floor ≤ 25 % (16 % desktop, 23 % phone). */
+      below: 0.66,
       // (Y: y reaches below the frame on purpose — with `fill` the box shrinks about the
       //  area's centre, and this puts its lower edge, `below` under the top, right on the
       //  frame's edge. On a phone the frame is tall and the table must fit its width: the
       //  camera stands further back (~2 m up) and the words sit above the cake; putting them
       //  under it brought the camera down but filled 33–41 % of the frame with floor.)
       area: [
-        { x: [-0.94, 0.22], y: [-1.1, 0.8] },
-        { x: [-0.95, 0.95], y: [-1.0, 0.6] },
+        { x: [-0.98, 0.34], y: [-1.2, 1.0] },
+        { x: [-0.95, 0.95], y: [-1.06, 0.56] },
       ],
       text: [
         [0.6, 0.05],

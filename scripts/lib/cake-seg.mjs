@@ -56,6 +56,7 @@ export function measure(LIMIT) {
   Object.values(flat).forEach((m) => m.dispose());
   const is = (P, k, r, g, b) => P[k] === r && P[k + 1] === g && P[k + 2] === b;
   let floor = 0;
+  let tableSeen = 0;
   let ours = 0;
   let hidden = 0;
   let cake = 0;
@@ -65,6 +66,7 @@ export function measure(LIMIT) {
   for (let i = 0; i < w * h; i++) {
     const k = i * 4;
     if (is(A, k, 0, 255, 0)) floor++;
+    if (is(A, k, 0, 0, 255)) tableSeen++;
     const red = is(B, k, 255, 0, 0);
     const blue = is(B, k, 0, 0, 255);
     if (!red && !blue) continue;
@@ -96,7 +98,7 @@ export function measure(LIMIT) {
     return `${x},${y}:${hit ? name || hit.object.geometry?.type : 'nothing'}`;
   });
   const margin = cake ? Math.min(box[0] / w, box[1] / h, (w - 1 - box[2]) / w, (h - 1 - box[3]) / h) : -1;
-  return { floor: floor / (w * h), cake, table, ours, hidden, by, margin, box: box.map((v, i) => +(v / (i % 2 ? h : w)).toFixed(3)) };
+  return { floor: floor / (w * h), tableShare: tableSeen / (w * h), cake, table, ours, hidden, by, margin, box: box.map((v, i) => +(v / (i % 2 ? h : w)).toFixed(3)) };
 }
 
 /** In the page: the cake's foot on the table, the table on the floor, their sizes. */
@@ -152,7 +154,8 @@ export async function enterRoom(p, { url, W, H, mobile, ledIn, password }) {
     await p.waitForTimeout(3000);
     return;
   }
-  await p.goto(`${url}?reset&debug`, { waitUntil: 'networkidle' });
+  // (a fresh context is her first visit: no ?reset; ?debug only exposes the QA hooks)
+  await p.goto(`${url}?debug`, { waitUntil: 'networkidle' });
   await p.waitForTimeout(4000);
   const touch = async () => {
     const before = await p.getAttribute('.heart-hit', 'aria-label');

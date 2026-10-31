@@ -83,7 +83,6 @@ export const SIGN_PLACEMENT = {
   landscape: { radius: 5.95, scale: 0.74, drop: 0 },
   portrait: { radius: 4.55, scale: 0.55, drop: 0 },
 }; // a small private room (the camera stands outside it: see CUT)
-const DEBUG = typeof location !== 'undefined' && new URLSearchParams(location.search).has('debug');
 const WALL_H = 6.2;
 /** Direction of the window: back-left, so the HAPPY BIRTHDAY installation owns the centre. */
 export const WINDOW_ANGLE = -0.78; // measured as atan(x, -z)
@@ -2283,13 +2282,16 @@ export function RoomSet({ floorY: stageY, rx, rz, heart, reducedMotion, hoverFx,
   // the dolls'-house cut for the set pieces: whatever stands between the camera and the
   // room (when she walks round it) steps out of the way, like the wall behind it
   const cutGroups = useRef<(THREE.Object3D | null)[]>([]);
-  // Y: the build lift's state lives HERE, not in `userData` — the JSX passes a new `userData`
-  // object on every render, which wiped it, and the next frame took the already-lowered
-  // height as the base: three renders during the tour sank every set piece 3 × 0.35 m (the
-  // cake's table vanished under the floor). `last` = the height this loop wrote; if the
-  // group's y differs, React placed it anew (floorY changed) and that is the new base.
-  const lift = useRef(new WeakMap<THREE.Object3D, { y0: number; b: number; last: number }>());
-  const warned = useRef(false);
+  // Z1: the build lift ASSIGNS each set piece's height every frame — `position.y = baseY −
+  // drop` — from a constant the JSX declares (`userData.baseY`, a prop, so a render can only
+  // write the same number again). It never reads a height back: Y's first version read the
+  // group's y to find its base, and a render that wiped its state let it take a lowered height
+  // as the base (every set piece sank 3 × 0.35 m during the tour; the cake's table vanished
+  // under the floor). Only the build's progress `b` is kept, here, not in `userData`.
+  const lift = useRef(new WeakMap<THREE.Object3D, number>());
+  const floorMesh = useRef<THREE.Mesh>(null);
+  const guard = useRef({ n: 0, warned: false, corr: 0 });
+  const gv = useMemo(() => [new THREE.Vector3(), new THREE.Vector3()], []);
   useFrame(({ camera: cam }, rawDt) => {
     const cx = cam.position.x;
     const cz = cam.position.z;
@@ -2303,23 +2305,31 @@ export function RoomSet({ floorY: stageY, rx, rz, heart, reducedMotion, hoverFx,
       // — a builder's order, one piece after the next. (Only a lift: several of these groups
       // hold pieces laid out in world space, so scaling them would pull them to the middle.)
       const want = sprite.builtAt(a);
-      let u = lift.current.get(g);
-      if (!u) lift.current.set(g, (u = { y0: g.position.y, b: want, last: NaN }));
-      else if (g.position.y !== u.last) u.y0 = g.position.y;
+      const prev = lift.current.get(g) ?? want;
       // (only the rising is animated: when a tour begins, what is not built yet simply is not)
-      u.b = want < u.b ? want : u.b + (want - u.b) * k;
-      const e = u.b * u.b * (3 - 2 * u.b);
-      g.position.y = u.last = u.y0 - (1 - e) * 0.35;
-      if (DEBUG) Object.assign(g.userData, { y0: u.y0, b: u.b });
-      // Y: once built, the cake's table stands ON the floor (it once sank 1.05 m under it, and
-      // only the cake showed — "the cake is on the floor"). Loud in dev and in ?debug.
-      if ((DEBUG || import.meta.env.DEV) && g === cutGroups.current[1] && u.b > 0.999) {
-        const off = g.position.y - cakeAt[1];
-        if (Math.abs(off) > 0.01 && !warned.current) {
-          warned.current = true;
-          console.error(`[room] the cake's table is ${off.toFixed(3)} m off the floor`);
+      const b = want < prev ? want : prev + (want - prev) * k;
+      lift.current.set(g, b);
+      const e = b * b * (3 - 2 * b);
+      g.position.y = (g.userData.baseY as number) - (1 - e) * 0.35 + (g === cutGroups.current[1] ? guard.current.corr : 0);
+    }
+    // Z1: a guard that runs everywhere (not only in ?debug): once built, the cake's table must
+    // stand ON the floor and the cake on the table. If not, put them back and say so.
+    const cakeG = cutGroups.current[1];
+    const gd = guard.current;
+    if (cakeG && floorMesh.current && (lift.current.get(cakeG) ?? 0) > 0.999 && ++gd.n % 30 === 0) {
+      const tableAt = cakeG.getWorldPosition(gv[0]).y;
+      const floorAt = floorMesh.current.getWorldPosition(gv[1]).y + 0.002;
+      const off = tableAt - floorAt;
+      (window as unknown as { __cakeOffFloor?: number }).__cakeOffFloor = off;
+      if (Math.abs(off) > 0.01) {
+        // (kept: the next frame's assignment carries it — the cake's own body is laid on the
+        //  table's top by Cake every frame, so the two cannot part)
+        gd.corr -= off;
+        cakeG.position.y -= off;
+        if (!gd.warned) {
+          gd.warned = true;
+          console.warn(`[room] the cake's table was ${off.toFixed(3)} m off the floor — put back`);
         }
-        (window as unknown as { __cakeOffFloor?: number }).__cakeOffFloor = off;
       }
     }
   });
@@ -2349,7 +2359,7 @@ export function RoomSet({ floorY: stageY, rx, rz, heart, reducedMotion, hoverFx,
 
   return (
     <group ref={root}>
-      <mesh rotation-x={-Math.PI / 2} position-y={floorY - 0.002} material={floorMat} renderOrder={-4} userData={{ seg: 'floor' }}>
+      <mesh ref={floorMesh} rotation-x={-Math.PI / 2} position-y={floorY - 0.002} material={floorMat} renderOrder={-4} userData={{ seg: 'floor' }}>
         <circleGeometry args={[WALL_R, 96]} />
       </mesh>
       <mesh position-y={floorY + WALL_H / 2} material={wallMat} renderOrder={-5}>
@@ -2375,7 +2385,7 @@ export function RoomSet({ floorY: stageY, rx, rz, heart, reducedMotion, hoverFx,
       {/* the window pane, as something to touch */}
       <mesh
         ref={(m) => void (cutGroups.current[3] = m)}
-        userData={{ anchor: WINDOW_ANGLE }}
+        userData={{ anchor: WINDOW_ANGLE, baseY: floorY + 1.9 }}
         position={[Math.sin(WINDOW_ANGLE) * (WALL_R - 0.12), floorY + 1.9, -Math.cos(WINDOW_ANGLE) * (WALL_R - 0.12)]}
         rotation-y={-WINDOW_ANGLE}
         onClick={touchWindow}
@@ -2391,7 +2401,7 @@ export function RoomSet({ floorY: stageY, rx, rz, heart, reducedMotion, hoverFx,
       <BuildGate at={[0, -WALL_R]} pivot={[0, floorY + 2.6, -WALL_R * 0.9]} grow={0.8}>
         <Garland floorY={floorY} />
       </BuildGate>
-      <group ref={(g) => void (cutGroups.current[4] = g)} userData={{ anchor: WINDOW_ANGLE }}>
+      <group ref={(g) => void (cutGroups.current[4] = g)} userData={{ anchor: WINDOW_ANGLE, baseY: 0 }}>
         <BuildGate
           at={[Math.sin(WINDOW_ANGLE) * WALL_R, -Math.cos(WINDOW_ANGLE) * WALL_R]}
           pivot={[Math.sin(WINDOW_ANGLE) * WALL_R, floorY + 1.9, -Math.cos(WINDOW_ANGLE) * WALL_R]}
@@ -2400,7 +2410,7 @@ export function RoomSet({ floorY: stageY, rx, rz, heart, reducedMotion, hoverFx,
           <ArchedWindow floorY={floorY} motion={motion} />
         </BuildGate>
       </group>
-      <group ref={(g) => void (cutGroups.current[0] = g)} userData={{ anchor: 0 }}>
+      <group ref={(g) => void (cutGroups.current[0] = g)} userData={{ anchor: 0, baseY: 0 }}>
         <BuildGate
           at={[0, -SIGN_PLACEMENT[portrait ? 'portrait' : 'landscape'].radius]}
           pivot={[0, floorY + 2.0, -SIGN_PLACEMENT[portrait ? 'portrait' : 'landscape'].radius]}
@@ -2414,7 +2424,7 @@ export function RoomSet({ floorY: stageY, rx, rz, heart, reducedMotion, hoverFx,
       </group>
       <RoomProps floorY={floorY} windowAngle={WINDOW_ANGLE} wallR={WALL_R} candleVec={candleVec} candleCount={candles.length} heart={heart} motion={motion} />
       {dogSpot && <Petals spot={dogSpot} y={stageY} motion={motion} />}
-      <group position={cakeAt} scale={1} ref={(g) => void (cutGroups.current[1] = g)} userData={{ anchor: LAYOUT.cake }}>
+      <group position={cakeAt} scale={1} ref={(g) => void (cutGroups.current[1] = g)} userData={{ anchor: LAYOUT.cake, baseY: cakeAt[1] }}>
         <BuildGate at={[cakeAt[0], cakeAt[2]]} pivot={[0, 0, 0]} mode="rise" grow={1.1}>
         <Cake
           at={[0, 0, 0]}
@@ -2427,7 +2437,7 @@ export function RoomSet({ floorY: stageY, rx, rz, heart, reducedMotion, hoverFx,
         />
         </BuildGate>
       </group>
-      <group ref={(g) => void (cutGroups.current[2] = g)} userData={{ anchor: LAYOUT.sideboard }}>
+      <group ref={(g) => void (cutGroups.current[2] = g)} userData={{ anchor: LAYOUT.sideboard, baseY: 0 }}>
         {balloons.map((b, i) => (
           <BuildGate key={i} at={[b.at[0], b.at[2]]} pivot={b.at} seed={i * 0.05} grow={0.9}>
             <Balloon {...b} motion={motion} hoverFx={hoverFx} />

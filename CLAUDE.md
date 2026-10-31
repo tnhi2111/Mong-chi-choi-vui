@@ -900,11 +900,19 @@ R3F assigns, wiping it; the next frame took the already-lowered height as the ba
 tour RoomSet rendered 3 times → every set piece (cake + table, sign, balloons, sideboard,
 window target) sat 3 × 0.35 = 1.05 m too low. The table vanished under the floor and only the
 top of the cake showed; the moment then framed that buried box from far above. Only the led-in
-path did this — every earlier QA (and W4's "on a real table") resumed in the room. Fix: the
-lift's state lives in a `WeakMap` (`lift` ref), and a change of the group's y that the loop did
-not write (React placed it anew) becomes the new base. **Rule: never keep per-frame state in a
-JSX-passed `userData`.** Dev/`?debug` assert: `[room] the cake's table is … off the floor`
-(`window.__cakeOffFloor`).
+path did this — every earlier QA (and W4's "on a real table") resumed in the room.
+**Z1 (final form): the lift ASSIGNS, never reads back** — each cut group declares its height in
+JSX (`userData.baseY`: window `floorY + 1.9`, cake `cakeAt[1]`, the rest 0) and every frame
+`position.y = baseY − (1 − e) · 0.35`; only the build's progress lives in the `lift` WeakMap.
+**Rule: never derive a base from the object's own current position or from `userData` state.**
+A guard runs in production too (every 30 frames once built): the cake group's world y vs the
+floor mesh's (`floorMesh`); off by > 1 cm → put back (`guard.corr`, carried by the assignment)
+and `console.warn('[room] the cake's table was … put back')`; `window.__cakeOffFloor`. The
+cake's body is laid on the table's top by `Cake` every frame. Z1 also checked the owner's
+"still on the floor" report: the live bundle matched HEAD, Y1 had been pushed at 03:27 and
+GitHub Pages caches index.html 10 min — so `version.json` (vite plugin, `src/lib/version.ts`)
+is fetched past the cache at start and a stale tab reloads once; `?debug` shows the build
+(sha · time) bottom-left.
 - **The table** (`getTableGeos`, `tableVertex`/`tableFragment`, one opaque program for every
   part + `fluteFragment` for the glass): a pedestal table in honey chestnut — turned column on a
   domed foot (lathe) — top at `TABLE_H` 0.76 (`TABLE_R` 0.6; the cake + stand = 67 % of it), a
@@ -917,20 +925,25 @@ JSX-passed `userData`.** Dev/`?debug` assert: `[room] the cake's table is … of
 - **The cake moment's frame** (RoomWorld): `frameBox(…, pts)` fits the cake's and table's REAL
   vertices (≤ 1500 per mesh) — a world AABB of a round table seen at 45° is √2 too wide/deep
   and stood the camera ~1 m too far and too high. The frame is cut `motion.moment.cake.below`
-  (0.5 m) under the table's top; own lens `cake.fov` [40, 56]; `elev.cake` 0.15 (−8.6°);
-  `cake.area` puts that cut on the frame's lower edge. Desktop: camera 1.6 m up, floor 10–11 %
-  of the frame; phone: the table must fit the narrow width, camera ~2 m up, floor 23 %, words
-  above the cake (words under it brought the camera down but 33–41 % floor). `?debug`
+  (Z1: 0.66 m — the whole column and most of the foot show; she wants to see the table) under
+  the table's top; own lens `cake.fov` [40, 56]; `elev.cake` 0.15 (−8.6°); `cake.area` puts that
+  cut on the frame's lower edge. Desktop: camera ~1.46 m up, floor ~16 %, table ~10 % of the
+  frame; phone: the table must fit the narrow width, camera ~2 m up, floor 23 %, words above the
+  cake (words under it brought the camera down but 33–41 % floor). `?debug`
   `window.__cakeFrame = { fov, elev, below, area }` tries a framing live
   (`qa-output/tmp/frametry.mjs`).
 - **Floor ≤ 25 % of the frame is a hard limit.** `npm run qa:cake-table`
   (`scripts/qa-cake-table.mjs [--ledin] [--sizes] [--steps]`, shared page code in
   `scripts/lib/cake-seg.mjs`): ID renders at one instant (floor + stage flat green, cake red,
   table blue, the rest real materials minus additive light; then cake + table alone): floor
-  ≤ 25 %, 0 hidden cake/table px (floor-coloured = a contact), cake margin ≥ 6 %, cake
+  ≤ 25 %, table seen ≥ 8 %, 0 hidden cake/table px (floor-coloured = a contact), cake margin ≥ 6 %, cake
   supported within 2 cm, top 0.72–0.78 m, foot on the floor, cake 55–75 % of the top, pitch
   −8…−14°, camera ≤ 1.7 m (phone 2.2), 5 openings: same camera (0 cm), same picture, 0 %
-  near-white — at 1440×900, 1920×1080, 390×844 × 36 ring turns, resumed AND led in.
+  near-white — at 1440×900, 1920×1080, 390×844 × 36 ring turns, led in by the tour (Z1: the
+  default; `--resumed` adds a resumed visit). `scripts/qa-owner-path.mjs` (`npm run
+  qa:owner-path`) walks HER way on the production build — tour, drag the ring, touch a gift in
+  3D, close it, touch the cake, leave, touch it again — with a shot and the table's footing at
+  every step. Both run in `npm run qa`.
   `qa-plausible.mjs` checks both ways in too.
 
 **Y2 — the letter floats out like a feather** (overrides W2's / V's pace and path; `motion.paper`,

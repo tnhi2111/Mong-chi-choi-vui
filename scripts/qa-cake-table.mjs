@@ -13,8 +13,10 @@
  * the moment opened 5 times lands the same camera and the same picture, never burned white.
  *
  *   node scripts/qa-cake-table.mjs [--gpu] [--sizes=1440x900,1920x1080,390x844m] [--steps=36]
- *        [--ledin]   (also come in by the real way: intro → password → the light's tour —
- *                     the path where the set pieces used to sink under the floor)
+ *        [--resumed]  (Z1: by default it comes in by HER way — intro → password → the light's
+ *                      tour, the path where the set pieces once sank under the floor; this adds a
+ *                      visit resumed in the room)
+ * Also: the table must be seen — ≥ 8 % of the frame.
  * Shots in qa-output/cake-table/ (the moment at each size, the worst frame, a sheet of turns).
  */
 import { chromium } from 'playwright-core';
@@ -26,14 +28,14 @@ const arg = (n, d) => (process.argv.find((a) => a.startsWith(`--${n}=`)) ?? `--$
 const sizes = arg('sizes', '1440x900,1920x1080,390x844m').split(',');
 const steps = +arg('steps', '36');
 const gpu = process.argv.includes('--gpu');
-const ledInToo = process.argv.includes('--ledin');
+const resumedToo = process.argv.includes('--resumed');
 const url = arg('url', process.env.QA_URL ?? 'http://localhost:4173/');
 const out = 'qa-output/cake-table';
 mkdirSync(out, { recursive: true });
 const password = /birthdayPassword:\s*'([^']+)'/.exec(readFileSync('src/config/birthday.ts', 'utf8'))?.[1] ?? '01/01/2000';
 const exe = [process.env.CHROME_PATH].find((p) => p && existsSync(p));
 const browser = await chromium.launch({ executablePath: exe, args: gpu ? ['--enable-gpu', '--ignore-gpu-blocklist'] : [] });
-const LIMIT = { floor: 0.25, margin: 0.06, gap: 0.02 };
+const LIMIT = { floor: 0.25, margin: 0.06, gap: 0.02, table: 0.08 };
 const problems = [];
 
 const stats = (p) =>
@@ -53,13 +55,13 @@ const stats = (p) =>
     return { mean: +(sum / (d.length / 4)).toFixed(1), white: +((white / (d.length / 4)) * 100).toFixed(2) };
   });
 
-const runs = sizes.map((s) => [s, false]);
-if (ledInToo) runs.push(...sizes.map((s) => [s, true]));
+const runs = sizes.map((s) => [s, true]);
+if (resumedToo) runs.push(...sizes.map((s) => [s, false]));
 const worst = [];
 for (const [sz, ledIn] of runs) {
   const mobile = sz.endsWith('m');
   const [W, H] = sz.replace('m', '').split('x').map(Number);
-  const tag = `${sz}${ledIn ? '-ledin' : ''}`;
+  const tag = `${sz}${ledIn ? '' : '-resumed'}`;
   const ctx = await browser.newContext({ viewport: { width: W, height: H }, isMobile: mobile, hasTouch: mobile, deviceScaleFactor: 1 });
   if (!ledIn)
     await ctx.addInitScript(() => {
@@ -124,6 +126,7 @@ for (const [sz, ledIn] of runs) {
     const m = await p.evaluate(measure, LIMIT);
     rows.push({ deg, ...m });
     if (m.floor > LIMIT.floor) problems.push(`${tag} ${deg}°: floor is ${(m.floor * 100).toFixed(1)} % of the frame`);
+    if (m.tableShare < LIMIT.table) problems.push(`${tag} ${deg}°: the table is only ${(m.tableShare * 100).toFixed(1)} % of the frame`);
     if (m.hidden) problems.push(`${tag} ${deg}°: ${m.hidden} of ${m.ours} cake/table pixels hidden (${m.by.join(' ')})`);
     if (m.margin < LIMIT.margin) problems.push(`${tag} ${deg}°: the cake's margin is ${(m.margin * 100).toFixed(1)} % (box ${m.box})`);
     if (!m.cake || !m.table) problems.push(`${tag} ${deg}°: cake ${m.cake} px, table ${m.table} px — test is blind`);
@@ -131,7 +134,7 @@ for (const [sz, ledIn] of runs) {
   }
   await p.evaluate(() => (window.__giftRing.qaTurn = 0));
   const f = rows.map((r) => r.floor);
-  console.log(`${tag} ${steps} turns: floor ${(Math.min(...f) * 100).toFixed(1)}–${(Math.max(...f) * 100).toFixed(1)} %, hidden max ${Math.max(...rows.map((r) => r.hidden))} px, margin min ${(Math.min(...rows.map((r) => r.margin)) * 100).toFixed(1)} %`);
+  console.log(`${tag} ${steps} turns: table ≥ ${(Math.min(...rows.map((r) => r.tableShare)) * 100).toFixed(1)} %, floor ${(Math.min(...f) * 100).toFixed(1)}–${(Math.max(...f) * 100).toFixed(1)} %, hidden max ${Math.max(...rows.map((r) => r.hidden))} px, margin min ${(Math.min(...rows.map((r) => r.margin)) * 100).toFixed(1)} %`);
   worst.push({ tag, rows: rows.map(({ deg, floor, hidden, margin }) => ({ deg, floor: +floor.toFixed(4), hidden, margin: +margin.toFixed(3) })), opens, support: s });
   await ctx.close();
 }
