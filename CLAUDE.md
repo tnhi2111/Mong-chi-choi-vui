@@ -830,6 +830,62 @@ alcove raised, sign-moment `elev` higher. QA: `node scripts/qa-cake.mjs --gpu [-
 Debug: `window.__THREE` (for raycasts in QA), gift root groups are named `gift:<id>`, the
 sign's root has `userData.signPart`.
 
+## Stage W — four fixes judged by pictures (`reference/qa/W/` has the before/after shots)
+
+- **W3 — the cake burnt white.** Not reproduced as "worse on the 2nd opening" (6 flows tried:
+  Esc / a wish / a touch elsewhere / phone / after opening gifts / after finale → back, plus
+  `?quality=low|medium`); every value the moment changes (`uKey`, flame `uLit`, glow, sparkles)
+  is recomputed each frame from state — nothing mutates a cached material. What WAS measured:
+  8.4 % of the cake's pixels clipped (a channel ≥ 250) on EVERY opening — its shader writes
+  straight to the screen and room light + the moment's key + six flames add past 1.0. Fix: a
+  hue-preserving shoulder at the end of `cakeFragment` (knee 0.7 → 0.92, headroom for the
+  candles' additive glow): 0 % clipped on desktop, ~0.3 % on a phone (flames excluded).
+  **Rule: anything the cake moment changes is derived each frame from `focused`/`hover`/
+  `blownAt` (enter/exit symmetric) — never write into a shared/cached material.**
+  `scripts/qa-cake-repeat.mjs` (in `npm run qa`): opens 1, 2, 3, 5 (leaving by Esc, a wish, a
+  touch elsewhere) compared on screen over the cake's mask — mean ±5 %, histogram ≤ 5 %,
+  room ±5 %, < 1 % burnt.
+- **W4 — the cake's table** (`Cake` in RoomSet): a round walnut table (`TABLE_H` 0.76,
+  `TABLE_R` 0.6) on four splayed legs + stretcher ring, a cream cloth with a short drape and a
+  candle pool (`clothTop`), its own floor shadow; all of it `userData.frame = 'cake'` (the
+  moment frames table + cake), root `userData.cakePart`, table group `cakeTable`. Cake moment
+  `elev.cake` 0.16 / 0.2 (just above the table, looking down a little).
+- **W1 — the sign above every gift.** `SIGN_SAFE_FLOOR` 2.25 m (its lowest glyph ≥ 0.35 m
+  above the tallest gift at the top of its bob with her hand lifting it), `SIGN_PLACEMENT`
+  scale 0.74 / 0.55. To fit, the room grew: crown moulding 3.45–3.6 m, `CEIL_H` 3.6, alcove top
+  2.95 + 0.5, garland at 3.38. Default framing looks a bit higher (`base.look` y 0.05).
+  Sign moment `elev.sign` −0.06 (looks up a little) / 0.2 on a phone (over the orb).
+- **Moments clear the ring (W1b/W4b):** Gift3D `ducked` (RoomWorld passes `!!moment`): every
+  gift sinks into the floor and shrinks away on a spring (ω 6 ≈ 0.8 s), hidden at the bottom,
+  rises back when the moment ends. QA hooks: `__giftRing.qaTurn` (extra ring turn),
+  `__giftRing.qaNoDuck`.
+- `scripts/qa-sign-occlusion.mjs --subject=sign|cake [--noduck]`: in ONE frame draws the
+  subject alone (mask), and the scene with/without the subject (without its own installation
+  and additive light); a mask pixel where those two agree is hidden; each one is ray-checked
+  (a contact — a table foot on the floor — is not an occlusion). 36 ring turns × closed/opened
+  × 1440×900, 1920×1080, 390×844: 0 px for both. `--noduck` shows what the duck prevents (the
+  box covers up to 68 617 px of the cake). `scripts/qa-plausible.mjs`: the cake rests on the
+  table, table top 0.7–0.82 m, legs on the floor, table outside the ring, words above gifts.
+  `npm run qa:occlusion` runs all three.
+- **W2 — the letter floats, never creased.** PaperCarrier `tri`/`half` are a loose roll of
+  constant curvature that relaxes to flat (no crease, no crease shading; the scroll's radius
+  0.07); the page's `data-fold` creases are gone. `motion.flight`: start ~0.6 s, `dur` 4 s
+  (cosine ease), flat by `unfold[1]` 0.85, `hand` 0.92, `roll` 0.13 + 0.03 sway (< 10°), slow
+  tail ripple, writing kept until the handoff, page `glide` 1 s, words at `inkAt` 0.7 of it.
+  **Root cause of the "stop" before the page:** App paused the canvas (`frameloop='demand'`)
+  the moment the gift reported opened — the sheet froze ~0.25 s until the page mounted. Now
+  `paused = overlayOpen && canRest` (rests only once `carrier.handed`). The puppy's flight
+  starts as its letter begins to slide out; envelope beats a little brisker.
+  `scripts/qa-handoff-flow.mjs`: records every frame (sheet quad, page matrix3d, uniforms):
+  flight 3.2–4.6 s, touch → words 4.5–6.8 s (puppy reported, ≤ 8.5 s), ≥ 5 % of top speed
+  until flat, no 150 ms still, handoff ≤ 2 px with speed carried (0.4–2.5×), max neighbour
+  normal angle ≤ 25° (a JS mirror of the vertex shader — keep them in step), and a CDP
+  screencast film (≥ 16 frames) per gift.
+- Known, not fixed: the puppy reads at ~7.7–8 s (its delivery performance comes first); an
+  intermittent ~3 s main-thread stall was seen once during its performance (not reproduced
+  with a long-task/program probe: `qa-output/dogstall.mjs`); a ~0.2 s long frame when the
+  letter page mounts.
+
 ## Design references (`reference/`)
 
 - `reference/VIDEO_ANALYSIS.md` — the owner's reference videos, analysed (3 in the first
