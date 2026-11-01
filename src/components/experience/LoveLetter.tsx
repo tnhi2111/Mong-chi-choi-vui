@@ -29,12 +29,15 @@ export default function LoveLetter({ onClose, reducedMotion, closing = false }: 
   // K: the letter page IS the letter that flew out of the envelope
   const leaf = useLeaf(closing, reducedMotion);
 
+  // the closing line and the name are optional (an empty string leaves them out)
+  const sign = [fill(cfg.closing), fill(cfg.signature)].filter((t) => t.trim() !== '');
+
   // greeting, the paragraphs, the closing and the name: one after another
   const seq = useMemo(() => {
     const s = new LightSeq();
-    s.count = paragraphs.length + 3;
+    s.count = paragraphs.length + 1 + sign.length;
     return s;
-  }, [paragraphs.length]);
+  }, [paragraphs.length, sign.length]);
   const [done, setDone] = useState(reducedMotion);
   useEffect(() => {
     seq.onDone = () => setDone(true);
@@ -75,10 +78,13 @@ export default function LoveLetter({ onClose, reducedMotion, closing = false }: 
             ))}
           </div>
 
-          <footer className="letter__sign is-on">
-            <LightText text={fill(cfg.closing)} variant="ink" pace="reading" ready={leaf.inked} seq={seq} seqIndex={paragraphs.length + 1} />
-            <LightText className="letter__name" text={fill(cfg.signature)} variant="ink" pace="reading" ready={leaf.inked} seq={seq} seqIndex={paragraphs.length + 2} />
-          </footer>
+          {sign.length > 0 && (
+            <footer className="letter__sign is-on">
+              {sign.map((t, i) => (
+                <LightText key={i} className={i === sign.length - 1 && cfg.signature.trim() ? 'letter__name' : undefined} text={t} variant="ink" pace="reading" ready={leaf.inked} seq={seq} seqIndex={paragraphs.length + 1 + i} />
+              ))}
+            </footer>
+          )}
         </article>
 
         <div className={`memory__end${done ? ' is-on' : ''}`}>

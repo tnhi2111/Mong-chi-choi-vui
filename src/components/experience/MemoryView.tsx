@@ -106,6 +106,12 @@ export default function MemoryView({ gift, index, onClose, closing = false, redu
             <LightText className="memory__message whisper" text={gift.message} variant="ink" pace="reading" ready={leaf.inked} seq={seq} seqIndex={at(gift.message)} />
           )}
 
+          {gift.story?.map((para, i) => (
+            <Reveal key={i} root={scroller} className="memory__story">
+              <p className="memory__message whisper">{para}</p>
+            </Reveal>
+          ))}
+
           {gift.timeline && gift.timeline.length > 0 && (
             <section className="memory__section" aria-label="Timeline">
               <Timeline items={gift.timeline} root={scroller} />

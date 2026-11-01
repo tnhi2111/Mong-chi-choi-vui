@@ -42,6 +42,8 @@ export interface Gift {
   coverImage?: Photo;
   /** A short message shown under the cover photo. */
   message?: string;
+  /** More of the story, one paragraph each, after the message. */
+  story?: string[];
   timeline?: TimelineItem[];
   /** Floating polaroids. */
   photos?: Photo[];
@@ -63,15 +65,10 @@ export const gifts: Gift[] = [
     tint: '#e9b7c0',
     title: 'The day we met',
     subtitle: 'Ngày mình gặp nhau',
-    date: '[MEMORY_01_DATE]',
-    location: '[MEMORY_01_PLACE]',
-    coverImage: img('memory-01.svg', '[MEMORY_01_IMAGE]'),
-    message: '[MEMORY_01_MESSAGE] Anh vẫn nhớ khoảnh khắc đầu tiên nhìn thấy em.',
-    timeline: [
-      { date: '[DATE]', title: 'Lần đầu nhìn thấy em', text: '[Kể lại khoảnh khắc đó]', image: img('memory-01b.svg', '[MEMORY_01B_IMAGE]') },
-      { date: '[DATE]', title: 'Tin nhắn đầu tiên', text: '[Em đã nhắn gì? Anh đã trả lời ra sao?]' },
+    message: 'Queo thì bọn mình gặp nhau trên cái app hẹn hò cho lé biên 🤡',
+    story: [
+      'Lần đầu gặp thì cx k mang nghĩa là date cho lắm mà em chỉ nghĩ đơn giản là bạn bè đi cf chơi chơi nên để lại một ấn tượng kì lạ khó quên cho chị nhưng cx lại là lí do để chúng ta có thêm nhiều cuộc gặp gỡ về sau =))))',
     ],
-    note: '[NOTE_01] Nếu được quay lại hôm đó, anh vẫn sẽ chọn bước tới chào em.',
   },
   {
     id: 'first-date',
@@ -80,17 +77,18 @@ export const gifts: Gift[] = [
     tint: '#f1d3c4',
     title: 'Our first date',
     subtitle: 'Ngày đầu tiên đi chơi',
-    date: '[MEMORY_02_DATE]',
-    location: '[MEMORY_02_PLACE]',
-    coverImage: img('memory-02.svg', '[MEMORY_02_IMAGE]'),
-    message: '[MEMORY_02_MESSAGE] Hôm đó anh hồi hộp hơn em nghĩ nhiều.',
-    timeline: [
-      { date: '[TIME]', title: 'Đón em', text: '[Chi tiết nhỏ anh còn nhớ]' },
-      { date: '[TIME]', title: 'Chỗ mình ngồi', text: '[Mình đã nói chuyện gì?]', image: img('memory-02b.svg', '[MEMORY_02B_IMAGE]') },
-      { date: '[TIME]', title: 'Trên đường về', text: '[Cảm giác lúc đó]' },
+    coverImage: img('first-date-1.jpg', 'Hai đứa mình buổi tối, dưới mái hiên sọc và viền đèn đỏ'),
+    message: 'Em cx k biết cuộc nào là first date, chỉ là đơn giản bọn mình cảm thấy thoải mái vui vẻ khi gặp nhau nên cứ đi thoi 😎',
+    story: [
+      'Cũng không biết thích chị từ lúc nào, cảm thấy chị lo cho từng thứ một, nhìn chị càng ngày càng thấy đẹp. Đùng phát thế là biết thích rồi đó 🥰',
+      'Xong rồi vào một ngày đẹp trời em cũng không giấu nổi nữa nên là tỏ tình chị :))) em vẫn nhớ là lúc đó u naked 🤡',
     ],
-    photos: [img('memory-02b.svg', '[PHOTO]', '[caption]'), img('memory-02.svg', '[PHOTO]', '[caption]')],
-    note: '[NOTE_02]',
+    photos: [
+      img('first-date-booth-1.jpg', 'Photobooth của hai đứa mình, tấm 1'),
+      img('first-date-booth-2.jpg', 'Photobooth của hai đứa mình, tấm 2'),
+      img('first-date-booth-3.jpg', 'Photobooth của hai đứa mình, tấm 3'),
+      img('first-date-booth-4.jpg', 'Photobooth của hai đứa mình, tấm 4'),
+    ],
   },
   {
     id: 'first-trip',
@@ -99,20 +97,10 @@ export const gifts: Gift[] = [
     tint: '#f3e3c8',
     title: 'Our first trip',
     subtitle: 'Lần đầu đi du lịch',
-    date: '[MEMORY_03_DATE]',
-    location: '[MEMORY_03_PLACE]',
-    coverImage: img('memory-03.svg', '[MEMORY_03_IMAGE]'),
-    message: '[MEMORY_03_MESSAGE]',
-    timeline: [
-      { date: '[DAY 1]', title: '[Khởi hành]', text: '[...]', image: img('memory-03b.svg', '[MEMORY_03B_IMAGE]') },
-      { date: '[DAY 2]', title: '[Khoảnh khắc đẹp nhất]', text: '[...]' },
-    ],
-    photos: [
-      img('memory-03.svg', '[PHOTO]', '[caption]'),
-      img('memory-03b.svg', '[PHOTO]', '[caption]'),
-      img('memory-01.svg', '[PHOTO]', '[caption]'),
-    ],
-    note: '[NOTE_03]',
+    coverImage: img('first-trip-1.jpg', 'Hai đứa mình trên sân gỗ nhìn ra núi ở Tam Đảo'),
+    message:
+      'Để nói thì có 2 trip du lịch trước và sau khi chúng mình chính thức là ny. Nhưng em xinloi em thích để trip Tam Đảo là trip đầu huhu 😭. Tại bả kêu hồi đó bà rất vui vì trip này chúng mình là ny chính thức nên hạnh phúc hơn trip trước đó',
+    story: ['Dù ngày đó có hơi nắng nóng chơi cũng có chút mệt mỏi nhưng cũng có nhiều kỉ niệm vui vẻ hí hí'],
   },
   {
     id: 'ordinary-day',
@@ -120,12 +108,14 @@ export const gifts: Gift[] = [
     shape: 'orb',
     tint: '#dcc6e0',
     title: 'An ordinary day',
-    subtitle: 'Một ngày rất bình thường nhưng anh nhớ mãi',
-    date: '[MEMORY_04_DATE]',
-    coverImage: img('memory-04.svg', '[MEMORY_04_IMAGE]'),
+    subtitle: 'Một ngày rất bình thường',
+    coverImage: img('ordinary-day-1.jpg', 'Một buổi tô tranh ở nhà, mặt đầy dấu son'),
     message:
-      '[MEMORY_04_MESSAGE] Chẳng có gì đặc biệt cả — chỉ là em ở đó, và thế là đủ.',
-    note: '[NOTE_04]',
+      'Một ngày bình thường em không ổn, chị cũng thế nhưng cuối ngày bọn mình vẫn có nhau bên nhau tâm sự. Chị bảo chị sẽ qua gặp em to cheer me up, and u did arghhhhh i love u so muchhhhh 😘🫶',
+    photos: [
+      img('ordinary-day-2.jpg', 'Vẫn buổi tô tranh đó, tai thỏ trên đầu'),
+      img('ordinary-day-3.jpg', 'Nằm cạnh nhau'),
+    ],
   },
   {
     id: 'letter',

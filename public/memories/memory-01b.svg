@@ -1,8 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="900" viewBox="0 0 1200 900">
-<defs><radialGradient id="g" cx="35%" cy="30%" r="90%"><stop offset="0" stop-color="#a85d73"/><stop offset="1" stop-color="#2b1320"/></radialGradient>
-<radialGradient id="l" cx="70%" cy="75%" r="45%"><stop offset="0" stop-color="#ffe9ee" stop-opacity=".35"/><stop offset="1" stop-color="#ffe9ee" stop-opacity="0"/></radialGradient></defs>
-<rect width="100%" height="100%" fill="url(#g)"/><rect width="100%" height="100%" fill="url(#l)"/>
-<g fill="none" stroke="#fff4f1" stroke-opacity=".55" stroke-width="3" transform="translate(600 420)"><path d="M0 26 C -44 -6 -34 -46 0 -26 C 34 -46 44 -6 0 26 Z"/></g>
-<text x="50%" y="498" text-anchor="middle" font-family="Georgia, serif" font-size="30" letter-spacing="4" fill="#fff4f1" fill-opacity=".8">[MEMORY_01B_IMAGE]</text>
-<text x="50%" y="540" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="20" letter-spacing="2" fill="#fff4f1" fill-opacity=".5">replace in /public/memories</text>
-</svg>

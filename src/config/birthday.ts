@@ -10,7 +10,7 @@
 
 export const birthdayConfig = {
   /** Her name (or the nickname you call her). */
-  recipientName: '[RECIPIENT_NAME]',
+  recipientName: 'Baby Hà Tú',
 
   /** Your name — used to sign the letter and the final message. */
   senderName: '[SENDER_NAME]',
@@ -23,7 +23,7 @@ export const birthdayConfig = {
    * ⚠️ This is only a sweet little gate, NOT real security: anyone who reads
    * the site's JavaScript can find it. Don't protect secrets with it.
    */
-  birthdayPassword: '01/01/2000', // [BIRTHDAY_PASSWORD]
+  birthdayPassword: '04/11/2000',
 
   /**
    * The public URL where the site will live. The QR code (open /qr.html)
@@ -63,7 +63,7 @@ export const birthdayConfig = {
 
   welcome: {
     lines: [
-      'Hi, {name}.',
+      'Hén lo chị giáo',
       'I made this little place just for you.',
       'Every light in here holds a piece of us.',
       'Take your time. Open them one by one.',
@@ -106,13 +106,12 @@ export const birthdayConfig = {
     greeting: 'Gửi {name},',
     /** One string per paragraph. [LOVE_LETTER] */
     paragraphs: [
-      'Anh có rất nhiều điều muốn nói, nhưng mỗi lần định nói thì lại chẳng biết bắt đầu từ đâu.',
-      '[LOVE_LETTER — đoạn 1] Viết ở đây điều anh nhớ nhất về những ngày đầu tiên.',
-      '[LOVE_LETTER — đoạn 2] Viết ở đây điều anh biết ơn nhất ở em.',
-      '[LOVE_LETTER — đoạn 3] Viết ở đây điều anh mong cho những năm tiếp theo của hai đứa.',
+      'Có những ngày em còn vụng về còn làm chị buồn, nhưng em chưa bao giờ hết thương chị và chưa bao giờ muốn buông tay',
+      'Cx k có gì nhiều chỉ muốn nói là em yêu chị thoi =)))',
     ],
-    closing: 'Yêu em, hôm nay và cả những ngày sau nữa.',
-    signature: '{sender}',
+    /** An optional closing line and signature ('' leaves them out). */
+    closing: '',
+    signature: '',
   },
 
   final: {
@@ -173,7 +172,7 @@ export const birthdayConfig = {
      */
     style: 'particles' as 'particles' | 'glass',
     /** Words that float around the ring under the heart ({name} / {sender} work here too). */
-    words: ['Happy Birthday', '{name}', 'I love you', 'Always', 'Forever', 'Thương em', 'Mãi bên nhau', '♥'],
+    words: ['Happy Birthday', '{name}', 'I love you', 'Always', 'Forever', 'Thương chị', 'Mãi bên nhau', '♥'],
   },
 
   motion: {

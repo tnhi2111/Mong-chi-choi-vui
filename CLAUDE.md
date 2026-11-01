@@ -14,8 +14,13 @@ it for their wife. Live at **https://tnhi2111.github.io/Mong-chi-choi-vui/**.
 - **Latest (owner): no screenshots sent to the owner and none saved in the repo** (QA shots
   stay in the git-ignored `qa-output/`). Finish the work, run the tests, then commit and push
   to `main` straight away — the owner tests on the live site.
-- Content (names, birthday password, letter, photos) is still placeholder text —
-  don't invent it; the owner will provide it. Password is `01/01/2000` for now.
+- Content is the owner's own words — never invent or "improve" it. Filled in (Nov 2026):
+  her name `Baby Hà Tú`, password `04/11/2000`, welcome line "Hén lo chị giáo", ring word
+  "Thương chị", the 4 memories (text in `message` + `story[]` paragraphs, photos in
+  `public/memories/`, no dates/places — the owner doesn't remember them) and the letter.
+  Voice: the writer is "em", she is "chị". Still placeholder (owner hasn't given them):
+  `senderName`, `togetherSince`, `room.secret`, the `final` texts, gift subtitles' English.
+  The letter's closing/signature are '' (left out) until the owner writes one.
 
 ## The story (what the viewer sees)
 
