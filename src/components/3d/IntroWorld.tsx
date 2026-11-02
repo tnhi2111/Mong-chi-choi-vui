@@ -91,6 +91,18 @@ export function IntroWorld({
   const settling = unlockPhase === 'settle';
 
   const short = useThree((st) => st.size.height < 680 && !portrait);
+  // The puppy's place by the screen's shape. Phones (up to ≈0.56 upright) and desktops
+  // (≥1.6) keep the framing they were tuned for. On a tablet it was cropped: upright (iPad
+  // 0.69–0.75) the view is less tall than a phone's, so above the heart its head left the top
+  // edge whenever the camera leaned in — there it sits on the ground instead, left of the
+  // ring, in the empty lower third (clear of the centred words). On its side (iPad 1.33–1.44)
+  // its waving paw passed the right edge: it comes in and shrinks with the narrower view, to
+  // the share of the screen it had at 1.6.
+  const aspect = useThree((st) => st.size.width / Math.max(1, st.size.height));
+  const tablet = portrait && aspect >= 0.62;
+  const wide = THREE.MathUtils.clamp(aspect / 1.6, 0.75, 1);
+  const dogPos: [number, number, number] = portrait ? (tablet ? [-1.05, -1.3, -0.2] : [-0.6, 2.05, -0.5]) : [2.6 * wide, -0.5, -0.2];
+  const dogScale = portrait ? (tablet ? 0.6 : 0.68) : 1.55 * wide;
   const gatePos: [number, number, number] = [0, portrait ? 1.55 : 1.2, -1.2];
   const heartPos: [number, number, number] =
     stage === 'intro'
@@ -301,9 +313,9 @@ export function IntroWorld({
         <LightDog
           awake={awake}
           visible={stage === 'intro'}
-          position={portrait ? [-0.6, 2.05, -0.5] : [2.6, -0.5, -0.2]}
+          position={dogPos}
           facing={portrait ? 0.25 : -0.35}
-          scale={portrait ? 0.68 : 1.55}
+          scale={dogScale}
           density={Math.max(0.4, heartPoints / 9000)}
           reducedMotion={reducedMotion}
           portrait={portrait}

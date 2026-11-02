@@ -279,6 +279,12 @@ soft blob shadow on the floor that tightens as it lands.
   follow her hand. Materials in `createLetterDogMaterials` (pre-warmed).
 - Room UI: memory indicators are medallions; the final note sits between fine rules and
   "Come closer" is ivory/blush glass (`room-ui__cta`).
+**Tablets (iPad)**: checked at 820×1180 and 1180×820 (touch, DPR 2) — the whole story runs.
+The intro puppy's place depends on the screen's shape (`dogPos`/`dogScale` in IntroWorld): an
+upright tablet (aspect ≥ 0.62) seats it on the ground left of the ring (above the heart its head
+left the top edge when the camera leaned in); on its side (< 1.6) it comes in and shrinks with
+the view (its waving paw was past the right edge). Phones and desktops unchanged.
+QA: `qa-output/introfit.mjs [WxH …]` (intro before/after the 3rd touch).
 Intro particle puppy: after its lap the waving arm's points settle onto the mirror image
 of the left front leg (`aRest` attribute; pads/toe-gaps fade) — both front legs alike.
 
