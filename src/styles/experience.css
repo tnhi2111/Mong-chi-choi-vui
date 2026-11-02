@@ -228,6 +228,8 @@
 
 .gate__title {
   margin-bottom: 14px;
+  /* two even lines, never one word left alone ("enter." on its own on an iPad) */
+  text-wrap: balance;
 }
 
 .gate__field {
@@ -1013,7 +1015,11 @@ html[data-reduce] .room-whisper span {
 }
 
 .memory__cover {
-  margin: 0;
+  /* the frame hugs the photo: a portrait photo on a landscape screen (an iPad on its side)
+     is shown whole and centred, never cropped into a strip through its middle */
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 auto;
   border-radius: 6px;
   overflow: hidden;
   box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(246, 236, 231, 0.06);
@@ -1021,9 +1027,11 @@ html[data-reduce] .room-whisper span {
 }
 
 .memory__cover img {
-  width: 100%;
+  display: block;
+  width: auto;
+  max-width: 100%;
+  height: auto;
   max-height: 70vh;
-  object-fit: cover;
 }
 
 .memory__message {

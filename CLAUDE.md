@@ -285,6 +285,11 @@ upright tablet (aspect ≥ 0.62) seats it on the ground left of the ring (above 
 left the top edge when the camera leaned in); on its side (< 1.6) it comes in and shrinks with
 the view (its waving paw was past the right edge). Phones and desktops unchanged.
 QA: `qa-output/introfit.mjs [WxH …]` (intro before/after the 3rd touch).
+**Owner: on the iPad she will use the site LANDSCAPE — judge tablets at 1180×820 (and 1366×1024).**
+For it: a memory's cover photo is shown whole and centred (`.memory__cover` hugs the photo,
+`max-height: 70vh`, no `object-fit: cover` — a portrait photo used to be cropped into a strip
+through its middle), and the gate title is `text-wrap: balance` (no lone "enter.").
+QA: `qa-output/roomfit.mjs`, `qa-output/content-l.mjs` (gate + every memory at 1180×820).
 Intro particle puppy: after its lap the waving arm's points settle onto the mirror image
 of the left front leg (`aRest` attribute; pads/toe-gaps fade) — both front legs alike.
 
