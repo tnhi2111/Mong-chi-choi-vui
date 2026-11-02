@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useFrame, type ThreeEvent } from '@react-three/fiber';
-import { Html } from '@react-three/drei';
 import * as THREE from 'three';
 import { motion as MOTION } from '../../config/motion';
 import { useShader } from './useShader';
@@ -8,8 +7,6 @@ import { HAND_GLSL, SPRITE_GLSL, handUniforms, sprite, spriteWake } from './spri
 import { BuildGate } from './BuildGate';
 import { roomHand, handNear } from './sceneStore';
 import { Rope, RopeTube } from './verlet';
-import { birthdayConfig } from '../../config/birthday';
-import { fill } from '../../lib/text';
 import { sound } from '../../lib/audio';
 import { getHeartGeometry } from './heartShape';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -32,8 +29,6 @@ import { BirthdaySign, metalVertex, metalFragment, satinVertex, satinFragment, m
  *     (a wisp of smoke), then catch again a few seconds later
  *   • balloons (round and heart-shaped) on ribbons, bobbing in the draught; touched, they
  *     bounce on their ribbons with a soft chime
- *   • a secret: a little glowing letter leaning against the cake table, only found by
- *     turning the room round
  *
  * Everything is drawn with small unlit shaders that fake their own light (so the room
  * adds no real lights and no heavy shaders — the gift materials stay the only lit ones).
@@ -1286,8 +1281,6 @@ function Cake({
   at,
   outward = at,
   motion,
-  secretFound,
-  onSecret,
   focused = false,
   onTap,
 }: {
@@ -1295,8 +1288,6 @@ function Cake({
   /** where it stands in the room (for which way is "toward the wall") */
   outward?: [number, number, number];
   motion: number;
-  secretFound: boolean;
-  onSecret: () => void;
   /** the camera has leant in close (RoomWorld's focus) */
   focused?: boolean;
   /** a touch on the cake: first the camera leans in; touched again, she makes a wish */
@@ -1398,7 +1389,6 @@ function Cake({
 
   const blownAt = useRef<number | null>(null);
   const now = useRef(0);
-  const letter = useRef<THREE.Mesh>(null);
   // a hand near it: the flames lean up a little, a warm glow gathers; a touch makes them flare
   const hovered = useRef(false);
   const hover = useRef(0);
@@ -1508,7 +1498,6 @@ function Cake({
       m.opacity = (0.03 + 0.05 * hover.current + 0.06 * focusAmt.current) * lit;
       glow.current.scale.setScalar(0.9 + 0.15 * focusAmt.current);
     }
-    if (letter.current) (letter.current.material as THREE.MeshBasicMaterial).color.setScalar(0.75 + 0.25 * Math.sin(t * 2.2));
   });
 
   const blowOut = () => {
@@ -1642,38 +1631,6 @@ function Cake({
       <group ref={wickGroup}>
         <points geometry={flames} material={flameMat} frustumCulled={false} />
         <points geometry={smoke} material={smokeMat} frustumCulled={false} />
-      </group>
-
-      {/* the secret: a little glowing letter leaning against the cloth's hem, on the far side */}
-      <group position={[along.x * 0.62 + out.x * 0.42, 0.09, along.y * 0.62 + out.y * 0.42]} userData={{ secretLetter: true }} rotation={[-0.25, Math.atan2(along.x, along.y), 0.08]}>
-        <mesh
-          ref={letter}
-          onClick={(e) => {
-            e.stopPropagation();
-            if (e.delta > 8) return;
-            onSecret();
-          }}
-          onPointerOver={(e) => {
-            e.stopPropagation();
-            document.body.style.cursor = 'pointer';
-          }}
-          onPointerOut={() => (document.body.style.cursor = '')}
-        >
-          <planeGeometry args={[0.26, 0.17]} />
-          <meshBasicMaterial color="#fff2e2" side={THREE.DoubleSide} />
-        </mesh>
-        <mesh position={[0, 0, 0.002]}>
-          <planeGeometry args={[0.05, 0.045]} />
-          <meshBasicMaterial color="#b3223c" side={THREE.DoubleSide} />
-        </mesh>
-        {secretFound && (
-          <Html center position={[0, 0.55, 0]} style={{ pointerEvents: 'none' }} zIndexRange={[6, 0]}>
-            <div className="room-secret">
-              <p className="room-secret__title">{fill(birthdayConfig.room.secret.title)}</p>
-              <p className="room-secret__text">{fill(birthdayConfig.room.secret.text)}</p>
-            </div>
-          </Html>
-        )}
       </group>
     </group>
   );
@@ -2268,12 +2225,6 @@ export function RoomSet({ floorY: stageY, rx, rz, heart, reducedMotion, hoverFx,
     [rx, rz, floorY],
   );
 
-  const [secretFound, setSecretFound] = useState(false);
-  const findSecret = () => {
-    if (!secretFound) sound.flourish();
-    setSecretFound(true);
-  };
-
   const cakeAt: [number, number, number] = cakePosition(floorY, WALL_R);
   useEffect(() => {
     floorU.uCake.value.set(cakeAt[0], cakeAt[2]);
@@ -2430,8 +2381,6 @@ export function RoomSet({ floorY: stageY, rx, rz, heart, reducedMotion, hoverFx,
           at={[0, 0, 0]}
           outward={cakeAt}
           motion={motion}
-          secretFound={secretFound}
-          onSecret={findSecret}
           focused={focus === 'cake'}
           onTap={onMoment && ((wish) => onMoment('cake', wish))}
         />

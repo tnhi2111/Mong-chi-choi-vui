@@ -783,41 +783,6 @@ html[data-reduce] .room-whisper span {
   opacity: 0;
 }
 
-/* the note found behind the tree: handwriting on warm paper, unfolding into view */
-.room-secret {
-  width: min(240px, 62vw);
-  padding: 14px 16px 12px;
-  border-radius: 3px;
-  background: linear-gradient(170deg, #fbf3e8, #f0e2cf);
-  color: var(--paper-ink);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45), 0 0 40px rgba(255, 190, 150, 0.18);
-  transform-origin: 50% 100%;
-  animation: secret-in 1.1s var(--ease-out) both;
-  text-align: center;
-}
-
-.room-secret__title {
-  margin: 0 0 6px;
-  font-family: var(--hand);
-  font-size: 22px;
-  color: #9a2a40;
-}
-
-.room-secret__text {
-  margin: 0;
-  font-family: var(--serif);
-  font-style: italic;
-  font-size: 15px;
-  line-height: 1.45;
-}
-
-@keyframes secret-in {
-  from {
-    opacity: 0;
-    transform: translateY(10px) rotateX(55deg) scale(0.9);
-  }
-}
-
 /* ── Sheet: memory + letter overlays ────────────────────────────────────── */
 .sheet {
   position: fixed;

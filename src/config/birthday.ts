@@ -13,7 +13,7 @@ export const birthdayConfig = {
   recipientName: 'Baby Hà Tú',
 
   /** Your name — used to sign the letter and the final message. */
-  senderName: '[SENDER_NAME]',
+  senderName: 'Bé Golden',
 
   /**
    * The playful password: her birthday.
@@ -77,14 +77,6 @@ export const birthdayConfig = {
     allOpenedHint: 'Every memory is open… something is waiting in the middle.',
     finalButton: 'Come closer',
     /**
-     * A little letter hidden beside the birthday-cake table — only found by turning the room
-     * round. [ROOM_SECRET] Write something only she would understand.
-     */
-    secret: {
-      title: 'Em tìm thấy rồi ♥',
-      text: '[ROOM_SECRET] Anh biết thế nào em cũng tò mò ngó quanh bàn bánh kem mà.',
-    },
-    /**
      * Hidden moments: nothing announces them — touching the cake or the HAPPY BIRTHDAY sign
      * brings the camera close and the room "speaks". One string per line.
      */
@@ -117,13 +109,12 @@ export const birthdayConfig = {
   final: {
     title: 'Happy Birthday, My Love',
     message:
-      '[FINAL_MESSAGE] Cảm ơn em đã đến, đã ở lại, và đã làm cho mọi ngày bình thường trở nên đáng nhớ.',
+      'Cảm ơn chị đã đến, đã ở lại, và đã làm cho mọi ngày bình thường trở nên đáng nhớ.',
     oneMoreThing: 'One more thing…',
     /** Revealed after “One more thing…” — the emotional climax. */
     secretMessage: [
-      '[FINAL_SECRET_MESSAGE]',
-      'Tất cả những gì em vừa đi qua chỉ là một phần rất nhỏ.',
-      'Phần đẹp nhất vẫn chưa được viết — và anh muốn viết nó cùng em.',
+      'Tất cả những gì chị vừa đi qua chỉ là một phần rất nhỏ.',
+      'Phần đẹp nhất vẫn chưa được viết — và em muốn viết nó cùng chị.',
     ],
     signature: '— {sender}',
   },

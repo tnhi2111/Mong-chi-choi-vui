@@ -18,9 +18,10 @@ it for their wife. Live at **https://tnhi2111.github.io/Mong-chi-choi-vui/**.
   her name `Baby Hà Tú`, password `04/11/2000`, welcome line "Hén lo chị giáo", ring word
   "Thương chị", the 4 memories (text in `message` + `story[]` paragraphs, photos in
   `public/memories/`, no dates/places — the owner doesn't remember them) and the letter.
-  Voice: the writer is "em", she is "chị". Still placeholder (owner hasn't given them):
-  `senderName`, `togetherSince`, `room.secret`, the `final` texts, gift subtitles' English.
-  The letter's closing/signature are '' (left out) until the owner writes one.
+  Voice: the writer is "em" (younger), she is "chị" — never anh/em. Sender `Bé Golden`.
+  The finale's texts are plain (no [placeholders]). The secret letter by the cake table is
+  GONE (owner: "too many messages — keep everything minimal"; `room.secret` removed).
+  Still placeholder: `togetherSince`. The letter's closing/signature are '' (left out).
 
 ## The story (what the viewer sees)
 
@@ -72,7 +73,7 @@ arched window onto a starry night, fairy-light garland, the HAPPY BIRTHDAY insta
 clusters (flicker shared by flames and the light they throw), a two-tier birthday cake on a
 table (tap → candles blown out with smoke + `sound.blow()`, relit after ~4 s), round and
 heart balloons on ribbons (bob; tap → bounce + chime), and a secret glowing letter by the
-cake table (`birthdayConfig.room.secret`, placeholder text). All unlit custom shaders (no
+cake table — removed in Nov 2026 (owner wants it minimal). All unlit custom shaders (no
 extra lights). The set is compiled with `gl.compileAsync` before it is shown, so
 entering the room stays ~130 ms (`qa:perf`).
 
