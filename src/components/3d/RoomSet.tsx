@@ -1039,15 +1039,21 @@ const smokeVertex = /* glsl */ `
     vec3 p = position + vec3(sin(rise * 2.2 + aSeed * 20.0) * 0.05 * rise, rise * 0.35, cos(rise * 1.7 + aSeed * 9.0) * 0.04 * rise);
     vec4 mv = modelViewMatrix * vec4(p, 1.0);
     gl_Position = projectionMatrix * mv;
-    gl_PointSize = (4.0 + rise * 10.0) * uPixelRatio * (6.0 / -mv.z);
-    vA = step(0.0, t) * (1.0 - smoothstep(0.4, 3.0, rise)) * 0.35;
+    // Thin wisps, not a cloud. The owner's phone showed a white dome over the cake right
+    // after blowing the candles out: 60 light-grey points at alpha 0.35, sized by 1/distance
+    // with no cap, piled into an opaque white disc when the cake moment had the camera close.
+    // Now each puff is faint, its size is capped, and it thins out right in front of the lens.
+    gl_PointSize = min((3.0 + rise * 6.0) * uPixelRatio * (6.0 / -mv.z), 70.0 * uPixelRatio);
+    float nearCam = smoothstep(0.5, 1.8, -mv.z);
+    vA = step(0.0, t) * (1.0 - smoothstep(0.3, 3.0, rise)) * 0.085 * nearCam;
   }
 `;
 const smokeFragment = /* glsl */ `
   varying float vA;
   void main() {
     float d = length(gl_PointCoord - 0.5);
-    gl_FragColor = vec4(vec3(0.75, 0.72, 0.74), smoothstep(0.5, 0.0, d) * vA);
+    float soft = smoothstep(0.5, 0.0, d);
+    gl_FragColor = vec4(vec3(0.5, 0.47, 0.5), soft * soft * vA);
   }
 `;
 

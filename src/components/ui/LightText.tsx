@@ -163,7 +163,7 @@ export function LightText({ text, as = 'p', className = '', id, style, delay = 0
   useLayoutEffect(() => {
     const el = root.current;
     if (!el) return;
-    el.classList.remove('is-run');
+    el.classList.remove('is-run', 'is-done');
   }, [text]);
 
   useEffect(() => {
@@ -178,6 +178,7 @@ export function LightText({ text, as = 'p', className = '', id, style, delay = 0
         spans.forEach((s) => (s.style.animationDelay = '0ms'));
         el.classList.add('is-run', 'is-plain');
         seq?.finish(seqIndex, performance.now());
+        timers.push(window.setTimeout(() => el.classList.add('is-done'), 600));
         return;
       }
       const now = performance.now();
@@ -277,6 +278,10 @@ export function LightText({ text, as = 'p', className = '', id, style, delay = 0
       wake?.();
       const lastLand = Math.max(0, ...lands);
       seq?.finish(seqIndex, now + lastLand + motion.reading.para * 1000);
+      // once every word has finished its animation, drop the animations altogether (`is-done`)
+      const ANIM_MS = 1400;
+      let doneTimer = window.setTimeout(() => el.classList.add('is-done'), lastLand + ANIM_MS);
+      timers.push(doneTimer);
       // P3: a touch on words still arriving brings them in quicker (never a cut)
       const fastForward = (f: number) => {
         if (group.ff !== undefined) return;
@@ -291,6 +296,9 @@ export function LightText({ text, as = 'p', className = '', id, style, delay = 0
           if (land === undefined || land <= elapsed) return;
           s.style.animationDelay = `${Math.round(elapsed + (land - elapsed) / f - 60)}ms`;
         });
+        clearTimeout(doneTimer);
+        doneTimer = window.setTimeout(() => el.classList.add('is-done'), (lastLand - elapsed) / f + ANIM_MS);
+        timers.push(doneTimer);
       };
       ffRef.current = fastForward;
       if (seq) unskip.push(seq.onSkip(() => fastForward(40)));

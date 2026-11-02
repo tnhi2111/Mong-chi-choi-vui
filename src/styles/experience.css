@@ -1847,8 +1847,10 @@ html[data-reduce] .leaf {
 .lt.is-run .lt__w {
   animation: lt-in 0.55s var(--ease-out) both;
 }
+/* on paper (memory pages, the letter): the words clear like a cloud lifting — soft, a
+   little long, overlapping their neighbours, so a line arrives as one breath, not word by word */
 .lt--ink.is-run .lt__w {
-  animation-duration: 0.45s;
+  animation: lt-cloud 1s cubic-bezier(0.25, 0.6, 0.3, 1) both;
 }
 .lt--constellation.is-run .lt__w {
   animation: lt-sharpen 1.2s var(--ease-out) both;
@@ -1858,6 +1860,16 @@ html[data-reduce] .leaf {
 }
 .lt.is-plain .lt__w {
   animation: lt-plain 0.4s var(--ease-out) both;
+}
+/* finished: no animation, no filter left on the words at all. iOS Safari sometimes left a
+   word painted at a mid-animation blur (a few words stayed blurred on the memory pages) —
+   dropping the animation forces a clean repaint of every word */
+.lt.is-done .lt__w {
+  animation: none;
+  opacity: 1;
+  filter: none;
+  text-shadow: none;
+  transform: none;
 }
 .lt.is-leaving .lt__w {
   animation: lt-out 0.9s var(--ease-in-out) forwards;
@@ -1874,6 +1886,22 @@ html[data-reduce] .leaf {
   to {
     opacity: 1;
     filter: none;
+  }
+}
+@keyframes lt-cloud {
+  from {
+    opacity: 0;
+    filter: blur(6px);
+    transform: translateY(3px);
+  }
+  45% {
+    opacity: 0.85;
+    filter: blur(1.5px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: none;
   }
 }
 @keyframes lt-sharpen {

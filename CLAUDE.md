@@ -1027,6 +1027,21 @@ its own (index: `.claude/skills/README.md`). E.g. `video-to-superprompt`, `itera
 `no-ai-design-slop`. They are generic: when one disagrees with this file (theme, palette,
 push-to-main), this file wins.
 
+## Owner's phone check (Nov 2026): blurred words, slow words, the cake's white dome
+
+- **Words stuck blurred** (iOS Safari): a few words of a memory page stayed at a mid-animation
+  `filter: blur()`. LightText now adds `.is-done` once every word has finished (and after a
+  fast-forward) — `animation: none; filter: none` on every word, a clean repaint.
+- **Too slow, word by word**: `motion.reading` is ~4× quicker (a line 0.32–0.6 s, lines 0.1 s
+  apart) and on paper (`lt--ink`) each word clears with `lt-cloud` (1 s, blur 6px → 0, a 3 px
+  rise), so neighbours overlap and a line arrives like a cloud lifting, ahead of the eye.
+  Measured (390×844, nogl): a whole memory page's words clear 5–6 s after it opens.
+- **White dome over the cake after blowing the candles out** = the candle SMOKE, not the
+  flames: 60 light-grey points at alpha 0.35 sized by 1/distance with no cap piled into an
+  opaque disc with the camera close. Now faint wisps (alpha 0.085, darker, size capped at 70 px
+  × pixel ratio, thinning within 0.5–1.8 m of the lens). QA: `qa-output/cakeglare.mjs`
+  (iPhone size: moment → blow → out → again), `qa-output/textpace.mjs`.
+
 ## The final surprise (after the finale's last words)
 
 A forward-only state machine in `App.tsx` (`advanceSurprise`, allowed moves only;

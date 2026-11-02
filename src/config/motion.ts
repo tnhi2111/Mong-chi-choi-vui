@@ -182,8 +182,11 @@ export const motion = {
   /**
    * P3 — reading pace for the words on a page: a line takes clamp(base + chars × perChar,
    * min, max) seconds; lines at least `gap` apart; a new paragraph rests `para` more.
+   * Owner (Nov 2026): it read word by word and she had to wait for the next word. A line now
+   * clears in ~0.4–0.6 s and the next one is already coming (each word takes ~1 s to clear,
+   * so they overlap like a cloud lifting) — always ahead of the eye, never waiting on it.
    */
-  reading: { base: 0.6, perChar: 0.025, min: 0.8, max: 2.2, gap: 0.35, para: 0.6, inView: 0.25, fastForward: 6 },
+  reading: { base: 0.22, perChar: 0.006, min: 0.32, max: 0.6, gap: 0.1, para: 0.25, inView: 0.25, fastForward: 6 },
 
   /**
    * L — words that arrive as light (`LightText`). Why: a line that fades in is information; a
