@@ -32,7 +32,7 @@ export const birthdayConfig = {
   siteUrl: 'https://tnhi2111.github.io/Mong-chi-choi-vui/',
 
   /** The day your story began (YYYY-MM-DD). Used to count the days together. Set to '' to hide. */
-  togetherSince: '2020-01-01', // [TOGETHER_SINCE]
+  togetherSince: '2026-05-12', // 12/5/2026
 
   /*
    * Texts below may use {name} and {sender} — they are replaced with the two

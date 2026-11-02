@@ -21,7 +21,7 @@ it for their wife. Live at **https://tnhi2111.github.io/Mong-chi-choi-vui/**.
   Voice: the writer is "em" (younger), she is "chị" — never anh/em. Sender `Bé Golden`.
   The finale's texts are plain (no [placeholders]). The secret letter by the cake table is
   GONE (owner: "too many messages — keep everything minimal"; `room.secret` removed).
-  Still placeholder: `togetherSince`. The letter's closing/signature are '' (left out).
+  `togetherSince` 2026-05-12 (owner: 12/5/2026). The letter's closing/signature are '' (left out).
 
 ## The story (what the viewer sees)
 
