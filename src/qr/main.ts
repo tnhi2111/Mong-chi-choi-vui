@@ -25,7 +25,7 @@ const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const phone = innerWidth < 640;
 
 const SCAN = 'Scan me ❤';
-const LINE = 'Something special is waiting for you…';
+const LINE = 'My little project for u';
 const EYEBROW = 'for you — and only you';
 /** the 2D heart outline (400 × 400 artboard), for the print sheet's engraving */
 const HEART2D =

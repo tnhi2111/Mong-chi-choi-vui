@@ -43,7 +43,7 @@ export const birthdayConfig = {
   pageTitle: 'For you',
 
   intro: {
-    teaser: 'Something special is waiting for you…',
+    teaser: 'My little project for u',
     hint: 'Touch it. Gently.',
     afterUnlock: 'Before you go any further…',
   },
