@@ -679,17 +679,25 @@ function GiftBody({
         // opened: the lid pops and swings away, then the four walls, hinged at the base,
         // fall open like petals (slowly, each a beat after the one before), and what was
         // inside rises out on a spiral. Nothing flashes: the light is the box's own.
-        const lidK = THREE.MathUtils.smoothstep(o, 0.08, 0.34);
+        // Z2: the lid pops, is lifted off on a LOW arc (≤ `lidRise` over the mouth) and set down
+        // standing on its edge beside the box, its bow toward her — inside the frame, clear of
+        // the room's title and of the letter, which flies out the other way
+        const lidK = sm5(0.08, 0.34, o);
         if (lid.current) {
-          // it pops, swings back over its hinge and hangs down behind the box — out of the
-          // way of what is about to rise, instead of standing up in front of it
-          // it pops, then is LIFTED OFF — up and away over the back, tipping a little the
-          // way a lid does in a hand — and leaves the frame before the walls fall
-          const pop = THREE.MathUtils.smoothstep(o, 0.06, 0.14);
-          const off = lidK * lidK;
-          lid.current.rotation.x = -lidK * 0.55 - lift * 0.22;
-          lid.current.position.y = 0.24 + pop * 0.05 + off * 1.9 + lift * 0.035;
-          lid.current.position.z = -0.33 - off * 0.7;
+          const pop = sm5(0.06, 0.14, o);
+          const side = MOTION.gift.lidSide;
+          // (the group is the hinge at the lid's back edge; the lid's middle is 0.33 in front)
+          // standing on edge: turned ~76° about x so its top faces her, beside the box
+          const stand = 1.33 * lidK;
+          lid.current.rotation.set(-lift * 0.22 + stand, 0, -side * 0.12 * Math.sin(Math.PI * lidK));
+          // (beside the box on a wide screen; on a narrow one — a phone — behind it and a
+          //  little to the side, or it would stand outside the frame)
+          const wide = THREE.MathUtils.clamp((state.size.width / state.size.height - 0.7) / 0.6, 0, 1);
+          lid.current.position.set(
+            side * THREE.MathUtils.lerp(0.22, 1.22, wide) * lidK,
+            0.24 + pop * 0.05 + lift * 0.035 + MOTION.gift.lidRise * Math.sin(Math.PI * Math.min(1, lidK * 1.15)) * (1 - lidK * 0.4) + lidK * 0.02,
+            -0.33 + lidK * THREE.MathUtils.lerp(-0.5, 0.08, wide),
+          );
         }
         once('satin', 0.06, () => sound.satin());
         walls.current.forEach((w, i) => {
@@ -924,7 +932,7 @@ function GiftBody({
             </group>
           </group>
           {/* lid hinged on the back edge */}
-          <group ref={lid} position={[0, 0.24, -0.33]}>
+          <group ref={lid} name="gift-lid" position={[0, 0.24, -0.33]}>
             <group position={[0, 0.06, 0.33]}>
               <RoundedBox args={[0.66, 0.13, 0.66]} radius={0.03} smoothness={4} material={mats.main} />
               <mesh material={mats.ribbon}>
@@ -1941,6 +1949,7 @@ export function Gift3D({
         )}
         <group
           ref={spin}
+          name="gift-body"
           onPointerDown={press}
           onPointerOver={(e) => {
             if (passThrough(e)) return;

@@ -100,6 +100,12 @@ export const motion = {
     // (K3: the owner found the box slow. Press → the page standing straight is now ≈ 3.5–4.5 s:
     //  the opening, then `carry.pageMs` while the page straightens out of the sheet.)
     open: { box: t(3.0), capsule: t(3.0), star: t(3.1), orb: t(3.0), envelope: t(5.4) },
+    /** Z2 — the box's lid: lifted off on a low arc (its top never more than `lidRise` m over
+     *  the box's mouth — it used to fly 1.9 m up and out over the screen's top edge and the
+     *  room's title), then set down standing on its edge beside the box (`lidSide`: which side,
+     *  away from where the letter flies), its bow toward her. */
+    lidRise: 0.3,
+    lidSide: 1,
     /** A held beat before the thing inside comes out (the breath before it gives). */
     hold: t(0.5),
     /** The memory page grows out of the thing on screen (ms — CSS reads it). */
