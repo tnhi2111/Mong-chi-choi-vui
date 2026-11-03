@@ -8,7 +8,7 @@
     "build": "tsc -p . && vite build",
     "preview": "vite preview",
     "typecheck": "tsc -p .",
-    "qa": "node scripts/qa.mjs && node scripts/qa-cake-repeat.mjs && node scripts/qa-cake-table.mjs && node scripts/qa-owner-path.mjs",
+    "qa": "node scripts/qa.mjs && node scripts/qa-cake-repeat.mjs && node scripts/qa-cake-table.mjs && node scripts/qa-owner-path.mjs && node scripts/qa-finale-title.mjs",
     "qa:occlusion": "node scripts/qa-sign-occlusion.mjs --subject=sign && node scripts/qa-sign-occlusion.mjs --subject=cake && node scripts/qa-plausible.mjs",
     "qa:cake-table": "node scripts/qa-cake-table.mjs --resumed",
     "qa:owner-path": "node scripts/qa-owner-path.mjs",

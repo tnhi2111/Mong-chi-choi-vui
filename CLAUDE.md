@@ -1042,6 +1042,16 @@ push-to-main), this file wins.
   × pixel ratio, thinning within 0.5–1.8 m of the lens). QA: `qa-output/cakeglare.mjs`
   (iPhone size: moment → blow → out → again), `qa-output/textpace.mjs`.
 
+## The finale's title (AA2)
+
+`birthdayConfig.final.title` is the ONE place it is written — now "Happy Birthday, chị giáo"
+(the owner's own lower case); `FinalReveal` draws it with LightText (bloom) and the ❤ after it.
+Cormorant's @fontsource CSS carries the `vietnamese` unicode-range, so "ị"/"á" are drawn by
+Cormorant itself. `scripts/qa-finale-title.mjs` (in `npm run qa`) reads the title from the DOM
+at 1440×900 / 1920×1080 / 390×844, checks the font really draws "chị giáo", no single word
+alone on the last line, and the heart right after the last word. "My Love" appeared nowhere
+else in the repo.
+
 ## The final surprise (after the finale's last words)
 
 A forward-only state machine in `App.tsx` (`advanceSurprise`, allowed moves only;

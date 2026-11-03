@@ -107,7 +107,8 @@ export const birthdayConfig = {
   },
 
   final: {
-    title: 'Happy Birthday, My Love',
+    /** The finale's title — the ONE place it is written (the heart ❤ follows it on screen). */
+    title: 'Happy Birthday, chị giáo',
     message:
       'Cảm ơn chị đã đến, đã ở lại, và đã làm cho mọi ngày bình thường trở nên đáng nhớ.',
     oneMoreThing: 'One more thing…',
