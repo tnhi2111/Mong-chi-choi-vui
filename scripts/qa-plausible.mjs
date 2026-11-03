@@ -2,7 +2,7 @@
  * W4d / Y1c — the cake stands where a cake can stand: a ray straight down from the cake's foot
  * meets the table's top within 2 cm (not air, not the floor), the table's top is 0.72–0.78 m
  * above the floor, its foot is on the floor, the cake is 55–75 % of the table's top, the table
- * is outside the gifts' ring, and the sign's lowest words hang ≥ 0.35 m above the tallest gift.
+ * is outside the gifts' ring.
  * Both ways in: resumed in the room, and led in by the light's tour (`--resumed` / `--ledin`
  * for one of them) — the tour is where every set piece once sank 1.05 m under the floor.
  *
@@ -72,12 +72,12 @@ for (const ledIn of ways) {
     if (s.cakeVsTop < 0.55 || s.cakeVsTop > 0.75) no(`the cake is ${(s.cakeVsTop * 100).toFixed(0)} % of the table's top`);
     if (r.offFloor === null || Math.abs(r.offFloor) > 0.01) no(`the set piece holding the table is ${r.offFloor} m off the floor`);
     if (r.tableInnerEdge < r.ringOuter + 0.2) no(`the table stands in the gifts' ring (${r.tableInnerEdge} < ${r.ringOuter})`);
-    // (the gifts bob ≤ 8 cm and lift 10 cm under her hand on top of their measured rest)
-    if (r.lettersBottom < r.giftTop + 0.18 + 0.35) no(`the sign's words are only ${(r.lettersBottom - r.giftTop).toFixed(2)} m above the tallest gift`);
+    // (AA1: the sign is no longer hung above the gifts — they duck in its moment; the words'
+    //  freedom from anything in front is measured by qa-sign-occlusion, the layout by qa-sign-layout)
   }
   errors.forEach((e) => no(e));
   await ctx.close();
 }
 await browser.close();
-console.log(bad.length ? '✗ ' + bad.join('\n✗ ') : '✓ the cake stands on its table, the table on the floor, the words above the gifts');
+console.log(bad.length ? '✗ ' + bad.join('\n✗ ') : '✓ the cake stands on its table, the table on the floor');
 process.exit(bad.length ? 1 : 0);

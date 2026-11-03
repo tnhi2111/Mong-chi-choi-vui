@@ -17,8 +17,7 @@ import { RoomBuild, sampleRoom, type BuildPoints } from './RoomBuild';
 import { BuildGate } from './BuildGate';
 import { motion as MOTION } from '../../config/motion';
 import { giftRing, hoverLight, roomHand, roomLights } from './sceneStore';
-import { RoomSet, SIGN_PLACEMENT, STAGE_STEP, WALL_R, WINDOW_ANGLE } from './RoomSet';
-import { safeDrop } from './BirthdaySign';
+import { ALCOVE, RoomSet, SIGN_PLACEMENT, STAGE_STEP, WALL_R, WINDOW_ANGLE } from './RoomSet';
 import { cakePosition } from './RoomProps';
 import { Html } from '@react-three/drei';
 import { birthdayConfig } from '../../config/birthday';
@@ -241,6 +240,61 @@ export function RoomWorld({
   // the finale can take over
   const atGlass = useRef(false);
   useEffect(() => void (atGlass.current = false), [windowFlight]);
+  // AA1: in the sign's moment the orb steps out of the way like the gifts do (W) — it sinks
+  // and shrinks on a spring (~0.8 s) and comes back after; the sign is not hung high to clear it
+  const orbGroup = useRef<THREE.Group>(null);
+  const orbDuck = useRef(0);
+  useFrame((_, rawDt) => {
+    const g = orbGroup.current;
+    if (!g) return;
+    const want = moment === 'sign' ? 1 : 0;
+    orbDuck.current += (want - orbDuck.current) * (1 - Math.exp(-Math.min(rawDt, 0.05) * (reducedMotion ? 14 : 6)));
+    const e = orbDuck.current * orbDuck.current * (3 - 2 * orbDuck.current);
+    g.position.y = ORB_Y - e * 1.4;
+    g.scale.setScalar(Math.max(0.001, 1 - e * 0.9));
+    g.visible = e < 0.995;
+  });
+  // AA1f: the room's title ("A little room for two", "5 / 5") never lies over the sign: while
+  // the sign's lettering would meet it on this screen, the title fades out (CSS, smooth)
+  const clash = useRef({ n: 0, parts: null as THREE.Mesh[] | null, v: new THREE.Vector3() });
+  useFrame(({ camera, scene }) => {
+    const c = clash.current;
+    if (++c.n % 6) return;
+    // (the whole installation — letters, arch, posies — not its cables to the ceiling)
+    if (!c.parts) {
+      scene.traverse((o) => {
+        if (!c.parts && o.userData.signPart) {
+          const list: THREE.Mesh[] = [];
+          o.traverse((m) => {
+            const mesh = m as THREE.Mesh;
+            if (mesh.isMesh && mesh.geometry.attributes.position.count > 12) list.push(mesh);
+          });
+          c.parts = list;
+        }
+      });
+    }
+    const head = document.querySelector('.room-ui__head');
+    if (!c.parts?.length || !head) return;
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    let front = false;
+    for (const m of c.parts) {
+      const g = m.geometry;
+      if (!g.boundingBox) g.computeBoundingBox();
+      const bb = g.boundingBox!;
+      for (let i = 0; i < 8; i++) {
+        c.v.set(i & 1 ? bb.max.x : bb.min.x, i & 2 ? bb.max.y : bb.min.y, i & 4 ? bb.max.z : bb.min.z).applyMatrix4(m.matrixWorld).project(camera);
+        if (c.v.z < 1) front = true;
+        const x = (c.v.x * 0.5 + 0.5) * innerWidth;
+        const y = (-c.v.y * 0.5 + 0.5) * innerHeight;
+        x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y);
+      }
+    }
+    const r = head.getBoundingClientRect();
+    const hit = front && x0 < r.right && x1 > r.left && y0 < r.bottom + 8 && y1 > r.top;
+    const want = hit ? '1' : '';
+    if ((document.documentElement.dataset.titleClash ?? '') !== want) document.documentElement.dataset.titleClash = want;
+  });
+  useEffect(() => () => void delete document.documentElement.dataset.titleClash, []);
   useFrame(({ camera }) => {
     if (!windowFlight || atGlass.current) return;
     if (Math.hypot(camera.position.x, camera.position.z) > WALL_R - MOTION.sprite.window.swapAt) {
@@ -337,12 +391,22 @@ export function RoomWorld({
       setFrame({ look: f.look, offset: f.offset, fov, text: [((tx + 1) / 2) * size.width, ((1 - ty) / 2) * size.height], maxW });
       if (new URLSearchParams(location.search).has('debug')) Object.assign(window, { __frame: { box: box.clone(), ...f } });
     } else {
+      // AA1: the sign's moment frames the whole alcove (the sign is fitted to it), from its
+      // foot to its apex, sampled along the curved wall — not the sign alone
+      const wallPts: THREE.Vector3[] = [];
+      for (let i = 0; i <= 24; i++) {
+        const sw = -ALCOVE.halfWidth + (i / 24) * ALCOVE.halfWidth * 2;
+        const a = sw / WALL_R;
+        const top = ALCOVE.side + Math.sqrt(Math.max(0, 1 - (sw / ALCOVE.halfWidth) ** 2)) * (ALCOVE.top - ALCOVE.side);
+        for (const h of [0, top]) wallPts.push(new THREE.Vector3(Math.sin(a) * WALL_R, ground + h, -Math.cos(a) * WALL_R));
+      }
+      box.setFromPoints(wallPts);
       // the words go under the sign, in a band as tall as they will really be
       const maxW = Math.min(size.width * 0.84, 560);
       const th = whisperHeight(birthdayConfig.room.moments.sign, size.width, maxW);
       const half = size.height / 2;
       const bottom = -1 + (M.sign.bottomPx + th + M.sign.gapPx) / half;
-      const f = frameBox(box, dir, fov, aspect, M.elev.sign[portrait ? 1 : 0], { x: [-M.sign.sides, M.sign.sides], y: [bottom, M.sign.top] }, M.fill);
+      const f = frameBox(box, dir, fov, aspect, M.elev.sign[portrait ? 1 : 0], { x: [-M.sign.sides, M.sign.sides], y: [bottom, M.sign.top] }, M.fill, wallPts);
       setFrame({ look: f.look, offset: f.offset, text: [size.width / 2, size.height - M.sign.bottomPx - th / 2], maxW });
     }
   }, [moment, size.width, size.height, portrait, cakeAt]);
@@ -708,7 +772,7 @@ export function RoomWorld({
       : [camLook[0], camLook[1] + MOMENT.far.lift[pi], camLook[2] + MOMENT.far.back[pi]];
     if (frame && momentNear) camFov = frame.fov ?? MOTION.moment.cake.fov[pi];
   } else if (moment === 'sign') {
-    camLook = frame && momentNear ? frame.look : [0, ground + 2.0 - safeDrop(sign.scale, sign.drop) + MOMENT.sign.lookOffset, -sign.radius];
+    camLook = frame && momentNear ? frame.look : [0, ground + sign.mid + MOMENT.sign.lookOffset, -sign.radius];
     camPos = frame && momentNear
       ? [camLook[0] + frame.offset[0], camLook[1] + frame.offset[1], camLook[2] + frame.offset[2]]
       : [0, camLook[1] + MOMENT.far.lift[pi], camLook[2] + MOMENT.far.back[pi] + 1.2];
@@ -799,7 +863,7 @@ export function RoomWorld({
           onMoment={onMoment}
         />
         <Floor rx={rx} rz={rz} />
-        <group position={[0, ORB_Y, 0]}>
+        <group ref={orbGroup} position={[0, ORB_Y, 0]}>
           {/* …and the orb last of all: the leader rises into the middle of the room and
               becomes it (BuildGate `last`), so the flight ends ON the thing it made */}
           <BuildGate at={[0, 0]} last grow={1.1}>

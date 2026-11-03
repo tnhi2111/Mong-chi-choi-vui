@@ -59,24 +59,26 @@ export const SIGN_LINES: { text: string; style: Style; h: number; cap: number; t
   { text: titleCase(WORDS.endearment), style: 'h', h: 1.6, cap: 0.22, track: 0.0, tone: 0.35 },
   { text: WORDS.name, style: 'r', h: 1.345, cap: 0.155, track: 0.5, tone: 1 },
 ];
-/**
- * The lettering's safe area: the lowest line's letters always keep this much air (m above
- * the floor). The sign rises by itself if a placement would bring them lower (see `safeDrop`).
- * W1a: the tallest thing standing in front of it is a gift on the ring — ≤ 1.74 m above the
- * floor at the top of its bob (±8 cm) with her hand lifting it (+10 cm) — so the words start
- * ≥ 0.35 m above that, wherever the ring turns (`qa-plausible` measures it).
- * (Accents and descenders reach ~8 cm below the line's cap box, hence the margin.)
- */
-export const SIGN_SAFE_FLOOR = 2.25;
 /** The sign's own pivot height (its middle), and how its scale is applied. */
 const PIVOT_H = 2.0;
 const INNER_SCALE = 0.9;
-/** How far down a placement may hang the sign without breaking the safe area. */
-export function safeDrop(scale: number, drop: number): number {
-  const k = scale * INNER_SCALE;
-  const low = SIGN_LINES[SIGN_LINES.length - 1];
-  const bottom = PIVOT_H + (low.h - low.cap / 2 - PIVOT_H) * k; // before the drop
-  return Math.min(drop, bottom - SIGN_SAFE_FLOOR);
+/**
+ * AA1 — the whole installation (arch apex → the posies' ribbons, posy to posy) before it is
+ * scaled, in m; it is centred on PIVOT_H. (Measured from its meshes, cables left out;
+ * `qa-sign-layout` checks the result on screen.)
+ */
+export const SIGN_CLUSTER = { width: 5.255, height: 3.12 };
+/**
+ * AA1 — where the sign hangs: fitted to the alcove behind it, not lifted to dodge what stands
+ * in front (the gifts duck in its moment — stage W). `share` = its width / the alcove's width,
+ * `centre` = where its middle sits, as a fraction of the alcove's height from its foot (the
+ * visual centre, a little under the geometric one). Returns the scale and how far below the
+ * pivot it hangs, and its middle's height above the floor.
+ */
+export function signLayout(share: number, centre: number, alcove: { halfWidth: number; top: number }) {
+  const scale = (share * alcove.halfWidth * 2) / (SIGN_CLUSTER.width * INNER_SCALE);
+  const mid = centre * alcove.top;
+  return { scale, hang: PIVOT_H - mid, mid };
 }
 /** Which line the hairlines frame (MY BABY). */
 const FRAMED_LINE = 2;
@@ -504,10 +506,9 @@ interface Props {
   floorY: number;
   /** radius of the arc it hangs on (in front of the wall) */
   radius: number;
-  /** overall size (smaller on a phone, where the back of the room is narrow) */
+  /** overall size and how far below its pivot it hangs (AA1: from `signLayout`) */
   scale: number;
-  /** how far below its usual height it hangs */
-  drop?: number;
+  hang: number;
   /** 0..1 how awake the heart is (its light on the letters) */
   heart: number;
   motion: number;
@@ -517,7 +518,7 @@ interface Props {
   onTap?: () => void;
 }
 
-export function BirthdaySign({ floorY, radius, scale, drop = 0.32, heart, motion, focused = false, onTap }: Props) {
+export function BirthdaySign({ floorY, radius, scale, hang, heart, motion, focused = false, onTap }: Props) {
   const chars = useMemo(() => [...new Set(SIGN_LINES.flatMap((l) => [...l.text.replace(/ /g, '')].map((c) => l.style + c)))], []);
   const SAMPLE = SIGN_LINES.map((l) => l.text).join(' ');
   const [fontReady, setFontReady] = useState(() =>
@@ -813,7 +814,6 @@ export function BirthdaySign({ floorY, radius, scale, drop = 0.32, heart, motion
 
   // scale about the sign's centre (on the arc, at the height of its middle)
   const pivot: [number, number, number] = [0, PIVOT_H, -R];
-  const hang = safeDrop(scale, drop);
   return (
     <group position={[0, floorY - hang, 0]} userData={{ signPart: true }}>
       <group position={pivot} scale={scale * INNER_SCALE}>

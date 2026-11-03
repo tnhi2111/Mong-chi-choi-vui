@@ -15,7 +15,7 @@ import { surface } from './Gift3D';
 import { getShadowTexture } from './glowTexture';
 import { getCake, cakeVertex, cakeFragment, sparkleGeometry, sparkleVertex, sparkleFragment, ringGeometry, ringVertex, ringFragment, EXPLODE, CAKE_LIFT, buildSlice, buildCrumbs } from './cakeModel';
 import { Glow } from './Glow';
-import { BirthdaySign, metalVertex, metalFragment, satinVertex, satinFragment, mergeAll } from './BirthdaySign';
+import { BirthdaySign, metalVertex, metalFragment, satinVertex, satinFragment, mergeAll, signLayout } from './BirthdaySign';
 
 /*
  * The gift room's set: a small, warm room dressed for her birthday, at night.
@@ -69,15 +69,22 @@ function fromHand(p: THREE.Vector3, away: THREE.Vector2): number {
 
 export const WALL_R = 6.9;
 /** Where the HAPPY BIRTHDAY installation hangs (shared with RoomWorld's close-up framing). */
-export const SIGN_PLACEMENT = {
-  // (the drop is a wish: BirthdaySign's safe area may hang it higher — `safeDrop`)
-  // S: hung 0.25 m higher on longer cables — the music box and the gifts used to stand in
-  // front of its lower lines; its arch still clears the alcove's crown and the ceiling
-  // W1a: the words hang above the tallest gift (SIGN_SAFE_FLOOR), a little smaller, under a
-  // crown that was raised to 3.45 m to keep their arch clear of it
-  landscape: { radius: 5.95, scale: 0.74, drop: 0 },
-  portrait: { radius: 4.55, scale: 0.55, drop: 0 },
-}; // a small private room (the camera stands outside it: see CUT)
+/** AA1 — the arched alcove on the feature wall (drawn by the wall shader): half its width along
+ *  the wall, its height at the edges and at its apex (m above the floor). */
+export const ALCOVE = { halfWidth: 2.5, side: 2.95, top: 3.45 };
+/**
+ * AA1 — the HAPPY BIRTHDAY installation fits the alcove: 62 % of its width, the middle of its
+ * box (ribbons included) at 52.8 % of the alcove's height — which puts arch apex ↔ the posies'
+ * foot on the alcove's visual centre (52 % up, `qa-sign-layout`) — just in front of the wall
+ * (`radius`). It is NOT hung high
+ * to keep clear of the gifts: in its moment the gifts duck out of the frame (stage W).
+ */
+export const SIGN_PLACEMENT = (() => {
+  const at = { radius: 6.55, share: 0.62, centre: 0.528 };
+  const lay = signLayout(at.share, at.centre, ALCOVE);
+  const one = { radius: at.radius, scale: lay.scale, hang: lay.hang, mid: lay.mid };
+  return { landscape: one, portrait: one };
+})(); // a small private room (the camera stands outside it: see CUT)
 const WALL_H = 6.2;
 /** Direction of the window: back-left, so the HAPPY BIRTHDAY installation owns the centre. */
 export const WINDOW_ANGLE = -0.78; // measured as atan(x, -z)
@@ -457,9 +464,9 @@ const wallFragment = /* glsl */ `
     vec3 plaster = vec3(0.2, 0.145, 0.135) * (0.93 + 0.07 * hash2(floor(vec2(sw, h) * 40.0)));
     vec3 col = plaster;
     // the feature wall: an arched alcove for the HAPPY BIRTHDAY installation
-    float aw = 2.5;
-    // (S: raised with the sign, so it keeps its air under the alcove's arch)
-    float alcTop = 2.95 + sqrt(max(0.0, 1.0 - (sw / aw) * (sw / aw))) * 0.5;
+    float aw = ${ALCOVE.halfWidth.toFixed(2)};
+    // (S: raised with the sign, so it keeps its air under the alcove's arch — AA1: ALCOVE)
+    float alcTop = ${ALCOVE.side.toFixed(2)} + sqrt(max(0.0, 1.0 - (sw / aw) * (sw / aw))) * ${(ALCOVE.top - ALCOVE.side).toFixed(2)};
     // (a full-height niche: no rail or wainscot runs behind the lettering, so from no
     //  angle does a horizontal border cross the words)
     float inAlc = step(abs(sw), aw) * step(h, alcTop);
@@ -500,7 +507,8 @@ const wallFragment = /* glsl */ `
     light += vec3(1.0, 0.7, 0.45) * 0.5 * inAlc * exp(-max(h - 0.6, 0.0) * 1.1);
     light += vec3(1.0, 0.72, 0.48) * 0.22 * exp(-(h - 3.4) * (h - 3.4) * 30.0) * step(h, 3.45);
     // the sign's champagne halo on the alcove behind it
-    light += vec3(1.0, 0.78, 0.52) * 0.6 * exp(-sw * sw * 0.2 - (h - 2.55) * (h - 2.55) * 0.4);
+    // (AA1: centred on the sign's middle)
+    light += vec3(1.0, 0.78, 0.52) * 0.6 * exp(-sw * sw * 0.2 - (h - ${SIGN_PLACEMENT.landscape.mid.toFixed(2)}) * (h - ${SIGN_PLACEMENT.landscape.mid.toFixed(2)}) * 0.4);
     // the lamps: warm pools on the wall, brightest just above and below a shade
     for (int i = 0; i < 8; i++) {
       vec3 lw = vWorld - uLamps[i].xyz;
@@ -2301,6 +2309,8 @@ export function RoomSet({ floorY: stageY, rx, rz, heart, reducedMotion, hoverFx,
   useEffect(() => {
     if (!new URLSearchParams(location.search).has('debug')) return;
     (window as unknown as { __roomLove?: () => void }).__roomLove = () => (loveAt.current = clockNow.current);
+    // (AA1 QA: the alcove the sign is fitted to)
+    Object.assign(window, { __alcove: { ...ALCOVE, wallR: WALL_R, floorY } });
   }, []);
   const touchWindow = (e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation();
@@ -2370,7 +2380,7 @@ export function RoomSet({ floorY: stageY, rx, rz, heart, reducedMotion, hoverFx,
       <group ref={(g) => void (cutGroups.current[0] = g)} userData={{ anchor: 0, baseY: 0 }}>
         <BuildGate
           at={[0, -SIGN_PLACEMENT[portrait ? 'portrait' : 'landscape'].radius]}
-          pivot={[0, floorY + 2.0, -SIGN_PLACEMENT[portrait ? 'portrait' : 'landscape'].radius]}
+          pivot={[0, floorY + SIGN_PLACEMENT[portrait ? 'portrait' : 'landscape'].mid, -SIGN_PLACEMENT[portrait ? 'portrait' : 'landscape'].radius]}
           grow={0.75}
         >
           <BirthdaySign floorY={floorY} {...SIGN_PLACEMENT[portrait ? 'portrait' : 'landscape']} heart={heart} motion={motion} focused={focus === 'sign'} onTap={onMoment && (() => onMoment('sign'))} />

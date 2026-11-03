@@ -615,6 +615,8 @@
     inset 0 1px 0 rgba(255, 244, 232, 0.25);
 }
 
+/* AA1f: while the sign's lettering would lie under the room's title on this screen */
+html[data-title-clash='1'] .room-ui__head,
 .room-ui.is-busy .room-ui__head,
 .room-ui.is-busy .room-ui__foot {
   /* (filter, not opacity: their fade-in animation holds opacity at 1) */

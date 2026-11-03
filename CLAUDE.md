@@ -237,7 +237,7 @@ soft blob shadow on the floor that tightens as it lands.
   `birthdayConfig.room.sign`; size / weight (500 vs 400) / tracking / metal tone (`aTone`:
   champagne → warm gold for her name) make the hierarchy; two gold hairlines frame MY BABY;
   a slow band of light crosses the letters (`uSweep`); posies and ribbons differ per side.
-- **Sign safe area**: `SIGN_SAFE_FLOOR` (1.22 m) — `safeDrop()` lifts the sign so its lowest
+- (Superseded by AA1 — no safe floor any more.) **Sign safe area**: `SIGN_SAFE_FLOOR` (1.22 m) — `safeDrop()` lifts the sign so its lowest
   line (TEACHER HÙ TÁ) always clears the alcove foot / chair rail (0.95 m) at any placement;
   RoomWorld frames the sign close-up from the same `safeDrop`. The alcove behind it is a
   full-height niche (no rail / wainscot inside it), so from no camera angle does a horizontal
@@ -871,7 +871,8 @@ sign's root has `userData.signPart`.
   moment frames table + cake), root `userData.cakePart`, table group `cakeTable`. Cake moment
   `elev.cake` 0.16 / 0.2 (just above the table, looking down a little). **Replaced in stage Y**
   — and it was never seen by the owner: after the tour it lay under the floor (see Y1).
-- **W1 — the sign above every gift.** `SIGN_SAFE_FLOOR` 2.25 m (its lowest glyph ≥ 0.35 m
+- **W1 — the sign above every gift** (**replaced by AA1**: the sign now fits its alcove and the
+  gifts + the orb duck instead). `SIGN_SAFE_FLOOR` 2.25 m (its lowest glyph ≥ 0.35 m
   above the tallest gift at the top of its bob with her hand lifting it), `SIGN_PLACEMENT`
   scale 0.74 / 0.55. To fit, the room grew: crown moulding 3.45–3.6 m, `CEIL_H` 3.6, alcove top
   2.95 + 0.5, garland at 3.38. Default framing looks a bit higher (`base.look` y 0.05).
@@ -1041,6 +1042,40 @@ push-to-main), this file wins.
   opaque disc with the camera close. Now faint wisps (alpha 0.085, darker, size capped at 70 px
   × pixel ratio, thinning within 0.5–1.8 m of the lens). QA: `qa-output/cakeglare.mjs`
   (iPhone size: moment → blow → out → again), `qa-output/textpace.mjs`.
+
+## Stage Z2 — the box's lid stays in the frame
+
+`Gift3D` box: the lid used to be lifted 1.9 m up and out over the screen's top edge (over the
+room's title). Now it pops, is lifted on a LOW arc (≤ `motion.gift.lidRise` 0.3 m over the mouth)
+and set down standing on its edge beside the box, bow toward her (`lidSide` = away from the
+letter, which flies left); on a narrow screen it stands behind the box, a little to the side
+(`wide` from the aspect). Group named `gift-lid`, the thing itself `gift-body`.
+`scripts/qa-gift-parts.mjs [--sizes] [--only] [--turns]`: every frame of each opening (views
+turned with `__orbit.tYaw` — the ring's `qaTurn` moves gifts without the opening camera
+knowing), the lid's / the thing's screen box keeps ≥ 3 % from the edges (never nearer than the
+box itself stands) and never crosses the room's title or the gift buttons while they are ≥ 50 %
+shown; judged once the camera has come to the gift.
+
+## Stage AA1 — the sign fits its alcove (and nothing is hung high to dodge)
+
+**Rule: never use height to keep a thing clear of what stands in front of it** — in a moment,
+what is in front steps out of the way (the gifts duck — W; the orb sinks and shrinks in the
+sign's moment — `orbGroup` in RoomWorld). `SIGN_SAFE_FLOOR` / `safeDrop` are gone.
+- `ALCOVE` (RoomSet: half width 2.5 m along the wall, sides 2.95 m, apex 3.45 m) is shared with
+  the wall shader. `SIGN_PLACEMENT` = `signLayout(share 0.62, centre 0.528, ALCOVE)` at radius
+  6.55 (just in front of the wall), the same on a phone: scale + `hang` + `mid`. `SIGN_CLUSTER`
+  (BirthdaySign) = the installation's unscaled size (5.255 × 3.12 m, centred on `PIVOT_H`).
+  The wall's champagne halo follows `mid`.
+- The sign's moment frames the whole alcove (its outline sampled on the curved wall, `frameBox`
+  with points), camera level with it (`elev.sign` 0 / 0).
+- The room's title never lies over the sign: RoomWorld projects the installation (no cables)
+  every 6 frames and sets `html[data-title-clash]`, which fades `.room-ui__head` (CSS).
+- `scripts/qa-sign-layout.mjs` (ID-render masks; the posies' foot = the lowest row where the
+  satin is still wider than a ribbon; the alcove projected): measured at 1440×900 / 1920×1080 /
+  390×844 — centre within 0.1–0.7 % of the visual centre (52 % up), gaps above/below 8–11 %
+  apart, sides ≤ 1.8 %, width 64–65 % of the alcove, title never over the sign (room at three
+  yaws + moment). `qa-sign-occlusion --subject=sign`: 0 hidden letter px over 216 frames.
+  `qa-plausible` no longer asks for the words above the gifts.
 
 ## The finale's title (AA2)
 

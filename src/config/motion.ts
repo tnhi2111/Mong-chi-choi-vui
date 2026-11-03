@@ -239,7 +239,9 @@ export const motion = {
     //  and looks down only slightly)
     //  (Y: the cake — the camera ~0.85 m above the table's top (a person standing by it),
     //  looking down ~8.6°; scripts/qa-cake-table.mjs holds it to -8°…-14°)
-    elev: { cake: [0.15, 0.15], sign: [-0.06, 0.2] },
+    //  (AA1: the sign's camera stands level with its middle — on a phone too: from above, the
+    //  sign in front of the wall slid up against the alcove)
+    elev: { cake: [0.15, 0.15], sign: [0, 0] },
     /** The words appear only once the camera has arrived (s after the touch). */
     textAfter: t(1.6),
     /** The subject's area and where its words sit: [landscape, portrait]. */
